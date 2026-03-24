@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chrome 插件 — 设计稿</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --green: #16a34a;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --bg: #f3f4f6;
+  --card: #ffffff;
+  --shadow-md: 0 8px 32px rgba(0,0,0,.14);
+}
+body {
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  background: #e8edf2;
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── DEMO BAR ── */
+.demo-bar {
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  letter-spacing: .2px;
+}
+.demo-bar b { color: #e2e8f0; font-weight: 500; }
+.demo-bar-dot { width: 6px; height: 6px; border-radius: 50%; background: #475569; }
+
+/* ── LAYOUT ── */
+.page-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px 64px;
+  gap: 64px;
+}
+
+/* ── SECTION LABEL ── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: #94a3b8;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+/* ── WECHAT BACKEND MOCKUP ── */
+.wx-backend {
+  width: 860px;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  position: relative;
+}
+.wx-backend-chrome {
+  background: #f1f3f4;
+  border-bottom: 1px solid #dadce0;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chrome-dots { display: flex; gap: 5px; }
+.chrome-dot { width: 10px; height: 10px; border-radius: 50%; }
+.chrome-addressbar {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 16px;
+  padding: 4px 14px;
+  font-size: 12px;
+  color: #5f6368;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chrome-addressbar svg { flex-shrink: 0; }
+.wx-content {
+  padding: 24px 32px;
+  min-height: 240px;
+  background: #f9fafb;
+  position: relative;
+}
+.wx-content-label {
+  font-size: 13px;
+  color: #9ca3af;
+}
+.wx-sidebar-mock {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 180px;
+  background: #fff;
+  border-right: 1px solid var(--border);
+  padding: 16px 0;
+}
+.wx-sidebar-item {
+  padding: 9px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: default;
+}
+.wx-sidebar-item.active {
+  background: #eff6ff;
+  color: var(--accent);
+  border-right: 2px solid var(--accent);
+}
+.wx-main-area {
+  margin-left: 180px;
+  padding: 20px 24px;
+  min-height: 220px;
+}
+.wx-page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.wx-table-row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.wx-table-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+}
+.wx-table-meta {
+  font-size: 11px;
+  color: var(--text-light);
+  width: 100px;
+  text-align: right;
+}
+
+/* ── FLOAT BUTTON (injected) ── */
+.float-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 22px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 4px 16px rgba(37,99,235,.45);
+  cursor: pointer;
+  user-select: none;
+  z-index: 10;
+}
+.float-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.inject-label {
+  position: absolute;
+  bottom: 62px;
+  right: 20px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 10px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.inject-label::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  right: 28px;
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+  border-bottom: none;
+}
+
+/* ── POPUP ── */
+.popups-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+}
+.popup-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.popup-state-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #64748b;
+}
+.popup {
+  width: 280px;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.popup-header {
+  background: #1e293b;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.popup-header-logo {
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.popup-header-logo svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.popup-header-title { font-size: 12px; font-weight: 600; color: #f1f5f9; }
+.popup-body { padding: 14px; }
+.popup-info { font-size: 12px; color: var(--text-muted); margin-bottom: 3px; }
+.popup-info b { color: var(--text); font-weight: 500; }
+.popup-meta { font-size: 10px; color: var(--text-light); margin-bottom: 12px; }
+
+/* progress */
+.progress-wrap { background: #e5e7eb; border-radius: 3px; height: 5px; overflow: hidden; margin: 8px 0 4px; }
+.progress-bar { height: 100%; background: var(--accent); border-radius: 3px; }
+.progress-txt { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-light); margin-bottom: 8px; }
+.checklist { display: flex; flex-direction: column; gap: 4px; }
+.check-item { font-size: 11px; display: flex; align-items: center; gap: 5px; }
+.check-item.done { color: var(--green); }
+.check-item.going { color: var(--accent); }
+.check-item.wait { color: var(--text-light); }
+
+/* success */
+.success-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.success-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #dcfce7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+/* btn */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 14px;
+  width: 100%;
+  margin-top: 12px;
+  transition: background .15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); margin-top: 8px; }
+
+/* not-logged */
+.not-logged-tip {
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-size: 11px;
+  color: #92400e;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+</style>
+</head>
+<body>
+
+<!-- Demo bar -->
+<div class="demo-bar">
+  <div class="demo-bar-dot"></div>
+  <b>设计稿 · Chrome 插件</b>
+  <span>仅在 mp.weixin.qq.com 域名下生效 · Content Script 注入</span>
+</div>
+
+<div class="page-wrap">
+
+  <!-- Section 1: Float button in WeChat backend -->
+  <div style="width:100%;max-width:860px;">
+    <div class="section-label">① 悬浮按钮 — 注入微信公众号后台页面</div>
+    <div class="wx-backend">
+      <!-- Chrome bar -->
+      <div class="wx-backend-chrome">
+        <div class="chrome-dots">
+          <div class="chrome-dot" style="background:#ff5f57;"></div>
+          <div class="chrome-dot" style="background:#febc2e;"></div>
+          <div class="chrome-dot" style="background:#28c840;"></div>
+        </div>
+        <div class="chrome-addressbar">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          mp.weixin.qq.com/cgi-bin/appmsgpublish
+        </div>
+      </div>
+      <!-- Page content -->
+      <div class="wx-content">
+        <div class="wx-sidebar-mock">
+          <div class="wx-sidebar-item">首页</div>
+          <div class="wx-sidebar-item active">发表文章</div>
+          <div class="wx-sidebar-item">图文消息</div>
+          <div class="wx-sidebar-item">数据分析</div>
+          <div class="wx-sidebar-item">用户管理</div>
+        </div>
+        <div class="wx-main-area">
+          <div class="wx-page-title">已发表</div>
+          <div class="wx-table-row">
+            <div class="wx-table-title">AI 不会让你变强，它只会放大你本来的样子</div>
+            <div class="wx-table-meta">03-14</div>
+          </div>
+          <div class="wx-table-row">
+            <div class="wx-table-title">3D 创业笔记：第 9 周进展</div>
+            <div class="wx-table-meta">03-08</div>
+          </div>
+          <div class="wx-table-row">
+            <div class="wx-table-title">9 天试了 3 条路全没走通...</div>
+            <div class="wx-table-meta">02-28</div>
+          </div>
+        </div>
+
+        <!-- Injected float button -->
+        <div class="inject-label">Content Script 注入</div>
+        <div class="float-btn">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          同步到运营助手
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Popup states -->
+  <div style="width:100%;max-width:960px;">
+    <div class="section-label">② 同步弹窗 — 四个状态</div>
+    <div class="popups-row">
+
+      <!-- State 0: Not logged in -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">未登录</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div class="not-logged-tip">
+              <span>⚠</span>
+              <span>请先前往运营助手登录，才能同步数据</span>
+            </div>
+            <button class="btn btn-primary">前往登录 →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- State 1: Ready to sync -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">已登录 · 待同步</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div class="popup-info">✓ 检测到公众号后台</div>
+            <div class="popup-meta">上次同步：03-17 10:15</div>
+            <button class="btn btn-primary">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
+              开始同步
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- State 2: Syncing -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">同步中</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div class="popup-info">正在采集数据...</div>
+            <div class="progress-wrap">
+              <div class="progress-bar" style="width:65%;"></div>
+            </div>
+            <div class="progress-txt">
+              <span>文章列表 · 数据指标</span>
+              <span>23 / 35 篇</span>
+            </div>
+            <div class="checklist">
+              <div class="check-item done">✓ 文章列表（35篇）</div>
+              <div class="check-item done">✓ 数据指标</div>
+              <div class="check-item going">● 文章全文（23/35）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- State 3: Done -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">同步完成</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div class="success-row">
+              <div class="success-check">✓</div>
+              <div>
+                <div style="font-size:13px;font-weight:600;">同步完成</div>
+                <div style="font-size:10px;color:var(--text-light);">新增 5 篇，更新 30 篇数据</div>
+              </div>
+            </div>
+            <div class="checklist" style="margin-bottom:0;">
+              <div class="check-item done">✓ 文章列表（35篇）</div>
+              <div class="check-item done">✓ 数据指标</div>
+              <div class="check-item done">✓ 文章全文</div>
+            </div>
+            <button class="btn btn-primary">前往运营助手查看 →</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

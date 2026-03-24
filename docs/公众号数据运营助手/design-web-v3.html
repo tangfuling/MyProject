@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web App — 设计稿 V3</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --accent-mid: #bfdbfe;
+  --green: #16a34a;
+  --green-light: #f0fdf4;
+  --red: #dc2626;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+  --bg: #f9fafb;
+  --card: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow: 0 1px 4px rgba(0,0,0,.08), 0 2px 12px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 20px rgba(0,0,0,.1);
+  --r: 10px;
+  --r-sm: 7px;
+}
+body { font-family: -apple-system,"PingFang SC","Helvetica Neue",sans-serif; font-size: 14px; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+/* ── DEMO BAR ── */
+.demo-bar {
+  background: #1e293b;
+  color: #64748b;
+  font-size: 11px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  flex-shrink: 0;
+}
+.demo-bar-label { color: #475569; margin-right: 16px; font-weight: 500; }
+.demo-tabs { display: flex; }
+.demo-tab {
+  padding: 0 14px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.demo-tab:hover { color: #94a3b8; }
+.demo-tab.active { color: #e2e8f0; border-bottom-color: var(--accent); }
+
+/* ── PAGE ── */
+.page { display: none; min-height: calc(100vh - 32px); }
+.page.active { display: block; }
+.page.flex-page { display: none; flex-direction: column; }
+.page.flex-page.active { display: flex; height: calc(100vh - 32px); overflow: hidden; }
+
+/* ── SHARED ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; font-family: inherit; }
+.btn-primary { background: var(--accent); color: #fff; padding: 10px 20px; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 9px 18px; }
+.btn-outline:hover { background: var(--bg); }
+.btn-ghost { background: none; color: var(--text-muted); border: 1px solid var(--border); padding: 7px 14px; }
+.btn-ghost:hover { color: var(--text); background: var(--bg); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-xs { padding: 4px 10px; font-size: 11px; }
+.input { width: 100%; padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 13px; outline: none; background: var(--bg); transition: border-color .15s, background .15s; font-family: inherit; color: var(--text); }
+.input:focus { border-color: var(--accent); background: #fff; }
+.tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.tag-blue { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-mid); }
+.tag-green { background: var(--green-light); color: var(--green); }
+
+
+/* ════════════════════════════════════════
+   PAGE 1 · 落地页
+════════════════════════════════════════ */
+/* Landing header */
+.landing-header {
+  height: 56px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+.brand-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.brand-icon svg { width: 17px; height: 17px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.brand-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+/* Hero */
+.hero {
+  padding: 72px 40px 80px;
+  text-align: center;
+  background: linear-gradient(180deg, #fff 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--border);
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-mid);
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 22px;
+}
+.hero-title {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  margin-bottom: 16px;
+  letter-spacing: -1px;
+}
+.hero-title span { color: var(--accent); }
+.hero-subtitle {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-bottom: 36px;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.7;
+}
+.hero-ctas { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.hero-cta-primary { background: var(--accent); color: #fff; padding: 13px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; border: none; transition: background .15s; }
+.hero-cta-primary:hover { background: #1d4ed8; }
+.hero-cta-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 13px 24px; border-radius: 8px; font-size: 15px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: all .15s; }
+.hero-cta-secondary:hover { background: var(--bg); }
+.hero-note { font-size: 12px; color: var(--text-light); margin-top: 16px; }
+.hero-note b { color: var(--accent); font-weight: 500; }
+
+/* Steps */
+.steps-section {
+  padding: 60px 40px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+.steps-title {
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.steps-sub {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 48px;
+}
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.step-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.step-icon { font-size: 24px; margin-bottom: 10px; }
+.step-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.step-desc { font-size: 13px; color: var(--text-muted); line-height: 1.65; }
+.step-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.step-arrow {
+  position: absolute;
+  right: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-light);
+  font-size: 18px;
+  z-index: 1;
+}
+
+/* Feature section */
+.feature-section {
+  padding: 60px 40px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+.feature-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+}
+.feature-item { text-align: center; }
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  font-size: 22px;
+}
+.feature-icon.blue { background: var(--accent-light); }
+.feature-icon.green { background: var(--green-light); }
+.feature-icon.purple { background: #f5f3ff; }
+.feature-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.feature-desc { font-size: 13px; color: var(--text-muted); line-height: 1.65; }
+
+/* Pricing */
+.pricing-section {
+  padding: 60px 40px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+.pricing-inner { max-width: 480px; margin: 0 auto; }
+.pricing-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.pricing-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+.pricing-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; text-align: left; }
+.pricing-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.pricing-item-check { color: var(--green); font-weight: 600; }
+
+/* Landing footer */
+.landing-footer {
+  border-top: 1px solid var(--border);
+  padding: 20px 40px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+
+/* ════════════════════════════════════════
+   PAGE 2 · 登录页
+════════════════════════════════════════ */
+.login-shell {
+  min-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, #f0f5ff 0%, #fafafa 100%);
+}
+.login-shell .landing-header { border-bottom: 1px solid var(--border); }
+.login-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+.login-box {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 36px 32px 28px;
+  width: 360px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+}
+.login-box-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.login-box-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+.form-field { margin-bottom: 16px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+.code-row { display: flex; gap: 8px; }
+.code-row .input { flex: 1; }
+.code-btn { padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12px; cursor: pointer; background: var(--card); color: var(--text-muted); white-space: nowrap; font-family: inherit; transition: all .15s; }
+.code-btn:hover { border-color: var(--accent); color: var(--accent); }
+.login-tip { font-size: 11px; color: var(--text-light); text-align: center; margin-top: 12px; }
+.login-tip b { color: var(--accent); font-weight: 500; }
+.login-back { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); cursor: pointer; margin-bottom: 20px; }
+.login-back:hover { color: var(--accent); }
+
+
+/* ════════════════════════════════════════
+   PAGE 3 · 工作台
+════════════════════════════════════════ */
+/* Topbar */
+.app-topbar {
+  height: 50px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+.app-topbar-account { font-size: 12px; color: var(--text-muted); padding-left: 12px; border-left: 1px solid var(--border); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sync-meta { font-size: 11px; color: var(--text-light); }
+.balance-chip {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--accent-light); border: 1px solid var(--accent-mid);
+  border-radius: 14px; padding: 3px 10px;
+  font-size: 11px; font-weight: 500; color: var(--accent);
+  cursor: pointer;
+}
+.avatar-btn {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #e0e7ff; color: var(--accent);
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none;
+}
+
+/* Workspace body */
+.workspace-body { flex: 1; display: flex; overflow: hidden; }
+
+/* Context panel */
+.ctx {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ctx-sec { flex-shrink: 0; }
+.ctx-sec + .ctx-sec { border-top: 1px solid var(--border); }
+.ctx-head { padding: 11px 14px 9px; display: flex; align-items: center; justify-content: space-between; }
+.ctx-head-left { display: flex; align-items: center; gap: 6px; }
+.ctx-head-icon { font-size: 13px; }
+.ctx-head-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+.ctx-body { padding: 0 14px 12px; }
+.stat-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.stat-cell { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.stat-cell-label { font-size: 10px; color: var(--text-light); margin-bottom: 2px; }
+.stat-cell-val { font-size: 18px; font-weight: 700; letter-spacing: -.5px; }
+.stat-cell-delta { font-size: 10px; margin-top: 1px; }
+.stat-cell-delta.up { color: var(--green); }
+.stat-cell-delta.down { color: var(--red); }
+.detail-link { display: block; text-align: center; font-size: 11px; color: var(--text-light); margin-top: 9px; cursor: pointer; transition: color .15s; }
+.detail-link:hover { color: var(--accent); }
+.ctx-analysis { flex: 1; overflow-y: auto; padding: 0 14px 12px; }
+.analysis-stage { display: inline-flex; align-items: center; gap: 5px; background: #fff7ed; border: 1px solid #fed7aa; color: #d97706; border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 600; margin-bottom: 9px; }
+.ctx-sec-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-bottom: 6px; }
+.finding { display: flex; gap: 6px; margin-bottom: 4px; font-size: 12px; line-height: 1.5; }
+.finding.pos { color: var(--text); }
+.finding.neg { color: var(--text); }
+.finding-dot { flex-shrink: 0; margin-top: 2px; font-size: 11px; }
+.divider { height: 1px; background: var(--border-light); margin: 9px 0; }
+.suggestion { display: flex; gap: 6px; margin-bottom: 6px; }
+.sug-num { width: 15px; height: 15px; border-radius: 50%; background: var(--accent-light); color: var(--accent); font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.sug-text { font-size: 12px; line-height: 1.55; }
+.ctx-footer { border-top: 1px solid var(--border-light); padding: 9px 14px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.ctx-footer-meta { font-size: 10px; color: var(--text-light); }
+.ctx-footer-meta b { color: var(--text-muted); }
+
+/* Time tabs */
+.time-tabs { display: flex; gap: 3px; }
+.time-tab { padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); transition: all .12s; }
+.time-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Chat */
+.chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-msgs { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+.msg { display: flex; gap: 9px; max-width: 700px; }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; max-width: 560px; }
+.msg-av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 14px; }
+.msg-av.ai { background: var(--accent-light); }
+.msg-av.user { background: #e5e7eb; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.7; }
+.bubble.ai { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 2px 12px 12px 12px; box-shadow: var(--shadow-sm); }
+.bubble.user { background: var(--accent); color: #fff; border-radius: 12px 2px 12px 12px; }
+.msg-meta { font-size: 10px; color: var(--text-light); padding: 0 2px; }
+
+/* Analysis message */
+.analysis-msg { background: var(--card); border: 1px solid var(--border); border-radius: 2px 12px 12px 12px; box-shadow: var(--shadow-sm); overflow: hidden; max-width: 660px; }
+.am-head { padding: 12px 16px 10px; border-bottom: 1px solid var(--border-light); }
+.am-head-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+.am-head-sub { font-size: 12px; color: var(--text-muted); }
+.am-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.am-sec-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-bottom: 6px; }
+.am-finding { display: flex; gap: 6px; font-size: 12px; line-height: 1.5; margin-bottom: 4px; }
+.suggest-list { display: flex; flex-direction: column; gap: 5px; }
+.suggest-item { display: flex; align-items: flex-start; gap: 7px; background: var(--bg); border-radius: 7px; padding: 7px 10px; font-size: 12px; }
+.suggest-item-num { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.mood-block { background: var(--bg); border-left: 3px solid var(--accent-mid); border-radius: 0 7px 7px 0; padding: 9px 12px; font-size: 12px; color: var(--text-muted); line-height: 1.65; }
+.am-footer { padding: 10px 16px; border-top: 1px solid var(--border-light); display: flex; align-items: center; justify-content: space-between; }
+.am-footer-chips { display: flex; gap: 6px; }
+.chip { padding: 3px 10px; border: 1px solid var(--border); border-radius: 12px; font-size: 11px; color: var(--text-muted); cursor: pointer; background: var(--card); transition: all .13s; }
+.chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+/* Chat bottom */
+.chat-bottom { flex-shrink: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 20px 14px; }
+.shortcut-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 9px; }
+.input-row { display: flex; gap: 8px; }
+.chat-input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 9px 13px; font-size: 13px; outline: none; resize: none; height: 40px; font-family: inherit; transition: border-color .15s; background: var(--bg); color: var(--text); }
+.chat-input:focus { border-color: var(--accent); background: #fff; }
+.send-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; height: 40px; padding: 0 18px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background .15s; }
+.send-btn:hover { background: #1d4ed8; }
+.send-btn svg { width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+
+/* ════════════════════════════════════════
+   PAGE 4 · 个人中心
+════════════════════════════════════════ */
+.profile-shell { min-height: calc(100vh - 32px); background: var(--bg); }
+.profile-body { max-width: 640px; margin: 0 auto; padding: 32px 24px 48px; }
+.profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+.profile-av { width: 48px; height: 48px; border-radius: 50%; background: #e0e7ff; color: var(--accent); font-size: 20px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.profile-name { font-size: 16px; font-weight: 700; }
+.profile-sub { font-size: 12px; color: var(--text-muted); }
+.section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); margin-bottom: 10px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm); margin-bottom: 16px; }
+.card-body { padding: 16px 20px; }
+.balance-num { font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+.balance-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.recharge-opts { display: flex; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+.recharge-opt { flex: 1; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all .13s; }
+.recharge-opt:hover { border-color: var(--accent); background: var(--accent-light); }
+.recharge-opt.active { border-color: var(--accent); background: var(--accent-light); }
+.recharge-opt-amount { font-size: 17px; font-weight: 700; }
+.recharge-opt-active .recharge-opt-amount { color: var(--accent); }
+.recharge-opt-sub { font-size: 10px; color: var(--text-light); margin-top: 2px; }
+.pay-btn-row { margin-top: 12px; }
+.log-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-light); gap: 10px; }
+.log-item:last-child { border-bottom: none; }
+.log-date { font-size: 11px; color: var(--text-light); width: 90px; flex-shrink: 0; }
+.log-type { font-size: 12px; color: var(--text); flex: 1; }
+.log-tok { font-size: 11px; color: var(--text-light); }
+.log-cost { font-size: 12px; font-weight: 600; color: var(--text); width: 48px; text-align: right; }
+.pay-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-light); gap: 10px; }
+.pay-item:last-child { border-bottom: none; }
+.pay-date { font-size: 11px; color: var(--text-light); width: 90px; flex-shrink: 0; }
+.pay-channel { font-size: 12px; color: var(--text); flex: 1; }
+.pay-amount { font-size: 13px; font-weight: 600; color: var(--green); }
+.more-link { text-align: center; padding: 10px; font-size: 11px; color: var(--text-light); cursor: pointer; }
+.more-link:hover { color: var(--accent); }
+
+/* ── DRAWER ── */
+.overlay { position: fixed; inset: 0; top: 32px; background: rgba(0,0,0,.2); z-index: 100; display: none; }
+.overlay.open { display: block; }
+.drawer { position: fixed; top: 32px; right: 0; bottom: 0; width: 460px; background: var(--card); box-shadow: -4px 0 24px rgba(0,0,0,.1); z-index: 101; transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
+.drawer.open { transform: translateX(0); }
+.drawer-head { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.drawer-head-title { font-size: 14px; font-weight: 600; }
+.drawer-head-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.drawer-close { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; color: var(--text-muted); font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.drawer-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 20px; }
+.dstat { background: var(--bg); border-radius: 8px; padding: 10px 11px; }
+.dstat-label { font-size: 10px; color: var(--text-light); margin-bottom: 2px; }
+.dstat-val { font-size: 18px; font-weight: 700; }
+.dstat-delta { font-size: 10px; margin-top: 1px; }
+.dstat-delta.up { color: var(--green); }
+.dstat-delta.down { color: var(--red); }
+.art-row { padding: 11px 0; border-bottom: 1px solid var(--border-light); }
+.art-row:last-child { border-bottom: none; }
+.art-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.art-title { font-size: 12px; font-weight: 500; }
+.art-date { font-size: 10px; color: var(--text-light); flex-shrink: 0; }
+.art-stats { display: flex; gap: 12px; }
+.art-stat { font-size: 11px; color: var(--text-muted); }
+.art-stat b { color: var(--text); font-weight: 600; }
+.src-bar { display: flex; height: 3px; border-radius: 2px; overflow: hidden; gap: 1px; margin-top: 6px; }
+.src-seg { height: 100%; }
+.src-labels { display: flex; gap: 10px; margin-top: 4px; }
+.src-label { font-size: 10px; color: var(--text-light); display: flex; align-items: center; gap: 3px; }
+.src-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Demo bar (嵌入布局，不浮动) -->
+<div class="demo-bar">
+  <span class="demo-bar-label">设计稿预览</span>
+  <div class="demo-tabs">
+    <div class="demo-tab active" onclick="showPage('landing')" id="dt-landing">落地页</div>
+    <div class="demo-tab" onclick="showPage('login')" id="dt-login">登录</div>
+    <div class="demo-tab" onclick="showPage('workspace')" id="dt-workspace">工作台</div>
+    <div class="demo-tab" onclick="showPage('profile')" id="dt-profile">个人中心</div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 1 · 落地页
+════════════════════════════════════════ -->
+<div id="page-landing" class="page active">
+
+  <!-- Header -->
+  <header class="landing-header">
+    <a class="brand" href="#">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="brand-name">公众号数据运营助手</div>
+    </a>
+    <div class="header-right">
+      <button class="btn btn-outline btn-sm" onclick="showPage('login')">登录</button>
+      <button class="btn btn-primary btn-sm" onclick="showPage('login')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        安装插件
+      </button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-eyebrow">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      给公众号创作者的 AI 运营助手
+    </div>
+    <h1 class="hero-title">
+      同步数据，<span>AI 帮你看清</span><br>下一步该怎么做
+    </h1>
+    <p class="hero-subtitle">
+      安装 Chrome 插件，一键同步微信公众号数据。AI 自动分析阅读趋势、渠道来源、内容风格，给你可直接执行的建议。
+    </p>
+    <div class="hero-ctas">
+      <button class="hero-cta-primary" onclick="showPage('login')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        安装 Chrome 插件，免费开始
+      </button>
+      <button class="hero-cta-secondary" onclick="showPage('workspace')">
+        查看示例工作台 →
+      </button>
+    </div>
+    <div class="hero-note">新用户注册赠 <b>¥1.00</b> 免费额度 · 按 token 计费 · 无月订阅</div>
+  </section>
+
+  <!-- How it works -->
+  <section class="steps-section">
+    <h2 class="steps-title">三步开始使用</h2>
+    <p class="steps-sub">整个过程 2 分钟完成</p>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-icon">🔌</div>
+        <div class="step-title">安装 Chrome 插件</div>
+        <div class="step-desc">从 Chrome 应用商店安装，登录手机号账号，完成绑定。</div>
+        <div class="step-detail">支持 Chrome / Edge · 仅在 mp.weixin.qq.com 运行</div>
+        <div class="step-arrow">›</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-icon">⚡</div>
+        <div class="step-title">一键同步数据</div>
+        <div class="step-desc">打开微信公众号后台，点击右下角悬浮按钮，自动采集所有文章数据。</div>
+        <div class="step-detail">采集：阅读、分享、收藏、完读率、来源结构、文章全文</div>
+        <div class="step-arrow">›</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-icon">🤖</div>
+        <div class="step-title">AI 分析 + 对话</div>
+        <div class="step-desc">AI 自动生成分析报告，你可以直接对话，追问任何运营问题。</div>
+        <div class="step-detail">基于你的真实数据 · 给出本周可执行的 3 条建议</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="feature-section">
+    <div class="feature-inner">
+      <div class="feature-item">
+        <div class="feature-icon blue">📊</div>
+        <div class="feature-title">数据同步与展示</div>
+        <div class="feature-desc">阅读趋势、来源结构、篇均完读率，全部可视化。增量同步，已有数据不重复采集。</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon green">📋</div>
+        <div class="feature-title">AI 智能分析报告</div>
+        <div class="feature-desc">自动判断账号阶段，识别外向型与记录型文章差异，给出渠道分析和内容建议。</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon purple">💬</div>
+        <div class="feature-title">对话式深度追问</div>
+        <div class="feature-desc">报告看完还不够？直接问 AI。「为什么这篇分享率低」「下一篇写什么」，秒回。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing-section">
+    <div class="pricing-inner">
+      <h2 class="pricing-title">按量计费，完全透明</h2>
+      <p class="pricing-sub">没有订阅费，不用时不收费，每次调用 AI 前都会显示预估费用。</p>
+      <div class="pricing-list">
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 注册赠 ¥1.00 免费额度，够用约 5 次分析</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 生成一次分析报告约 ¥0.15–0.20</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 对话每轮约 ¥0.01–0.05</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 每次 AI 调用前显示预估 token 和费用</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 支付宝充值，最低 ¥10</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="showPage('login')">免费注册开始使用</button>
+    </div>
+  </section>
+
+  <footer class="landing-footer">© 2026 公众号数据运营助手 · 先服务自己，再验证价值</footer>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 2 · 登录
+════════════════════════════════════════ -->
+<div id="page-login" class="page">
+  <div class="login-shell">
+    <header class="landing-header">
+      <a class="brand" href="#" onclick="showPage('landing')">
+        <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="brand-name">公众号数据运营助手</div>
+      </a>
+    </header>
+    <div class="login-body">
+      <div class="login-box">
+        <div class="login-back" onclick="showPage('landing')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap: round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          返回首页
+        </div>
+        <div class="login-box-title">登录 / 注册</div>
+        <div class="login-box-sub">用手机号登录，新用户自动注册</div>
+
+        <div class="form-field">
+          <div class="form-label">手机号</div>
+          <input class="input" type="text" placeholder="请输入手机号">
+        </div>
+        <div class="form-field">
+          <div class="form-label">验证码</div>
+          <div class="code-row">
+            <input class="input" type="text" placeholder="请输入验证码">
+            <button class="code-btn">获取验证码</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="showPage('workspace')">登录</button>
+        <div class="login-tip">新用户注册赠送 <b>¥1.00</b> 免费额度</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 3 · 工作台
+════════════════════════════════════════ -->
+<div id="page-workspace" class="page flex-page">
+
+  <!-- Topbar -->
+  <div class="app-topbar">
+    <a class="brand" href="#" onclick="showPage('landing')" style="text-decoration:none;">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="brand-name">运营助手</div>
+    </a>
+    <span class="app-topbar-account">机器猫创业记</span>
+    <div class="topbar-right">
+      <span class="sync-meta">上次同步 14:30 · 156 篇</span>
+      <button class="btn btn-ghost btn-xs" style="display:flex;align-items:center;gap:3px;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
+        同步
+      </button>
+      <div class="balance-chip" onclick="showPage('profile')">¥ 9.86</div>
+      <button class="avatar-btn" onclick="showPage('profile')">T</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="workspace-body">
+
+    <!-- Context panel -->
+    <div class="ctx">
+      <!-- Data -->
+      <div class="ctx-sec">
+        <div class="ctx-head">
+          <div class="ctx-head-left">
+            <span class="ctx-head-icon">📊</span>
+            <span class="ctx-head-title">数据</span>
+          </div>
+          <div class="time-tabs">
+            <div class="time-tab">7天</div>
+            <div class="time-tab active">30天</div>
+          </div>
+        </div>
+        <div class="ctx-body">
+          <div class="stat-grid-2x2">
+            <div class="stat-cell">
+              <div class="stat-cell-label">总阅读</div>
+              <div class="stat-cell-val">640</div>
+              <div class="stat-cell-delta up">↑ 12%</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-cell-label">篇均阅读</div>
+              <div class="stat-cell-val">80</div>
+              <div class="stat-cell-delta up">↑ 5%</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-cell-label">完读率</div>
+              <div class="stat-cell-val">62<span style="font-size:12px;font-weight:500">%</span></div>
+              <div class="stat-cell-delta down">↓ 3%</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-cell-label">总分享</div>
+              <div class="stat-cell-val">48</div>
+              <div class="stat-cell-delta up">↑ 20%</div>
+            </div>
+          </div>
+          <a class="detail-link" onclick="openDrawer()">查看 8 篇文章详情 →</a>
+        </div>
+      </div>
+
+      <!-- Analysis -->
+      <div class="ctx-sec" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="ctx-head">
+          <div class="ctx-head-left">
+            <span class="ctx-head-icon">📋</span>
+            <span class="ctx-head-title">分析</span>
+          </div>
+          <span style="font-size:10px;color:var(--text-light);">03-17 生成</span>
+        </div>
+        <div class="ctx-analysis">
+          <div class="analysis-stage">📍 冷启动期 → 内容验证期</div>
+          <div class="ctx-sec-title">核心发现</div>
+          <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 外向型文章阅读是记录型 <b>3 倍</b></div>
+          <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 朋友圈是主力渠道（<b>68%</b>）</div>
+          <div class="finding neg"><span class="finding-dot" style="color:var(--red);">✗</span> 搜一搜 / 推荐流量几乎为零</div>
+          <div class="finding neg"><span class="finding-dot" style="color:var(--red);">✗</span> 分享率偏低，传播靠个人</div>
+          <div class="divider"></div>
+          <div class="ctx-sec-title">本周建议</div>
+          <div class="suggestion"><div class="sug-num">1</div><div class="sug-text">下一篇用外向型选题验证趋势</div></div>
+          <div class="suggestion"><div class="sug-num">2</div><div class="sug-text">标题加入搜索关键词测试流量</div></div>
+          <div class="suggestion"><div class="sug-num">3</div><div class="sug-text">文末加引导分享的钩子</div></div>
+        </div>
+        <div class="ctx-footer">
+          <div class="ctx-footer-meta">近30天 · <b>≈¥0.18</b></div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;">重新生成</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="chat-wrap">
+      <div class="chat-msgs">
+
+        <!-- AI: analysis report as first message -->
+        <div class="msg">
+          <div class="msg-av ai">🤖</div>
+          <div>
+            <div class="analysis-msg">
+              <div class="am-head">
+                <div class="am-head-title">
+                  已分析你近 30 天的 8 篇文章
+                  <span style="background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;">03-17 · 20,150 tok</span>
+                </div>
+                <div class="am-head-sub">你已稳定输出 78 天，发布 23 篇，平均阅读 80。同阶段属于正常偏上。</div>
+              </div>
+              <div class="am-body">
+                <div>
+                  <div class="am-sec-title">核心发现</div>
+                  <div class="am-finding"><span style="color:var(--green);">✓</span>&nbsp;外向型文章平均阅读 130，是记录型的 <b>3 倍</b></div>
+                  <div class="am-finding"><span style="color:var(--green);">✓</span>&nbsp;朋友圈是主力渠道，贡献了 68% 的阅读量</div>
+                  <div class="am-finding"><span style="color:var(--red);">✗</span>&nbsp;搜一搜 / 推荐流量几乎为零，内容尚未被平台分发</div>
+                  <div class="am-finding"><span style="color:var(--red);">✗</span>&nbsp;分享率偏低（0.8%），传播主要靠你个人分发</div>
+                </div>
+                <div>
+                  <div class="am-sec-title">本周可执行的 3 件事</div>
+                  <div class="suggest-list">
+                    <div class="suggest-item"><div class="suggest-item-num">1</div>下一篇用外向型选题，验证阅读量上升趋势是否持续</div>
+                    <div class="suggest-item"><div class="suggest-item-num">2</div>标题加入「创业 + 具体场景」关键词，测试搜一搜自然流量</div>
+                    <div class="suggest-item"><div class="suggest-item-num">3</div>文末加一句引导分享的钩子，降低读者分享决策成本</div>
+                  </div>
+                </div>
+                <div class="mood-block">
+                  78 天 23 篇，写作习惯已建立。数据还没爆发是正常的——同类账号通常在 50–80 篇时开始出现稳定推荐流量。你在正确的路上。
+                </div>
+              </div>
+              <div class="am-footer">
+                <span style="font-size:11px;color:var(--text-light);">有问题直接问我 👇</span>
+                <div class="am-footer-chips">
+                  <div class="chip">外向型 vs 记录型</div>
+                  <div class="chip">怎么提高分享率</div>
+                </div>
+              </div>
+            </div>
+            <div class="msg-meta">今天 14:30</div>
+          </div>
+        </div>
+
+        <!-- User -->
+        <div class="msg user">
+          <div class="msg-av user">我</div>
+          <div>
+            <div class="bubble user">我的外向型和记录型文章，数据差异的根本原因是什么？</div>
+          </div>
+        </div>
+
+        <!-- AI reply -->
+        <div class="msg" style="max-width:580px;">
+          <div class="msg-av ai">🤖</div>
+          <div>
+            <div class="bubble ai">
+              从数据看，差异主要来自<b>分发渠道</b>，不是内容质量。<br><br>
+              你的外向型文章发朋友圈比例是 100%，记录型只有 40%。朋友圈贡献了外向型 68% 的阅读量。<br><br>
+              值得注意：记录型完读率（<b>72%</b>）反而高于外向型（<b>61%</b>）——读到的人更认可这类内容，只是触达面小。
+            </div>
+            <div class="msg-meta">14:32 · 1,240 tok · ¥0.01</div>
+          </div>
+        </div>
+
+        <!-- User -->
+        <div class="msg user">
+          <div class="msg-av user">我</div>
+          <div>
+            <div class="bubble user">那我是不是应该全部转外向型？</div>
+          </div>
+        </div>
+
+        <!-- AI -->
+        <div class="msg" style="max-width:580px;">
+          <div class="msg-av ai">🤖</div>
+          <div>
+            <div class="bubble ai">
+              不建议。两个原因：<br><br>
+              1. 记录型完读率更高，说明有一批忠实读者在追踪你的创业进展——这是外向型很难积累的<b>核心用户</b>。<br><br>
+              2. 记录型是外向型的<b>素材库</b>，你能写出「9 天试了 3 条路」正是因为有真实记录。<br><br>
+              建议保持 <b>7:3 比例</b>（外向型:记录型），两类文章都认真发朋友圈。
+            </div>
+            <div class="msg-meta">14:33 · 2,340 tok · ¥0.02</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Chat bottom -->
+      <div class="chat-bottom">
+        <div class="shortcut-row">
+          <div class="chip">下一篇写什么</div>
+          <div class="chip">怎么提高分享率</div>
+          <div class="chip">对比上周</div>
+          <div class="chip">哪篇完读率最高</div>
+          <div class="chip">搜一搜怎么优化</div>
+        </div>
+        <div class="input-row">
+          <textarea class="chat-input" placeholder="问我关于你账号的任何问题..."></textarea>
+          <button class="send-btn">
+            发送
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 4 · 个人中心
+════════════════════════════════════════ -->
+<div id="page-profile" class="page">
+  <div class="profile-shell">
+    <div class="app-topbar">
+      <a class="brand" href="#" onclick="showPage('landing')" style="text-decoration:none;">
+        <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="brand-name">运营助手</div>
+      </a>
+      <span class="app-topbar-account">机器猫创业记</span>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-xs" onclick="showPage('workspace')" style="display:flex;align-items:center;gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          返回工作台
+        </button>
+      </div>
+    </div>
+
+    <div class="profile-body">
+      <div class="profile-head">
+        <div class="profile-av">T</div>
+        <div>
+          <div class="profile-name">138 **** 1234</div>
+          <div class="profile-sub">已同步 156 篇文章 · 机器猫创业记</div>
+        </div>
+      </div>
+
+      <div class="section-title">余额</div>
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+              <div class="balance-num">¥9.86</div>
+              <div class="balance-sub">含免费额度 ¥0.00（初始 ¥1.00 已用完）</div>
+            </div>
+          </div>
+          <div class="recharge-opts">
+            <div class="recharge-opt active">
+              <div class="recharge-opt-amount" style="color:var(--accent);">¥10</div>
+              <div class="recharge-opt-sub">≈ 110 万 tokens</div>
+            </div>
+            <div class="recharge-opt">
+              <div class="recharge-opt-amount">¥30</div>
+              <div class="recharge-opt-sub">≈ 330 万 tokens</div>
+            </div>
+            <div class="recharge-opt">
+              <div class="recharge-opt-amount">¥50</div>
+              <div class="recharge-opt-sub">≈ 550 万 tokens</div>
+            </div>
+          </div>
+          <div class="pay-btn-row">
+            <button class="btn btn-primary" style="width:100%;padding:11px;font-size:13px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              支付宝支付 ¥10
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">消费记录</div>
+      <div class="card">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="log-item">
+            <div class="log-date">03-24 14:32</div>
+            <div class="log-type">对话</div>
+            <div class="log-tok">1,847 tok</div>
+            <div class="log-cost">¥0.02</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-24 14:30</div>
+            <div class="log-type">生成分析（近 30 天）</div>
+            <div class="log-tok">20,150 tok</div>
+            <div class="log-cost">¥0.18</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-17 10:20</div>
+            <div class="log-type">对话</div>
+            <div class="log-tok">4,502 tok</div>
+            <div class="log-cost">¥0.05</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-17 10:15</div>
+            <div class="log-type">生成分析（近 30 天）</div>
+            <div class="log-tok">19,800 tok</div>
+            <div class="log-cost">¥0.17</div>
+          </div>
+          <div class="more-link">加载更多 ↓</div>
+        </div>
+      </div>
+
+      <div class="section-title">充值记录</div>
+      <div class="card">
+        <div class="card-body" style="padding:12px 16px;">
+          <div class="pay-item">
+            <div class="pay-date">03-20 15:00</div>
+            <div class="pay-channel">支付宝</div>
+            <div class="pay-amount">+¥10.00</div>
+          </div>
+          <div class="pay-item">
+            <div class="pay-date">03-01</div>
+            <div class="pay-channel">免费额度（注册赠送）</div>
+            <div class="pay-amount">+¥1.00</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost" style="color:var(--red);border-color:#fecdd3;" onclick="showPage('login')">退出登录</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Drawer: article detail -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <div class="drawer-head-title">文章数据 · 近 30 天</div>
+      <div class="drawer-head-sub">8 篇 · 上次同步 2026-03-24 14:30</div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-stat-grid">
+      <div class="dstat"><div class="dstat-label">总阅读</div><div class="dstat-val">640</div><div class="dstat-delta up">↑ 12%</div></div>
+      <div class="dstat"><div class="dstat-label">篇均阅读</div><div class="dstat-val">80</div><div class="dstat-delta up">↑ 5%</div></div>
+      <div class="dstat"><div class="dstat-label">完读率</div><div class="dstat-val">62%</div><div class="dstat-delta down">↓ 3%</div></div>
+      <div class="dstat"><div class="dstat-label">总分享</div><div class="dstat-val">48</div><div class="dstat-delta up">↑ 20%</div></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:10px;">文章列表</div>
+
+    <div class="art-row">
+      <div class="art-top"><div class="art-title">AI 不会让你变强，它只会放大你本来的样子</div><div class="art-date">03-14</div></div>
+      <div class="art-stats"><div class="art-stat">阅读 <b>120</b></div><div class="art-stat">分享 <b>8</b></div><div class="art-stat">收藏 <b>5</b></div><div class="art-stat">完读 <b>67%</b></div></div>
+      <div class="src-bar"><div class="src-seg" style="width:68%;background:#2563eb;"></div><div class="src-seg" style="width:20%;background:#93c5fd;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#2563eb;"></div>朋友圈 68%</div><div class="src-label"><div class="src-dot" style="background:#93c5fd;"></div>公众号 20%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
+    </div>
+    <div class="art-row">
+      <div class="art-top"><div class="art-title">3D 创业笔记：第 9 周进展</div><div class="art-date">03-08</div></div>
+      <div class="art-stats"><div class="art-stat">阅读 <b>32</b></div><div class="art-stat">分享 <b>1</b></div><div class="art-stat">收藏 <b>0</b></div><div class="art-stat">完读 <b>58%</b></div></div>
+      <div class="src-bar"><div class="src-seg" style="width:82%;background:#93c5fd;"></div><div class="src-seg" style="width:12%;background:#2563eb;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#93c5fd;"></div>公众号 82%</div><div class="src-label"><div class="src-dot" style="background:#2563eb;"></div>朋友圈 12%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 6%</div></div>
+    </div>
+    <div class="art-row">
+      <div class="art-top"><div class="art-title">9 天试了 3 条路全没走通，我发现了一个更重要的问题</div><div class="art-date">02-28</div></div>
+      <div class="art-stats"><div class="art-stat">阅读 <b>85</b></div><div class="art-stat">分享 <b>6</b></div><div class="art-stat">收藏 <b>3</b></div><div class="art-stat">完读 <b>72%</b></div></div>
+      <div class="src-bar"><div class="src-seg" style="width:54%;background:#2563eb;"></div><div class="src-seg" style="width:30%;background:#93c5fd;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#2563eb;"></div>朋友圈 54%</div><div class="src-label"><div class="src-dot" style="background:#93c5fd;"></div>公众号 30%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 16%</div></div>
+    </div>
+    <div class="art-row">
+      <div class="art-top"><div class="art-title">创业第 8 周：焦虑的本质是信息不足</div><div class="art-date">02-20</div></div>
+      <div class="art-stats"><div class="art-stat">阅读 <b>97</b></div><div class="art-stat">分享 <b>5</b></div><div class="art-stat">收藏 <b>7</b></div><div class="art-stat">完读 <b>69%</b></div></div>
+      <div class="src-bar"><div class="src-seg" style="width:60%;background:#2563eb;"></div><div class="src-seg" style="width:28%;background:#93c5fd;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#2563eb;"></div>朋友圈 60%</div><div class="src-label"><div class="src-dot" style="background:#93c5fd;"></div>公众号 28%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
+    </div>
+    <div class="more-link">加载更多 ↓</div>
+  </div>
+</div>
+
+
+<script>
+const pages = ['landing','login','workspace','profile'];
+function showPage(name) {
+  pages.forEach(p => {
+    const el = document.getElementById('page-' + p);
+    const tab = document.getElementById('dt-' + p);
+    el?.classList.remove('active');
+    tab?.classList.remove('active');
+  });
+  document.getElementById('page-' + name)?.classList.add('active');
+  document.getElementById('dt-' + name)?.classList.add('active');
+  closeDrawer();
+}
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+showPage('landing');
+</script>
+</body>
+</html>
