@@ -1,0 +1,55 @@
+:root {
+  --common-color-bg: #f6f8fb;
+  --common-color-primary: #0f4c81;
+  --common-color-text: #1c1f23;
+}
+
+body {
+  background: linear-gradient(180deg, #eef3ff 0%, var(--common-color-bg) 42%, #ffffff 100%);
+  color: var(--common-color-text);
+}
+
+.page-shell {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+
+.page-card {
+  width: min(560px, 100%);
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dbe4f0;
+  box-shadow: 0 20px 50px rgba(17, 37, 74, 0.08);
+  padding: 28px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 32px;
+}
+
+.page-desc {
+  margin-top: 10px;
+  color: #556272;
+}
+
+.page-action {
+  margin-top: 24px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #ffffff;
+  background: var(--common-color-primary);
+  cursor: pointer;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
