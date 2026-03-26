@@ -454,6 +454,10 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
 .ctx-head-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--text-muted); }
 .ctx-body { padding: 0 16px 14px; }
 .stat-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-grid-3x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mini-trend { margin-top: 12px; }
+.mini-trend-label { font-size: 10px; color: var(--text-light); margin-bottom: 4px; font-weight: 500; }
+.sparkline { width: 100%; height: 40px; }
 .stat-cell { background: linear-gradient(135deg, var(--bg), #f1f5f9); border-radius: 12px; padding: 10px 12px; border: 1px solid var(--border-light); transition: all .15s; }
 .stat-cell:hover { border-color: var(--accent-mid); }
 .stat-cell-label { font-size: 10px; color: var(--text-light); margin-bottom: 3px; font-weight: 500; }
@@ -464,7 +468,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
 .detail-link { display: block; text-align: center; font-size: 11px; color: var(--text-light); margin-top: 10px; cursor: pointer; transition: color .15s; font-weight: 500; }
 .detail-link:hover { color: var(--accent); }
 .ctx-analysis { flex: 1; overflow-y: auto; padding: 0 16px 14px; }
-.analysis-stage { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 1px solid #fed7aa; color: #d97706; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 700; margin-bottom: 10px; }
+.analysis-stage { display: flex; align-items: flex-start; gap: 5px; background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 1px solid #fed7aa; color: #d97706; border-radius: 8px; padding: 8px 10px; font-size: 11px; font-weight: 600; margin-bottom: 10px; line-height: 1.5; }
 .ctx-sec-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 7px; }
 .finding { display: flex; gap: 7px; margin-bottom: 5px; font-size: 12px; line-height: 1.55; }
 .finding.pos { color: var(--text); }
@@ -592,6 +596,8 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
 .src-labels { display: flex; gap: 12px; margin-top: 5px; }
 .src-label { font-size: 10px; color: var(--text-light); display: flex; align-items: center; gap: 4px; font-weight: 500; }
 .src-dot { width: 7px; height: 7px; border-radius: 50%; }
+.trend-chart-box { background: linear-gradient(135deg, var(--bg), #f1f5f9); border-radius: 12px; padding: 14px 16px 10px; border: 1px solid var(--border-light); margin-bottom: 4px; }
+.src-overview { background: linear-gradient(135deg, var(--bg), #f1f5f9); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border-light); }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 4px; }
@@ -797,7 +803,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
           </div>
         </div>
         <div class="ctx-body">
-          <div class="stat-grid-2x2">
+          <div class="stat-grid-3x2">
             <div class="stat-cell">
               <div class="stat-cell-label">总阅读</div>
               <div class="stat-cell-val">640</div>
@@ -818,8 +824,27 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
               <div class="stat-cell-val">48</div>
               <div class="stat-cell-delta up">↑ 20%</div>
             </div>
+            <div class="stat-cell">
+              <div class="stat-cell-label">总点赞</div>
+              <div class="stat-cell-val">36</div>
+              <div class="stat-cell-delta up">↑ 8%</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-cell-label">新增关注</div>
+              <div class="stat-cell-val">12</div>
+              <div class="stat-cell-delta up">↑ 50%</div>
+            </div>
           </div>
-          <a class="detail-link" onclick="openDrawer()">查看 8 篇文章详情 →</a>
+          <!-- Mini trend sparkline -->
+          <div class="mini-trend">
+            <div class="mini-trend-label">阅读趋势（近 30 天）</div>
+            <svg class="sparkline" viewBox="0 0 240 40" preserveAspectRatio="none">
+              <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="0,35 30,32 60,28 90,30 120,22 150,18 180,20 210,12 240,8"/>
+              <polyline fill="url(#spark-grad)" stroke="none" points="0,35 30,32 60,28 90,30 120,22 150,18 180,20 210,12 240,8 240,40 0,40"/>
+              <defs><linearGradient id="spark-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".15"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+            </svg>
+          </div>
+          <a class="detail-link" onclick="openDrawer()">查看全部指标与 8 篇文章详情 →</a>
         </div>
       </div>
 
@@ -833,7 +858,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
           <span style="font-size:10px;color:var(--text-light);">03-17 生成</span>
         </div>
         <div class="ctx-analysis">
-          <div class="analysis-stage">📍 冷启动期 → 内容验证期</div>
+          <div class="analysis-stage">📍 已稳定更新 78 天，读者还主要靠自己分发，平台还没开始推你</div>
           <div class="ctx-sec-title">核心发现</div>
           <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 外向型文章阅读是记录型 <b>3 倍</b></div>
           <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 朋友圈是主力渠道（<b>68%</b>）</div>
@@ -866,7 +891,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
                   已分析你近 30 天的 8 篇文章
                   <span style="background:var(--accent-light);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">03-17 · 20,150 tok</span>
                 </div>
-                <div class="am-head-sub">你已稳定输出 78 天，发布 23 篇，平均阅读 80。同阶段属于正常偏上。</div>
+                <div class="am-head-sub">你已稳定输出 78 天，发布 23 篇，平均阅读 80。你现在还在靠自己分发（朋友圈为主），平台推荐还没起来，这在同阶段创作者里属于正常偏上。</div>
               </div>
               <div class="am-body">
                 <div>
@@ -1091,36 +1116,97 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
     <button class="drawer-close" onclick="closeDrawer()">✕</button>
   </div>
   <div class="drawer-body">
-    <div class="drawer-stat-grid">
+    <!-- Full metrics grid: 8 indicators -->
+    <div class="drawer-stat-grid" style="grid-template-columns:repeat(4,1fr);">
       <div class="dstat"><div class="dstat-label">总阅读</div><div class="dstat-val">640</div><div class="dstat-delta up">↑ 12%</div></div>
       <div class="dstat"><div class="dstat-label">篇均阅读</div><div class="dstat-val">80</div><div class="dstat-delta up">↑ 5%</div></div>
       <div class="dstat"><div class="dstat-label">完读率</div><div class="dstat-val">62%</div><div class="dstat-delta down">↓ 3%</div></div>
+      <div class="dstat"><div class="dstat-label">新增关注</div><div class="dstat-val">12</div><div class="dstat-delta up">↑ 50%</div></div>
+    </div>
+    <div class="drawer-stat-grid" style="grid-template-columns:repeat(4,1fr);margin-top:-14px;">
       <div class="dstat"><div class="dstat-label">总分享</div><div class="dstat-val">48</div><div class="dstat-delta up">↑ 20%</div></div>
+      <div class="dstat"><div class="dstat-label">总点赞</div><div class="dstat-val">36</div><div class="dstat-delta up">↑ 8%</div></div>
+      <div class="dstat"><div class="dstat-label">总喜欢</div><div class="dstat-val">29</div><div class="dstat-delta up">↑ 15%</div></div>
+      <div class="dstat"><div class="dstat-label">总留言</div><div class="dstat-val">14</div><div class="dstat-delta down">↓ 12%</div></div>
     </div>
 
-    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:12px;">文章列表</div>
+    <!-- Trend chart -->
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:10px;">阅读趋势</div>
+    <div class="trend-chart-box">
+      <svg viewBox="0 0 420 100" preserveAspectRatio="none" style="width:100%;height:100px;">
+        <!-- Grid lines -->
+        <line x1="0" y1="25" x2="420" y2="25" stroke="var(--border-light)" stroke-width="0.5"/>
+        <line x1="0" y1="50" x2="420" y2="50" stroke="var(--border-light)" stroke-width="0.5"/>
+        <line x1="0" y1="75" x2="420" y2="75" stroke="var(--border-light)" stroke-width="0.5"/>
+        <!-- Area fill -->
+        <polygon fill="url(#trend-grad)" points="0,85 60,78 120,65 180,70 240,52 300,42 360,45 420,25 420,100 0,100"/>
+        <!-- Line -->
+        <polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="0,85 60,78 120,65 180,70 240,52 300,42 360,45 420,25"/>
+        <!-- Data dots -->
+        <circle cx="0" cy="85" r="3" fill="var(--accent)"/>
+        <circle cx="60" cy="78" r="3" fill="var(--accent)"/>
+        <circle cx="120" cy="65" r="3" fill="var(--accent)"/>
+        <circle cx="180" cy="70" r="3" fill="var(--accent)"/>
+        <circle cx="240" cy="52" r="3" fill="var(--accent)"/>
+        <circle cx="300" cy="42" r="3" fill="var(--accent)"/>
+        <circle cx="360" cy="45" r="3" fill="var(--accent)"/>
+        <circle cx="420" cy="25" r="4" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+        <defs><linearGradient id="trend-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".12"/><stop offset="100%" stop-color="var(--accent)" stop-opacity=".01"/></linearGradient></defs>
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-light);margin-top:4px;">
+        <span>02-24</span><span>03-01</span><span>03-08</span><span>03-14</span><span>03-24</span>
+      </div>
+    </div>
+
+    <!-- Traffic source overview -->
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin:18px 0 10px;">流量来源</div>
+    <div class="src-overview">
+      <div class="src-bar" style="height:8px;border-radius:8px;">
+        <div class="src-seg" style="width:52%;background:var(--accent);border-radius:8px 0 0 8px;"></div>
+        <div class="src-seg" style="width:30%;background:#a5b4fc;"></div>
+        <div class="src-seg" style="width:8%;background:var(--green);"></div>
+        <div class="src-seg" style="flex:1;background:#e5e7eb;border-radius:0 8px 8px 0;"></div>
+      </div>
+      <div class="src-labels" style="flex-wrap:wrap;gap:8px 16px;margin-top:8px;">
+        <div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 52%</div>
+        <div class="src-label"><div class="src-dot" style="background:#a5b4fc;"></div>公众号消息 30%</div>
+        <div class="src-label"><div class="src-dot" style="background:var(--green);"></div>搜一搜 8%</div>
+        <div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 10%</div>
+      </div>
+    </div>
+
+    <!-- Article list -->
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin:18px 0 12px;">文章列表</div>
 
     <div class="art-row">
       <div class="art-top"><div class="art-title">AI 不会让你变强，它只会放大你本来的样子</div><div class="art-date">03-14</div></div>
-      <div class="art-stats"><div class="art-stat">阅读 <b>120</b></div><div class="art-stat">分享 <b>8</b></div><div class="art-stat">收藏 <b>5</b></div><div class="art-stat">完读 <b>67%</b></div></div>
+      <div class="art-stats">
+        <div class="art-stat">阅读 <b>120</b></div><div class="art-stat">分享 <b>8</b></div><div class="art-stat">点赞 <b>6</b></div><div class="art-stat">喜欢 <b>5</b></div><div class="art-stat">留言 <b>3</b></div><div class="art-stat">完读 <b>67%</b></div>
+      </div>
       <div class="src-bar"><div class="src-seg" style="width:68%;background:var(--accent);"></div><div class="src-seg" style="width:20%;background:#a5b4fc;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
       <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 68%</div><div class="src-label"><div class="src-dot" style="background:#a5b4fc;"></div>公众号 20%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
     </div>
     <div class="art-row">
       <div class="art-top"><div class="art-title">3D 创业笔记：第 9 周进展</div><div class="art-date">03-08</div></div>
-      <div class="art-stats"><div class="art-stat">阅读 <b>32</b></div><div class="art-stat">分享 <b>1</b></div><div class="art-stat">收藏 <b>0</b></div><div class="art-stat">完读 <b>58%</b></div></div>
+      <div class="art-stats">
+        <div class="art-stat">阅读 <b>32</b></div><div class="art-stat">分享 <b>1</b></div><div class="art-stat">点赞 <b>2</b></div><div class="art-stat">喜欢 <b>1</b></div><div class="art-stat">留言 <b>0</b></div><div class="art-stat">完读 <b>58%</b></div>
+      </div>
       <div class="src-bar"><div class="src-seg" style="width:82%;background:#a5b4fc;"></div><div class="src-seg" style="width:12%;background:var(--accent);"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
       <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#a5b4fc;"></div>公众号 82%</div><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 12%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 6%</div></div>
     </div>
     <div class="art-row">
       <div class="art-top"><div class="art-title">9 天试了 3 条路全没走通，我发现了一个更重要的问题</div><div class="art-date">02-28</div></div>
-      <div class="art-stats"><div class="art-stat">阅读 <b>85</b></div><div class="art-stat">分享 <b>6</b></div><div class="art-stat">收藏 <b>3</b></div><div class="art-stat">完读 <b>72%</b></div></div>
+      <div class="art-stats">
+        <div class="art-stat">阅读 <b>85</b></div><div class="art-stat">分享 <b>6</b></div><div class="art-stat">点赞 <b>4</b></div><div class="art-stat">喜欢 <b>3</b></div><div class="art-stat">留言 <b>2</b></div><div class="art-stat">完读 <b>72%</b></div>
+      </div>
       <div class="src-bar"><div class="src-seg" style="width:54%;background:var(--accent);"></div><div class="src-seg" style="width:30%;background:#a5b4fc;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
       <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 54%</div><div class="src-label"><div class="src-dot" style="background:#a5b4fc;"></div>公众号 30%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 16%</div></div>
     </div>
     <div class="art-row">
       <div class="art-top"><div class="art-title">创业第 8 周：焦虑的本质是信息不足</div><div class="art-date">02-20</div></div>
-      <div class="art-stats"><div class="art-stat">阅读 <b>97</b></div><div class="art-stat">分享 <b>5</b></div><div class="art-stat">收藏 <b>7</b></div><div class="art-stat">完读 <b>69%</b></div></div>
+      <div class="art-stats">
+        <div class="art-stat">阅读 <b>97</b></div><div class="art-stat">分享 <b>5</b></div><div class="art-stat">点赞 <b>8</b></div><div class="art-stat">喜欢 <b>7</b></div><div class="art-stat">留言 <b>4</b></div><div class="art-stat">完读 <b>69%</b></div>
+      </div>
       <div class="src-bar"><div class="src-seg" style="width:60%;background:var(--accent);"></div><div class="src-seg" style="width:28%;background:#a5b4fc;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
       <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 60%</div><div class="src-label"><div class="src-dot" style="background:#a5b4fc;"></div>公众号 28%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
     </div>
