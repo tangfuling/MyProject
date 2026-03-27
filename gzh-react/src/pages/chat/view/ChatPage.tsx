@@ -1,15 +1,28 @@
+import { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '../../../common/ui/AppLayout';
 import StreamText from '../../../common/ui/StreamText';
 import { useChatViewModel } from '../viewmodel/useChatViewModel';
 
 export default function ChatPage() {
-  const vm = useChatViewModel();
+  const [params] = useSearchParams();
+  const initQuestion = params.get('q') ?? undefined;
+  const initReportId = useMemo(() => {
+    const raw = params.get('reportId');
+    if (!raw) {
+      return undefined;
+    }
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : undefined;
+  }, [params]);
+
+  const vm = useChatViewModel(initQuestion, initReportId);
 
   return (
     <AppLayout>
       <section className="page-panel chat-panel">
         <h2>AI 对话</h2>
-        <div className="muted">会话ID: {vm.sessionId || '新会话'}</div>
+        <div className="muted">会话ID: {vm.sessionId || '新会话'} {vm.reportId ? `· 报告 ${vm.reportId}` : ''}</div>
 
         <div className="chat-box">
           {vm.messages.map((message) => (

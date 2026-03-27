@@ -176,6 +176,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         vo.setId(article.getId());
         vo.setWxArticleId(article.getWxArticleId());
         vo.setTitle(article.getTitle());
+        vo.setContent(article.getContent());
         vo.setWordCount(article.getWordCount());
         vo.setPublishTime(article.getPublishTime());
 

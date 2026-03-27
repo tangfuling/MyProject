@@ -10,6 +10,7 @@ public class ArticleVO {
     private Long id;
     private String wxArticleId;
     private String title;
+    private String content;
     private Integer wordCount;
     private LocalDateTime publishTime;
     private Integer readCount;

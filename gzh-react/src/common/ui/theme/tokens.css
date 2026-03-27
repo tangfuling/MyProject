@@ -313,6 +313,13 @@ body {
   background: #f0fdfa;
 }
 
+.suggest-box {
+  margin-top: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
 .report-detail {
   margin-top: 10px;
 }

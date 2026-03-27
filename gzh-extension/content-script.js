@@ -49,6 +49,12 @@
     });
   }
 
+  async function setStorage(payload) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set(payload, () => resolve());
+    });
+  }
+
   function parseTokenFromUrl() {
     const match = window.location.href.match(/[?&]token=(\d+)/);
     return match ? match[1] : '';
@@ -65,9 +71,11 @@
         throw new Error('未检测到微信后台 token，请确认页面已登录');
       }
 
-      const storage = await getStorage(['gzhAuthToken', 'gzhApiBase']);
+      const storage = await getStorage(['gzhAuthToken', 'gzhApiBase', 'gzhSyncedArticleIds']);
       const authToken = storage.gzhAuthToken;
       const apiBase = storage.gzhApiBase || 'http://127.0.0.1:8081';
+      const syncedArticleIds = storage.gzhSyncedArticleIds || {};
+
       if (!authToken) {
         throw new Error('请先在插件弹窗里配置 Web 登录 JWT');
       }
@@ -82,27 +90,32 @@
 
       const snapshots = [];
       const syncArticles = [];
+      const mergedIds = { ...syncedArticleIds };
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
+        const isNew = !mergedIds[article.wxArticleId];
+
         notifyState({
           stage: 'fetch_detail',
-          message: `正在抓取第 ${index + 1}/${articles.length} 篇`,
+          message: `${isNew ? '新文章' : '旧文章'}：${index + 1}/${articles.length}`,
           progress: Math.round(((index + 1) / articles.length) * 70) + 10,
           total: articles.length,
           synced: index,
         });
 
         const metrics = await fetchArticleMetrics(token, article).catch(() => ({}));
-        const content = await fetchArticleContent(article.contentUrl).catch(() => '');
 
-        syncArticles.push({
-          wxArticleId: article.wxArticleId,
-          title: article.title,
-          content,
-          wordCount: content.length,
-          publishTime: article.publishTime,
-        });
+        if (isNew) {
+          const content = await fetchArticleContent(article.contentUrl).catch(() => '');
+          syncArticles.push({
+            wxArticleId: article.wxArticleId,
+            title: article.title,
+            content,
+            wordCount: content.length,
+            publishTime: article.publishTime,
+          });
+        }
 
         snapshots.push({
           wxArticleId: article.wxArticleId,
@@ -116,6 +129,8 @@
           trafficSources: metrics.trafficSources || {},
           newFollowers: metrics.newFollowers || 0,
         });
+
+        mergedIds[article.wxArticleId] = true;
       }
 
       notifyState({ stage: 'upload', message: '正在上传到后端...', progress: 92, total: articles.length, synced: articles.length });
@@ -134,6 +149,8 @@
       if (!response.ok || json.code !== 0) {
         throw new Error(json.message || '同步上传失败');
       }
+
+      await setStorage({ gzhSyncedArticleIds: mergedIds });
 
       notifyState({
         stage: 'done',

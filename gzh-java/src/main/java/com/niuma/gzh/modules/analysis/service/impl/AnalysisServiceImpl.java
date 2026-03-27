@@ -75,8 +75,11 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     public AnalysisReportVO reportDetail(Long id) {
         Long userId = AuthContext.requiredUserId();
         AnalysisReportEntity report = analysisReportRepository.findById(id);
-        if (report == null || !report.getUserId().equals(userId)) {
-            return null;
+        if (report == null) {
+            throw new com.niuma.gzh.common.web.BizException(com.niuma.gzh.common.web.ErrorCode.NOT_FOUND.getCode(), "报告不存在");
+        }
+        if (!report.getUserId().equals(userId)) {
+            throw new com.niuma.gzh.common.web.BizException(com.niuma.gzh.common.web.ErrorCode.FORBIDDEN.getCode(), "无权限查看该报告");
         }
         return toVO(report);
     }

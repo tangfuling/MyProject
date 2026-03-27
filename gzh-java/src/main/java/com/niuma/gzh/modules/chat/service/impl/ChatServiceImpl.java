@@ -153,6 +153,21 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         StringBuilder sb = new StringBuilder();
         OverviewVO overview = articleService.overview(dto.getRange());
         sb.append("当前数据概览: ").append(jsonUtil.toJson(overview)).append("\n");
+
+        var recentArticles = articleService.listRangeArticles(dto.getRange(), 3);
+        if (!recentArticles.isEmpty()) {
+            sb.append("最近文章内容片段:\n");
+            for (var article : recentArticles) {
+                String snippet = article.getContent();
+                if (snippet == null) {
+                    snippet = "";
+                }
+                if (snippet.length() > 800) {
+                    snippet = snippet.substring(0, 800);
+                }
+                sb.append("- ").append(article.getTitle()).append(": ").append(snippet).append("\n");
+            }
+        }
         if (dto.getReportId() != null) {
             AnalysisReportEntity report = analysisReportRepository.findById(dto.getReportId());
             if (report != null && report.getUserId().equals(userId)) {

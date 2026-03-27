@@ -1,6 +1,8 @@
 import AppLayout from '../../../common/ui/AppLayout';
 import StreamText from '../../../common/ui/StreamText';
 import { useAnalysisViewModel } from '../viewmodel/useAnalysisViewModel';
+import RouterManager from '../../../common/router/RouterManager';
+import { RoutePath } from '../../../common/router/RoutePath';
 
 const ranges = [
   { code: '7d', label: '近7天' },
@@ -39,6 +41,25 @@ export default function AnalysisPage() {
               已完成: 消耗 {vm.lastDone.inputTokens + vm.lastDone.outputTokens} tokens，费用 ¥{(vm.lastDone.costCent / 100).toFixed(2)}
             </div>
           ) : null}
+
+          {vm.lastDone?.suggestedQuestions?.length ? (
+            <div className="suggest-box">
+              <div className="muted">推荐问题：</div>
+              <div className="chip-row">
+                {vm.lastDone.suggestedQuestions.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    className="chip"
+                    onClick={() => RouterManager.navigate(`${RoutePath.CHAT}?q=${encodeURIComponent(question)}&reportId=${vm.lastDone?.reportId}`)}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <StreamText content={vm.streamText} />
         </div>
 
@@ -62,6 +83,15 @@ export default function AnalysisPage() {
           {vm.selectedReport ? (
             <div className="report-detail">
               <h4>报告详情</h4>
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => RouterManager.navigate(`${RoutePath.CHAT}?reportId=${vm.selectedReport?.id}`)}
+                >
+                  基于此报告开始对话
+                </button>
+              </div>
               <StreamText content={vm.selectedReport.content} />
             </div>
           ) : null}

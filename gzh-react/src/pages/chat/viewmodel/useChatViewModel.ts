@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import ChatApi from '../api/ChatApi';
 import type { ChatDoneEvent, ChatMessage } from '../model/ChatModels';
 
-export function useChatViewModel() {
+export function useChatViewModel(initialQuestion?: string, initialReportId?: number) {
   const [sessionId, setSessionId] = useState('');
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialQuestion ?? '');
+  const [reportId, setReportId] = useState<number | undefined>(initialReportId);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [lastDone, setLastDone] = useState<ChatDoneEvent | null>(null);
@@ -38,7 +39,7 @@ export function useChatViewModel() {
     const userMessage: ChatMessage = {
       id: Date.now(),
       sessionId: sessionId || 'pending',
-      reportId: null,
+      reportId: reportId ?? null,
       role: 'user',
       content: currentInput,
       aiModel: '',
@@ -50,7 +51,7 @@ export function useChatViewModel() {
     setLocalMessages((prev) => [...prev, userMessage]);
 
     abortRef.current = ChatApi.send(
-      { message: currentInput, sessionId: sessionId || undefined, range: '30d' },
+      { message: currentInput, sessionId: sessionId || undefined, reportId, range: '30d' },
       (chunk) => {
         streamTextRef.current += chunk;
         setStreamText((prev) => prev + chunk);
@@ -63,7 +64,7 @@ export function useChatViewModel() {
         const assistant: ChatMessage = {
           id: Date.now() + 1,
           sessionId: done.sessionId,
-          reportId: null,
+          reportId: reportId ?? null,
           role: 'assistant',
           content: streamTextRef.current,
           aiModel: done.aiModel,
@@ -91,6 +92,8 @@ export function useChatViewModel() {
     setSessionId,
     input,
     setInput,
+    reportId,
+    setReportId,
     messages: localMessages,
     streamText,
     streaming,

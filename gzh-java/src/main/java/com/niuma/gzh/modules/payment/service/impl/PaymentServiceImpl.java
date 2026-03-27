@@ -1,6 +1,8 @@
 package com.niuma.gzh.modules.payment.service.impl;
 
 import com.niuma.gzh.common.base.BaseService;
+import com.niuma.gzh.common.cache.CacheKey;
+import com.niuma.gzh.common.cache.RedisClient;
 import com.niuma.gzh.common.security.AuthContext;
 import com.niuma.gzh.common.util.IdUtil;
 import com.niuma.gzh.common.util.JsonUtil;
@@ -15,6 +17,7 @@ import com.niuma.gzh.modules.payment.service.PaymentService;
 import com.niuma.gzh.modules.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -28,6 +31,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final UserService userService;
     private final JsonUtil jsonUtil;
+    private final RedisClient redisClient;
 
     private final String gatewayUrl;
     private final String appId;
@@ -39,6 +43,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     public PaymentServiceImpl(PaymentOrderRepository paymentOrderRepository,
                               UserService userService,
                               JsonUtil jsonUtil,
+                              RedisClient redisClient,
                               @Value("${app.payment.alipay.gateway-url}") String gatewayUrl,
                               @Value("${app.payment.alipay.app-id}") String appId,
                               @Value("${app.payment.alipay.private-key}") String privateKey,
@@ -48,6 +53,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         this.paymentOrderRepository = paymentOrderRepository;
         this.userService = userService;
         this.jsonUtil = jsonUtil;
+        this.redisClient = redisClient;
         this.gatewayUrl = gatewayUrl;
         this.appId = appId;
         this.privateKey = privateKey;
@@ -102,8 +108,16 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         if (outTradeNo == null || outTradeNo.isBlank()) {
             return "failure";
         }
+
+        String idempotentKey = CacheKey.paymentIdempotent(outTradeNo);
+        Boolean first = redisClient.setIfAbsent(idempotentKey, "1", Duration.ofHours(24));
+        if (Boolean.FALSE.equals(first)) {
+            return "success";
+        }
+
         PaymentOrderEntity order = paymentOrderRepository.findByOrderNo(outTradeNo);
         if (order == null) {
+            redisClient.delete(idempotentKey);
             return "failure";
         }
 
@@ -119,6 +133,8 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
             userService.recharge(order.getUserId(), order.getAmountCent());
             return "success";
         }
+
+        redisClient.delete(idempotentKey);
         return "failure";
     }
 
