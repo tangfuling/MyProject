@@ -6,12 +6,15 @@ import com.niuma.gzh.common.ai.AiGenerateRequest;
 import com.niuma.gzh.common.ai.AiGenerateResult;
 import com.niuma.gzh.common.ai.AiMessage;
 import com.niuma.gzh.common.ai.AiModelProvider;
+import com.niuma.gzh.common.ai.AiToolCall;
+import com.niuma.gzh.common.ai.AiToolDefinition;
 import com.niuma.gzh.common.base.BaseService;
 import com.niuma.gzh.common.security.AuthContext;
 import com.niuma.gzh.common.util.IdUtil;
 import com.niuma.gzh.common.util.JsonUtil;
 import com.niuma.gzh.modules.analysis.model.entity.AnalysisReportEntity;
 import com.niuma.gzh.modules.analysis.repository.AnalysisReportRepository;
+import com.niuma.gzh.modules.article.model.vo.ArticleVO;
 import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.service.ArticleService;
 import com.niuma.gzh.modules.chat.model.dto.ChatSendDTO;
@@ -25,15 +28,21 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Service
 public class ChatServiceImpl extends BaseService implements ChatService {
+    private static final Pattern LEGACY_TOOL_CALL_PATTERN =
+        Pattern.compile("^\\[\\[TOOL:get_article_content\\|keyword=(.+?)\\]\\]$", Pattern.DOTALL);
+
     private final ChatMessageRepository chatMessageRepository;
     private final AnalysisReportRepository analysisReportRepository;
     private final ArticleService articleService;
@@ -86,12 +95,49 @@ public class ChatServiceImpl extends BaseService implements ChatService {
 
             List<AiMessage> history = loadHistory(userId, sessionId);
             String prompt = buildPrompt(userId, dto);
-            AiGenerateResult result = client.generate(new AiGenerateRequest(chatSystemPrompt(), prompt + "\n用户问题: " + dto.getMessage(), history));
-            String content = result.content();
+            String requestText = prompt + "\n用户问题: " + dto.getMessage();
 
-            streamText(emitter, content);
+            AiGenerateResult firstResult = client.generate(new AiGenerateRequest(
+                chatSystemPrompt(),
+                requestText,
+                history,
+                buildToolDefinitions()
+            ));
 
-            int costCent = provider.calcCostCent(result.inputTokens(), result.outputTokens());
+            int totalInputTokens = firstResult.inputTokens();
+            int totalOutputTokens = firstResult.outputTokens();
+            String finalContent = sanitizeAssistantOutput(firstResult.content());
+
+            ToolCall toolCall = parseNativeToolCall(firstResult.safeToolCalls());
+            if (toolCall == null) {
+                toolCall = parseLegacyToolCall(firstResult.content());
+            }
+
+            if (toolCall != null) {
+                String toolResult = executeTool(toolCall, dto);
+                List<AiMessage> secondHistory = new ArrayList<>(history);
+                if (firstResult.content() != null && !firstResult.content().isBlank()) {
+                    secondHistory.add(new AiMessage("assistant", firstResult.content()));
+                }
+                secondHistory.add(new AiMessage("user", "工具调用结果如下，请直接给最终回答，不要再输出工具调用。\n" + toolResult));
+
+                AiGenerateResult secondResult = client.generate(new AiGenerateRequest(
+                    chatSystemPrompt(),
+                    requestText,
+                    secondHistory,
+                    List.of()
+                ));
+                totalInputTokens += secondResult.inputTokens();
+                totalOutputTokens += secondResult.outputTokens();
+                finalContent = sanitizeAssistantOutput(secondResult.content());
+            }
+
+            streamText(emitter, finalContent);
+
+            int costCent = provider.calcCostCent(totalInputTokens, totalOutputTokens);
+            String assistantContentForStore = finalContent;
+            final int finalInputTokens = totalInputTokens;
+            final int finalOutputTokens = totalOutputTokens;
             transactionTemplate.execute(status -> {
                 userService.deductCost(userId, costCent);
 
@@ -109,24 +155,24 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                 assistant.setSessionId(sessionId);
                 assistant.setReportId(dto.getReportId());
                 assistant.setRole("assistant");
-                assistant.setContent(content);
+                assistant.setContent(assistantContentForStore);
                 assistant.setAiModel(provider.getCode());
-                assistant.setInputTokens(result.inputTokens());
-                assistant.setOutputTokens(result.outputTokens());
+                assistant.setInputTokens(finalInputTokens);
+                assistant.setOutputTokens(finalOutputTokens);
                 assistant.setCostCent(costCent);
                 assistant.setCreatedAt(LocalDateTime.now());
                 chatMessageRepository.save(assistant);
 
                 userService.logTokenCost(userId, "chat", String.valueOf(assistant.getId()), provider.getCode(),
-                    result.inputTokens(), result.outputTokens(), costCent);
+                    finalInputTokens, finalOutputTokens, costCent);
                 return null;
             });
 
             sendEvent(emitter, Map.of(
                 "type", "done",
                 "sessionId", sessionId,
-                "inputTokens", result.inputTokens(),
-                "outputTokens", result.outputTokens(),
+                "inputTokens", totalInputTokens,
+                "outputTokens", totalOutputTokens,
                 "costCent", costCent,
                 "aiModel", provider.getCode()
             ));
@@ -154,20 +200,21 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         OverviewVO overview = articleService.overview(dto.getRange());
         sb.append("当前数据概览: ").append(jsonUtil.toJson(overview)).append("\n");
 
-        var recentArticles = articleService.listRangeArticles(dto.getRange(), 3);
+        List<ArticleVO> recentArticles = articleService.listRangeArticles(dto.getRange(), 5);
         if (!recentArticles.isEmpty()) {
-            sb.append("最近文章内容片段:\n");
-            for (var article : recentArticles) {
+            sb.append("最近文章摘要:\n");
+            for (ArticleVO article : recentArticles) {
                 String snippet = article.getContent();
                 if (snippet == null) {
                     snippet = "";
                 }
-                if (snippet.length() > 800) {
-                    snippet = snippet.substring(0, 800);
+                if (snippet.length() > 300) {
+                    snippet = snippet.substring(0, 300);
                 }
                 sb.append("- ").append(article.getTitle()).append(": ").append(snippet).append("\n");
             }
         }
+
         if (dto.getReportId() != null) {
             AnalysisReportEntity report = analysisReportRepository.findById(dto.getReportId());
             if (report != null && report.getUserId().equals(userId)) {
@@ -178,7 +225,103 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     }
 
     private String chatSystemPrompt() {
-        return "你是公众号数据运营助手。你必须基于用户历史数据给出具体建议，避免鸡汤，避免空泛表达。";
+        return "你是公众号数据运营助手。你必须基于用户历史数据给出具体建议，避免鸡汤和空泛表达。"
+            + "如需某篇文章完整正文，请优先使用 get_article_content 工具。";
+    }
+
+    private List<AiToolDefinition> buildToolDefinitions() {
+        Map<String, Object> schema = new HashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", Map.of(
+            "keyword", Map.of(
+                "type", "string",
+                "description", "文章标题关键词或 wxArticleId"
+            )
+        ));
+        schema.put("required", List.of("keyword"));
+        schema.put("additionalProperties", false);
+
+        return List.of(new AiToolDefinition(
+            "get_article_content",
+            "根据文章标题关键词或 wxArticleId 获取文章正文与关键指标",
+            schema
+        ));
+    }
+
+    private ToolCall parseNativeToolCall(List<AiToolCall> calls) {
+        if (calls == null || calls.isEmpty()) {
+            return null;
+        }
+        AiToolCall first = calls.getFirst();
+        if (first == null || first.name() == null || first.name().isBlank()) {
+            return null;
+        }
+        String keyword = "";
+        try {
+            Map<?, ?> args = jsonUtil.fromJson(first.argumentsJson(), Map.class);
+            Object value = args.get("keyword");
+            if (value != null) {
+                keyword = String.valueOf(value).trim();
+            }
+        } catch (Exception ignore) {
+            keyword = first.argumentsJson();
+        }
+        if (keyword.isBlank()) {
+            return null;
+        }
+        return new ToolCall(first.name(), keyword);
+    }
+
+    private ToolCall parseLegacyToolCall(String content) {
+        if (content == null) {
+            return null;
+        }
+        Matcher matcher = LEGACY_TOOL_CALL_PATTERN.matcher(content.trim());
+        if (!matcher.matches()) {
+            return null;
+        }
+        String keyword = matcher.group(1).trim();
+        if (keyword.isEmpty()) {
+            return null;
+        }
+        return new ToolCall("get_article_content", keyword);
+    }
+
+    private String executeTool(ToolCall call, ChatSendDTO dto) {
+        if (!"get_article_content".equals(call.name())) {
+            return "工具调用失败：不支持的工具 " + call.name();
+        }
+        List<ArticleVO> candidates = articleService.listRangeArticles(dto.getRange(), 30);
+        String keywordLower = call.keyword().toLowerCase();
+        for (ArticleVO article : candidates) {
+            String title = article.getTitle() == null ? "" : article.getTitle();
+            String wxId = article.getWxArticleId() == null ? "" : article.getWxArticleId();
+            if (!title.toLowerCase().contains(keywordLower) && !wxId.toLowerCase().contains(keywordLower)) {
+                continue;
+            }
+            String content = article.getContent() == null ? "" : article.getContent();
+            if (content.length() > 4000) {
+                content = content.substring(0, 4000);
+            }
+            return "tool=get_article_content\n"
+                + "title=" + title + "\n"
+                + "wxArticleId=" + wxId + "\n"
+                + "publishTime=" + article.getPublishTime() + "\n"
+                + "readCount=" + article.getReadCount() + "\n"
+                + "content=" + content;
+        }
+        return "tool=get_article_content\nresult=未找到匹配文章，keyword=" + call.keyword();
+    }
+
+    private String sanitizeAssistantOutput(String content) {
+        if (content == null) {
+            return "";
+        }
+        ToolCall toolCall = parseLegacyToolCall(content);
+        if (toolCall != null) {
+            return "我需要更多文章内容才能回答，请换个问题或指定更准确的文章标题。";
+        }
+        return content;
     }
 
     private ChatMessageVO toVO(ChatMessageEntity entity) {
@@ -209,5 +352,8 @@ public class ChatServiceImpl extends BaseService implements ChatService {
 
     private void sendEvent(SseEmitter emitter, Map<String, Object> event) throws IOException {
         emitter.send(SseEmitter.event().data(jsonUtil.toJson(event)));
+    }
+
+    private record ToolCall(String name, String keyword) {
     }
 }

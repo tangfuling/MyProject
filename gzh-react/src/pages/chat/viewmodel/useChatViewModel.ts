@@ -14,6 +14,18 @@ export function useChatViewModel(initialQuestion?: string, initialReportId?: num
   const abortRef = useRef<AbortController | null>(null);
   const streamTextRef = useRef('');
 
+  useEffect(() => {
+    if (initialQuestion) {
+      setInput(initialQuestion);
+    }
+  }, [initialQuestion]);
+
+  useEffect(() => {
+    if (initialReportId) {
+      setReportId(initialReportId);
+    }
+  }, [initialReportId]);
+
   const historyQuery = useQuery({
     queryKey: ['chat-history', sessionId],
     queryFn: () => ChatApi.history(sessionId),
