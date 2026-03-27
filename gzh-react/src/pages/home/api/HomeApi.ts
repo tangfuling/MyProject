@@ -7,7 +7,7 @@ const HomeApi = {
       return (await http.get('/demo/home')) as HomeInfo;
     } catch {
       return {
-        title: 'com.niuma.demo',
+        title: 'com.niuma.gzh',
         desc: 'fallback data for local demo',
       };
     }
