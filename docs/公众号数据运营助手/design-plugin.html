@@ -481,7 +481,7 @@ body {
 
   <!-- Section 2: Popup states -->
   <div style="width:100%;max-width:1300px;">
-    <div class="section-label">同步弹窗 — 四个状态</div>
+    <div class="section-label">同步弹窗 — 六个状态</div>
     <div class="popups-row">
 
       <!-- State 0: Not logged in -->
@@ -592,6 +592,69 @@ body {
               </div>
             </div>
             <button class="btn btn-primary">前往运营助手查看 →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- State 4: Session Expired -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">登录过期</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div style="background:linear-gradient(135deg,#fef2f2,#fecdd3);border:1px solid #fca5a5;border-radius:10px;padding:12px 14px;font-size:12px;color:#991b1b;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;line-height:1.5;">
+              <span style="font-size:15px;flex-shrink:0;">&#10060;</span>
+              <span>微信后台登录已过期，请刷新页面重新登录微信公众平台后再同步</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-light);margin-bottom:10px;">可能原因：长时间未操作 / 在其他设备登录了微信后台</div>
+            <button class="btn btn-primary">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
+              刷新页面
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- State 5: Partial Failure -->
+      <div class="popup-wrap">
+        <div class="popup-state-label">部分失败</div>
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-header-logo"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="popup-header-title">公众号数据运营助手</div>
+          </div>
+          <div class="popup-body">
+            <div class="success-row">
+              <div class="success-check" style="background:linear-gradient(135deg,#fef3c7,#fde68a);color:#d97706;box-shadow:0 2px 8px rgba(245,158,11,.2);">
+                <span style="font-size:13px;">!</span>
+              </div>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:var(--text);">同步部分完成</div>
+                <div style="font-size:11px;color:var(--text-muted);">成功 30 篇，失败 5 篇</div>
+              </div>
+            </div>
+            <div class="checklist" style="margin-bottom:0;">
+              <div class="check-item done">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                文章列表（35篇）
+              </div>
+              <div class="check-item done">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                数据指标
+              </div>
+              <div class="check-item" style="color:#d97706;font-weight:500;">
+                <span style="font-size:13px;">&#9888;</span>
+                文章全文（30/35，5 篇获取超时）
+              </div>
+            </div>
+            <button class="btn btn-primary" style="background:linear-gradient(135deg,#f59e0b,#d97706);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
+              重试失败的 5 篇
+            </button>
+            <button class="btn btn-outline">先查看已同步的数据 →</button>
           </div>
         </div>
       </div>

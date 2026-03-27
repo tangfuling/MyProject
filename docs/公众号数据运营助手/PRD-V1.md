@@ -447,6 +447,7 @@
 | phone | varchar(20) | 手机号 |
 | balance | int | 余额（单位：分） |
 | free_quota | int | 剩余免费额度（分） |
+| ai_model | varchar(16) | 当前 AI 模型（qwen/doubao/claude/gpt），默认 qwen |
 | created_at | datetime | 注册时间 |
 
 ### articles 文章表
@@ -498,6 +499,8 @@
 | time_range | varchar(16) | 分析范围（7d/30d/90d/all） |
 | article_count | int | 分析文章数 |
 | content | text | 报告内容（markdown） |
+| recommended_questions | json | 推荐问题（5 个） |
+| ai_model | varchar(16) | 生成报告使用的 AI 模型 |
 | tokens_in | int | 输入 token |
 | tokens_out | int | 输出 token |
 | cost | int | 费用（分） |
@@ -510,6 +513,7 @@
 | id | bigint | 主键 |
 | user_id | bigint | 用户ID |
 | action | varchar(32) | analysis / chat |
+| ai_model | varchar(16) | 使用的 AI 模型 |
 | tokens_in | int | 输入 token |
 | tokens_out | int | 输出 token |
 | cost | int | 费用（分） |
@@ -570,8 +574,8 @@
                    │ ├── 对话引擎（流式+function call）│
                    │ └── 计费引擎（实时扣费+余额校验） │
                    │                                  │
-                   │ 大模型调用                       │
-                   │ └── Claude API（或其他，可切换）   │
+                   │ 大模型调用（多模型热切换）          │
+                   │ └── 千问 / 豆包 / Claude / GPT    │
                    └─────────────────────────────────┘
 ```
 

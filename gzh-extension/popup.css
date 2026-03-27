@@ -1,0 +1,81 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f3f6fb;
+}
+
+.popup {
+  width: 320px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+label {
+  font-size: 12px;
+  color: #4a5568;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  color: white;
+  background: #0f766e;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+button.ghost {
+  background: #334155;
+}
+
+.status {
+  border: 1px solid #e0e6f1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+#progressBar {
+  height: 8px;
+  border-radius: 999px;
+  background: #edf2f7;
+  overflow: hidden;
+}
+
+#progressInner {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #0f766e;
+}

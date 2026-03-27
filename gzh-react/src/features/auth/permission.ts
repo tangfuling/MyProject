@@ -1,5 +1,5 @@
 import { useAuthStore } from '../../common/state/authStore';
 
-export function canVisitHome() {
+export function isAuthed() {
   return Boolean(useAuthStore.getState().token);
 }

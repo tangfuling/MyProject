@@ -1,4 +1,4 @@
-import type { NavigateFunction } from 'react-router-dom';
+import type { NavigateFunction, NavigateOptions } from 'react-router-dom';
 
 class RouterManager {
   private navigateFn: NavigateFunction | null = null;
@@ -7,8 +7,8 @@ class RouterManager {
     this.navigateFn = navigate;
   }
 
-  navigate(path: string) {
-    this.navigateFn?.(path);
+  navigate(path: string, options?: NavigateOptions) {
+    this.navigateFn?.(path, options);
   }
 
   back() {

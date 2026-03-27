@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "公众号数据运营助手",
+  "version": "1.0.0",
+  "description": "同步微信公众号后台数据到运营助手",
+  "permissions": ["storage", "activeTab", "tabs"],
+  "host_permissions": [
+    "https://mp.weixin.qq.com/*",
+    "http://127.0.0.1:8081/*",
+    "https://api-gzh.niuma.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://mp.weixin.qq.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

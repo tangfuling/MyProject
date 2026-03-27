@@ -3,3 +3,10 @@ export type ApiResponse<T> = {
   message: string;
   data: T;
 };
+
+export type PageResult<T> = {
+  page: number;
+  size: number;
+  total: number;
+  records: T[];
+};

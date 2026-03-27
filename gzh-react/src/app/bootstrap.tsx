@@ -1,4 +1,3 @@
-import './App';
 import '../common/ui/theme/reset.css';
 import '../common/ui/theme/tokens.css';
 import { QueryProvider } from './providers/QueryProvider';

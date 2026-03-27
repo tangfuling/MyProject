@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公众号数据运营助手</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="popup">
+    <h1>公众号数据运营助手</h1>
+
+    <label>后端 API 地址</label>
+    <input id="apiBase" placeholder="http://127.0.0.1:8081" />
+
+    <label>Web 登录 JWT</label>
+    <textarea id="authToken" placeholder="登录 Web 后复制 token 粘贴到这里"></textarea>
+
+    <div class="actions">
+      <button id="saveBtn">保存配置</button>
+      <button id="syncBtn">开始同步</button>
+    </div>
+
+    <div class="actions">
+      <button id="openWebBtn" class="ghost">前往运营助手</button>
+    </div>
+
+    <section class="status">
+      <div id="statusText">等待同步</div>
+      <div id="progressText">0%</div>
+      <div id="progressBar"><span id="progressInner"></span></div>
+      <div id="countText"></div>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

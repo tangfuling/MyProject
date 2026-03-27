@@ -1,23 +1,76 @@
+server:
+  port: ${SERVER_PORT:8081}
+
 spring:
   application:
-    name: niuma-demo-java
+    name: gzh-java
   datasource:
-    url: jdbc:h2:mem:demo;MODE=MySQL;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/gzh?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: localhost
-      port: 6379
-  kafka:
-    bootstrap-servers: localhost:9092
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
 
 mybatis-plus:
-  mapper-locations: classpath:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET:please-change-me-to-32-bytes-at-least}
+    jwt-expire-days: ${JWT_EXPIRE_DAYS:30}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,chrome-extension://*}
+  sms:
+    endpoint: ${SMS_ENDPOINT:https://sms.example.com/send}
+    api-key: ${SMS_API_KEY:}
+    api-secret: ${SMS_API_SECRET:}
+    sign-name: ${SMS_SIGN_NAME:公众号助手}
+    template-code: ${SMS_TEMPLATE_CODE:SMS_000000001}
+  ai:
+    default-model: ${AI_DEFAULT_MODEL:qwen}
+    timeout-ms: ${AI_TIMEOUT_MS:30000}
+    qwen:
+      endpoint: ${QWEN_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      api-key: ${QWEN_API_KEY:}
+      model: ${QWEN_MODEL:qwen-plus}
+    doubao:
+      endpoint: ${DOUBAO_ENDPOINT:https://ark.cn-beijing.volces.com/api/v3/chat/completions}
+      api-key: ${DOUBAO_API_KEY:}
+      model: ${DOUBAO_MODEL:doubao-seed-1-6-thinking-250715}
+    gpt:
+      endpoint: ${GPT_ENDPOINT:https://api.openai.com/v1/chat/completions}
+      api-key: ${GPT_API_KEY:}
+      model: ${GPT_MODEL:gpt-4o-mini}
+    claude:
+      endpoint: ${CLAUDE_ENDPOINT:https://api.anthropic.com/v1/messages}
+      api-key: ${CLAUDE_API_KEY:}
+      model: ${CLAUDE_MODEL:claude-3-5-sonnet-latest}
+  payment:
+    alipay:
+      gateway-url: ${ALIPAY_GATEWAY_URL:https://openapi.alipay.com/gateway.do}
+      app-id: ${ALIPAY_APP_ID:}
+      private-key: ${ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+      notify-url: ${ALIPAY_NOTIFY_URL:https://api-gzh.niuma.com/payment/notify}
+      return-url: ${ALIPAY_RETURN_URL:https://gzh.niuma.com/settings}

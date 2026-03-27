@@ -1,24 +1,42 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import type { ApiResponse } from './ApiResponse';
 import { ApiConfig } from './ApiConfig';
 import { authInterceptor } from './interceptors/authInterceptor';
 import { errorInterceptor } from './interceptors/errorInterceptor';
 
-const http = axios.create({
+const instance = axios.create({
   baseURL: ApiConfig.baseUrl,
   timeout: ApiConfig.timeout,
 });
 
-http.interceptors.request.use((config) => authInterceptor(config));
-http.interceptors.response.use(
-  (response) => {
-    const payload = response.data as ApiResponse<unknown>;
-    if (payload.code !== 0) {
-      return Promise.reject(new Error(payload.message));
-    }
-    return payload.data;
+instance.interceptors.request.use((config) => authInterceptor(config));
+instance.interceptors.response.use((response) => response, (error) => errorInterceptor(error));
+
+async function unwrap<T>(request: Promise<AxiosResponse<ApiResponse<T>>>): Promise<T> {
+  const response = await request;
+  const payload = response.data;
+  if (payload.code !== 0) {
+    throw new Error(payload.message);
+  }
+  return payload.data;
+}
+
+const http = {
+  get<T>(url: string, config?: AxiosRequestConfig) {
+    return unwrap<T>(instance.get<ApiResponse<T>>(url, config));
   },
-  (error) => errorInterceptor(error)
-);
+  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
+    return unwrap<T>(instance.post<ApiResponse<T>>(url, data, config));
+  },
+  put<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
+    return unwrap<T>(instance.put<ApiResponse<T>>(url, data, config));
+  },
+  patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
+    return unwrap<T>(instance.patch<ApiResponse<T>>(url, data, config));
+  },
+  delete<T>(url: string, config?: AxiosRequestConfig) {
+    return unwrap<T>(instance.delete<ApiResponse<T>>(url, config));
+  },
+};
 
 export default http;

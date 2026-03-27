@@ -604,6 +604,62 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* Model Selector */
+.model-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border: 1px solid #a7f3d0;
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 11px; font-weight: 700; color: #059669;
+  cursor: pointer; position: relative;
+  transition: all .15s;
+}
+.model-chip:hover { box-shadow: 0 2px 8px rgba(16,185,129,.2); }
+.model-chip svg { width: 12px; height: 12px; }
+.model-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); box-shadow: var(--shadow-md);
+  min-width: 180px; padding: 6px; z-index: 100;
+  display: none;
+}
+.model-chip:hover .model-dropdown { display: block; }
+.model-opt {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; color: var(--text); font-weight: 500;
+  transition: background .15s;
+}
+.model-opt:hover { background: var(--bg); }
+.model-opt.active { background: var(--accent-light); color: var(--accent); }
+.model-opt-price { font-size: 10px; color: var(--text-light); font-weight: 400; }
+.model-opt.active .model-opt-price { color: var(--accent); opacity: .7; }
+
+/* Model Grid (Profile) */
+.model-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.model-card {
+  border: 2px solid var(--border); border-radius: var(--r-sm);
+  padding: 14px; cursor: pointer; transition: all .15s;
+  position: relative;
+}
+.model-card:hover { border-color: var(--accent-mid); }
+.model-card.active { border-color: var(--accent); background: var(--accent-light); }
+.model-card-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.model-card.active .model-card-name { color: var(--accent); }
+.model-card-desc { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.model-card-price { font-size: 11px; font-weight: 600; color: var(--text-light); }
+.model-card.active .model-card-price { color: var(--accent); }
+.model-card-check {
+  position: absolute; top: 8px; right: 8px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: none; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+.model-card.active .model-card-check { display: flex; }
 </style>
 </head>
 <body>
@@ -775,6 +831,17 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
     </a>
     <span class="app-topbar-account">机器猫创业记</span>
     <div class="topbar-right">
+      <div class="model-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        千问
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;opacity:.6;"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="model-dropdown">
+          <div class="model-opt active"><span>千问</span><span class="model-opt-price">¥2/百万tok</span></div>
+          <div class="model-opt"><span>豆包</span><span class="model-opt-price">¥3/百万tok</span></div>
+          <div class="model-opt"><span>Claude</span><span class="model-opt-price">¥15/百万tok</span></div>
+          <div class="model-opt"><span>GPT</span><span class="model-opt-price">¥10/百万tok</span></div>
+        </div>
+      </div>
       <span class="sync-meta">上次同步 14:30 · 156 篇</span>
       <button class="btn btn-ghost btn-xs" style="display:flex;align-items:center;gap:4px;">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
@@ -889,7 +956,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
               <div class="am-head">
                 <div class="am-head-title">
                   已分析你近 30 天的 8 篇文章
-                  <span style="background:var(--accent-light);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">03-17 · 20,150 tok</span>
+                  <span style="background:var(--accent-light);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">千问 · 03-17 · 20,150 tok</span>
                 </div>
                 <div class="am-head-sub">你已稳定输出 78 天，发布 23 篇，平均阅读 80。你现在还在靠自己分发（朋友圈为主），平台推荐还没起来，这在同阶段创作者里属于正常偏上。</div>
               </div>
@@ -942,7 +1009,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
               你的外向型文章发朋友圈比例是 100%，记录型只有 40%。朋友圈贡献了外向型 68% 的阅读量。<br><br>
               值得注意：记录型完读率（<b>72%</b>）反而高于外向型（<b>61%</b>）——读到的人更认可这类内容，只是触达面小。
             </div>
-            <div class="msg-meta">14:32 · 1,240 tok · ¥0.01</div>
+            <div class="msg-meta">千问 · 14:32 · 1,240 tok · ¥0.01</div>
           </div>
         </div>
 
@@ -964,7 +1031,7 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
               2. 记录型是外向型的<b>素材库</b>，你能写出「9 天试了 3 条路」正是因为有真实记录。<br><br>
               建议保持 <b>7:3 比例</b>（外向型:记录型），两类文章都认真发朋友圈。
             </div>
-            <div class="msg-meta">14:33 · 2,340 tok · ¥0.02</div>
+            <div class="msg-meta">千问 · 14:33 · 2,340 tok · ¥0.02</div>
           </div>
         </div>
 
@@ -1017,6 +1084,38 @@ body { font-family: 'Inter', -apple-system,"PingFang SC","Helvetica Neue",sans-s
         <div>
           <div class="profile-name">138 **** 1234</div>
           <div class="profile-sub">已同步 156 篇文章 · 机器猫创业记</div>
+        </div>
+      </div>
+
+      <div class="section-title">AI 模型</div>
+      <div class="card">
+        <div class="card-body">
+          <div class="model-grid">
+            <div class="model-card active">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">千问</div>
+              <div class="model-card-desc">通义千问 · 国产性价比之选</div>
+              <div class="model-card-price">¥2/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">豆包</div>
+              <div class="model-card-desc">字节豆包 · 中文理解力强</div>
+              <div class="model-card-price">¥3/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">Claude</div>
+              <div class="model-card-desc">Anthropic Claude · 分析能力出众</div>
+              <div class="model-card-price">¥15/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">GPT</div>
+              <div class="model-card-desc">OpenAI GPT-4o · 综合能力强</div>
+              <div class="model-card-price">¥10/百万tokens</div>
+            </div>
+          </div>
         </div>
       </div>
 

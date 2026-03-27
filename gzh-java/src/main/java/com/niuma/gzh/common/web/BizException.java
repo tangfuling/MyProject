@@ -8,6 +8,11 @@ public class BizException extends RuntimeException {
         this.code = code;
     }
 
+    public BizException(ErrorCode errorCode) {
+        super(errorCode.getMessage());
+        this.code = errorCode.getCode();
+    }
+
     public int getCode() {
         return code;
     }

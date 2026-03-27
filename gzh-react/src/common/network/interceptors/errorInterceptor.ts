@@ -3,7 +3,7 @@ import { useAuthStore } from '../../state/authStore';
 
 export function errorInterceptor(error: AxiosError) {
   if (error.response?.status === 401) {
-    useAuthStore.getState().setToken(null);
+    useAuthStore.getState().clearAuth();
   }
   return Promise.reject(error);
 }
