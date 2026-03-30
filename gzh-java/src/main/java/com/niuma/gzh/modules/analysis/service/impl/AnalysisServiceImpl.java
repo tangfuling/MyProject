@@ -345,7 +345,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     }
 
     private String friendlyErrorMessage(Exception ex) {
-        if (ex instanceof BizException bizException && bizException.getCode().equals(ErrorCode.THIRD_PARTY_ERROR.getCode())) {
+        if (ex instanceof BizException bizException && bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
             return "当前模型暂时不可用，请切换其他模型重试";
         }
         String message = ex.getMessage();

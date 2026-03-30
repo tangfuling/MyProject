@@ -1,17 +1,12 @@
 package com.niuma.gzh.common.mq;
 
-import org.springframework.kafka.core.KafkaTemplate;
+import com.niuma.gzh.common.log.LoggerUtil;
 import org.springframework.stereotype.Component;
 
 @Component
 public class KafkaProducer {
-    private final KafkaTemplate<String, String> kafkaTemplate;
-
-    public KafkaProducer(KafkaTemplate<String, String> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
-    }
-
     public void send(String topic, String payload) {
-        kafkaTemplate.send(topic, payload);
+        // Keep method signature for compatibility; Kafka is not enabled in this project.
+        LoggerUtil.info("kafka disabled, skip send topic=" + topic + ", payload=" + payload);
     }
 }

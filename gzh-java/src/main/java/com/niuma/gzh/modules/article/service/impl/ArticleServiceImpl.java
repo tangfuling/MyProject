@@ -15,6 +15,7 @@ import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.model.vo.SyncResultVO;
 import com.niuma.gzh.modules.article.repository.ArticleRepository;
 import com.niuma.gzh.modules.article.repository.ArticleSnapshotRepository;
+import com.niuma.gzh.modules.article.service.ArticleService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
