@@ -16,6 +16,7 @@ public class PaymentOrderEntity {
     private Long userId;
     private String orderNo;
     private Integer amountCent;
+    private String channel;
     private String status;
     private String subject;
     private String payUrl;

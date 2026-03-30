@@ -171,6 +171,27 @@ GET https://mp.weixin.qq.com/misc/appmsganalysis?action=detailpage&msgid={mid}_1
 | article_data_new.follow_after_read_uv | 阅读后关注数 |
 | subs_transform.send_uv | 送达人数 |
 
+### send_uv 读取方式（重点）
+
+- `send_uv` 不在 `article_data_new` 里，而在 `articleData.subs_transform.send_uv`。
+- 含义是“群发通知送达人数”（初始送达盘），不是全渠道曝光总量。
+- 朋友圈/好友转发带来的二次阅读不会完整计入 `send_uv`，会体现在 `articleSummaryData` 的来源分布里。
+
+**提取示例（Python）**：
+```python
+import re, json
+
+raw = open("analysis_detail.html", "r", encoding="utf-8").read()
+
+# 从 window.wx.cgiData 里提取 articleData JSON
+m = re.search(r"articleData:\\s*(\\{.*?\\})\\s*,\\s*articleSummaryData:", raw, re.S)
+article_data = json.loads(m.group(1))
+
+# 送达人数
+send_uv = int((article_data.get("subs_transform") or {}).get("send_uv", 0))
+print(send_uv)
+```
+
 ### articleSummaryData — 阅读来源分布
 
 按 scene 字段区分来源：

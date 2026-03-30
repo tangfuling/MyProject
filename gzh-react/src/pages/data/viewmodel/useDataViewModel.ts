@@ -8,6 +8,11 @@ export function useDataViewModel() {
   const [showDetail, setShowDetail] = useState(false);
   const size = 20;
 
+  const profileQuery = useQuery({
+    queryKey: ['user-profile-brief'],
+    queryFn: DataApi.profile,
+  });
+
   const overviewQuery = useQuery({
     queryKey: ['overview', range],
     queryFn: () => DataApi.overview(range),
@@ -71,9 +76,10 @@ export function useDataViewModel() {
     setShowDetail,
     trendReads,
     detailStats,
+    profile: profileQuery.data,
     overview: overviewQuery.data,
     articlePage: articleQuery.data,
-    loading: overviewQuery.isPending || articleQuery.isPending,
-    error: overviewQuery.error?.message ?? articleQuery.error?.message ?? null,
+    loading: profileQuery.isPending || overviewQuery.isPending || articleQuery.isPending,
+    error: profileQuery.error?.message ?? overviewQuery.error?.message ?? articleQuery.error?.message ?? null,
   };
 }

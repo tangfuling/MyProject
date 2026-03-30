@@ -5,9 +5,14 @@ import com.niuma.gzh.common.base.BaseService;
 import com.niuma.gzh.common.ai.AiModelProvider;
 import com.niuma.gzh.common.base.PageResult;
 import com.niuma.gzh.common.security.AuthContext;
+import com.niuma.gzh.common.util.PhoneUtil;
 import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
+import com.niuma.gzh.modules.article.model.entity.ArticleSnapshotEntity;
 import com.niuma.gzh.modules.article.repository.ArticleRepository;
+import com.niuma.gzh.modules.article.repository.ArticleSnapshotRepository;
+import com.niuma.gzh.modules.payment.model.entity.PaymentOrderEntity;
+import com.niuma.gzh.modules.payment.repository.PaymentOrderRepository;
 import com.niuma.gzh.modules.user.model.entity.TokenLogEntity;
 import com.niuma.gzh.modules.user.model.entity.UserEntity;
 import com.niuma.gzh.modules.user.model.vo.TokenLogVO;
@@ -15,6 +20,7 @@ import com.niuma.gzh.modules.user.model.vo.UserProfileVO;
 import com.niuma.gzh.modules.user.repository.TokenLogRepository;
 import com.niuma.gzh.modules.user.repository.UserRepository;
 import com.niuma.gzh.modules.user.service.UserService;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +30,19 @@ public class UserServiceImpl extends BaseService implements UserService {
     private final UserRepository userRepository;
     private final TokenLogRepository tokenLogRepository;
     private final ArticleRepository articleRepository;
+    private final ArticleSnapshotRepository articleSnapshotRepository;
+    private final PaymentOrderRepository paymentOrderRepository;
 
     public UserServiceImpl(UserRepository userRepository,
                            TokenLogRepository tokenLogRepository,
-                           ArticleRepository articleRepository) {
+                           ArticleRepository articleRepository,
+                           ArticleSnapshotRepository articleSnapshotRepository,
+                           PaymentOrderRepository paymentOrderRepository) {
         this.userRepository = userRepository;
         this.tokenLogRepository = tokenLogRepository;
         this.articleRepository = articleRepository;
+        this.articleSnapshotRepository = articleSnapshotRepository;
+        this.paymentOrderRepository = paymentOrderRepository;
     }
 
     @Override
@@ -46,6 +58,7 @@ public class UserServiceImpl extends BaseService implements UserService {
         created.setBalanceCent(0);
         created.setFreeQuotaCent(100);
         userRepository.save(created);
+        createFreeQuotaGrantRecord(created);
         return created;
     }
 
@@ -64,11 +77,14 @@ public class UserServiceImpl extends BaseService implements UserService {
         UserEntity user = getById(userId);
         UserProfileVO vo = new UserProfileVO();
         vo.setId(user.getId());
-        vo.setPhone(user.getPhone());
+        vo.setPhone(PhoneUtil.mask(user.getPhone()));
         vo.setAiModel(user.getAiModel());
         vo.setBalanceCent(user.getBalanceCent());
         vo.setFreeQuotaCent(user.getFreeQuotaCent());
         vo.setArticleCount(articleRepository.countByUser(userId));
+        vo.setCreatedAt(user.getCreatedAt());
+        ArticleSnapshotEntity latestSnapshot = articleSnapshotRepository.latestByUser(userId);
+        vo.setLastSyncAt(latestSnapshot == null ? null : latestSnapshot.getSnapshotTime());
         return vo;
     }
 
@@ -140,5 +156,27 @@ public class UserServiceImpl extends BaseService implements UserService {
         UserEntity user = getById(userId);
         user.setBalanceCent((user.getBalanceCent() == null ? 0 : user.getBalanceCent()) + amountCent);
         userRepository.save(user);
+    }
+
+    private void createFreeQuotaGrantRecord(UserEntity user) {
+        if (user.getId() == null) {
+            return;
+        }
+        String orderNo = "FREE-GRANT-" + user.getId();
+        if (paymentOrderRepository.findByOrderNo(orderNo) != null) {
+            return;
+        }
+        int amountCent = user.getFreeQuotaCent() == null ? 100 : user.getFreeQuotaCent();
+        PaymentOrderEntity grantRecord = new PaymentOrderEntity();
+        grantRecord.setUserId(user.getId());
+        grantRecord.setOrderNo(orderNo);
+        grantRecord.setAmountCent(amountCent);
+        grantRecord.setChannel("free_quota");
+        grantRecord.setStatus("PAID");
+        grantRecord.setSubject("新用户免费额度");
+        grantRecord.setAlipayTradeNo("FREE-" + user.getId());
+        grantRecord.setCreatedAt(LocalDateTime.now());
+        grantRecord.setUpdatedAt(LocalDateTime.now());
+        paymentOrderRepository.save(grantRecord);
     }
 }

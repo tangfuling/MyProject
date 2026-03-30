@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import ChatApi from '../api/ChatApi';
+import AnalysisApi from '../../analysis/api/AnalysisApi';
 import type { ChatDoneEvent, ChatMessage } from '../model/ChatModels';
 
 export function useChatViewModel(initialQuestion?: string, initialReportId?: number) {
@@ -30,6 +31,17 @@ export function useChatViewModel(initialQuestion?: string, initialReportId?: num
     queryKey: ['chat-history', sessionId],
     queryFn: () => ChatApi.history(sessionId),
     enabled: sessionId.length > 0,
+  });
+
+  const reportDetailQuery = useQuery({
+    queryKey: ['analysis-report-detail-for-chat', reportId],
+    queryFn: () => AnalysisApi.detail(reportId as number),
+    enabled: typeof reportId === 'number' && Number.isFinite(reportId),
+  });
+
+  const latestReportQuery = useQuery({
+    queryKey: ['analysis-reports-for-chat'],
+    queryFn: () => AnalysisApi.reports(1, 1),
   });
 
   useEffect(() => {
@@ -99,6 +111,15 @@ export function useChatViewModel(initialQuestion?: string, initialReportId?: num
     setStreaming(false);
   };
 
+  const quickQuestions = useMemo(() => {
+    const fromReport = reportDetailQuery.data?.suggestedQuestions ?? [];
+    if (fromReport.length > 0) {
+      return fromReport;
+    }
+    const latest = latestReportQuery.data?.records?.[0];
+    return latest?.suggestedQuestions ?? [];
+  }, [latestReportQuery.data?.records, reportDetailQuery.data?.suggestedQuestions]);
+
   return {
     sessionId,
     setSessionId,
@@ -110,6 +131,7 @@ export function useChatViewModel(initialQuestion?: string, initialReportId?: num
     streamText,
     streaming,
     lastDone,
+    quickQuestions,
     loading: historyQuery.isPending,
     error: historyQuery.error?.message ?? null,
     send,

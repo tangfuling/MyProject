@@ -38,7 +38,12 @@ export default function DataPage() {
       <PageWrapper loading={vm.loading} error={vm.error}>
         <section className="page-panel">
           <header className="panel-header">
-            <h2>数据概览</h2>
+            <div>
+              <h2>数据概览</h2>
+              <div className="muted">
+                上次同步: {vm.profile?.lastSyncAt ? vm.profile.lastSyncAt.slice(0, 16) : '--'} · 共 {vm.profile?.articleCount ?? 0} 篇文章
+              </div>
+            </div>
             <div className="chip-row">
               {ranges.map((range) => (
                 <button

@@ -14,11 +14,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
       if (!tab?.id) {
+        const state = { stage: 'error', message: '未找到当前页面，请重试', progress: 0, synced: 0, total: 0 };
+        setState(state);
+        chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
         sendResponse({ ok: false, error: 'no-active-tab' });
+        return;
+      }
+      if (!tab.url || !tab.url.includes('https://mp.weixin.qq.com')) {
+        const state = {
+          stage: 'login_expired',
+          message: '请先打开并登录微信公众号后台页面后再同步',
+          progress: 0,
+          synced: 0,
+          total: 0,
+        };
+        setState(state);
+        chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
+        sendResponse({ ok: false, error: 'not-mp-page' });
         return;
       }
       chrome.tabs.sendMessage(tab.id, { type: 'start-sync' }, (response) => {
         if (chrome.runtime.lastError) {
+          const state = {
+            stage: 'login_expired',
+            message: '微信后台登录已过期，请刷新页面后重试',
+            progress: 0,
+            synced: 0,
+            total: 0,
+          };
+          setState(state);
+          chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
           sendResponse({ ok: false, error: chrome.runtime.lastError.message });
           return;
         }

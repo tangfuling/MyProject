@@ -1,5 +1,5 @@
 import http from '../../../common/network/HttpClient';
-import type { PaymentCreateResult, TokenLogPage, UserProfile } from '../model/SettingsModels';
+import type { PaymentCreateResult, PaymentOrderPage, TokenLogPage, UserProfile } from '../model/SettingsModels';
 
 const SettingsApi = {
   profile() {
@@ -10,6 +10,9 @@ const SettingsApi = {
   },
   tokenLogs(page: number, size: number) {
     return http.get<TokenLogPage>('/user/token-logs', { params: { page, size } });
+  },
+  paymentOrders(page: number, size: number) {
+    return http.get<PaymentOrderPage>('/payment/orders', { params: { page, size } });
   },
   createPayment(amountCent: number) {
     return http.post<PaymentCreateResult>('/payment/create', { amountCent, subject: '公众号助手充值' });

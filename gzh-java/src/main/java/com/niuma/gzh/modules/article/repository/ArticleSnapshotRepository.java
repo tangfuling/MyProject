@@ -28,6 +28,13 @@ public class ArticleSnapshotRepository extends BaseRepository {
             .last("limit 1"));
     }
 
+    public ArticleSnapshotEntity latestByUser(Long userId) {
+        return articleSnapshotMapper.selectOne(new LambdaQueryWrapper<ArticleSnapshotEntity>()
+            .eq(ArticleSnapshotEntity::getUserId, userId)
+            .orderByDesc(ArticleSnapshotEntity::getSnapshotTime)
+            .last("limit 1"));
+    }
+
     public Map<Long, ArticleSnapshotEntity> latestByArticleIds(List<Long> articleIds) {
         Map<Long, ArticleSnapshotEntity> map = new HashMap<>();
         for (Long articleId : articleIds) {

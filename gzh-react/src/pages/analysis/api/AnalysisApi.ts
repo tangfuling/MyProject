@@ -2,9 +2,12 @@ import http from '../../../common/network/HttpClient';
 import { ApiConfig } from '../../../common/network/ApiConfig';
 import { createSseStream } from '../../../common/network/SseClient';
 import { useAuthStore } from '../../../common/state/authStore';
-import type { AnalysisDoneEvent, AnalysisReport, AnalysisReportPage } from '../model/AnalysisModels';
+import type { AnalysisDoneEvent, AnalysisEstimate, AnalysisReport, AnalysisReportPage } from '../model/AnalysisModels';
 
 const AnalysisApi = {
+  estimate(range: string) {
+    return http.get<AnalysisEstimate>('/analysis/estimate', { params: { range } });
+  },
   reports(page: number, size: number) {
     return http.get<AnalysisReportPage>('/analysis/reports', { params: { page, size } });
   },

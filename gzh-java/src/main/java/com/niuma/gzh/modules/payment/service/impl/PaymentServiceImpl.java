@@ -1,5 +1,7 @@
 package com.niuma.gzh.modules.payment.service.impl;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.niuma.gzh.common.base.PageResult;
 import com.niuma.gzh.common.base.BaseService;
 import com.niuma.gzh.common.cache.CacheKey;
 import com.niuma.gzh.common.cache.RedisClient;
@@ -12,6 +14,7 @@ import com.niuma.gzh.integrations.alipay.AlipaySignUtil;
 import com.niuma.gzh.modules.payment.model.dto.CreatePaymentDTO;
 import com.niuma.gzh.modules.payment.model.entity.PaymentOrderEntity;
 import com.niuma.gzh.modules.payment.model.vo.CreatePaymentVO;
+import com.niuma.gzh.modules.payment.model.vo.PaymentOrderVO;
 import com.niuma.gzh.modules.payment.repository.PaymentOrderRepository;
 import com.niuma.gzh.modules.payment.service.PaymentService;
 import com.niuma.gzh.modules.user.service.UserService;
@@ -75,6 +78,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         order.setUserId(userId);
         order.setOrderNo(orderNo);
         order.setAmountCent(dto.getAmountCent());
+        order.setChannel("alipay");
         order.setStatus("PENDING");
         order.setSubject(dto.getSubject() == null || dto.getSubject().isBlank() ? "公众号助手充值" : dto.getSubject());
         order.setCreatedAt(LocalDateTime.now());
@@ -91,6 +95,18 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     }
 
     @Override
+    public PageResult<PaymentOrderVO> orders(long page, long size) {
+        Long userId = AuthContext.requiredUserId();
+        Page<PaymentOrderEntity> result = paymentOrderRepository.pageByUser(userId, page, size);
+        return new PageResult<>(
+            page,
+            size,
+            result.getTotal(),
+            result.getRecords().stream().map(this::toVO).toList()
+        );
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public String notify(Map<String, String> params) {
         String sign = params.get("sign");
@@ -104,8 +120,13 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         String outTradeNo = params.get("out_trade_no");
         String tradeStatus = params.get("trade_status");
         String tradeNo = params.get("trade_no");
+        String totalAmount = params.get("total_amount");
+        String callbackAppId = params.get("app_id");
 
         if (outTradeNo == null || outTradeNo.isBlank()) {
+            return "failure";
+        }
+        if (callbackAppId != null && !callbackAppId.isBlank() && !callbackAppId.equals(appId)) {
             return "failure";
         }
 
@@ -123,6 +144,12 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
 
         if ("PAID".equals(order.getStatus())) {
             return "success";
+        }
+
+        Integer callbackAmountCent = parseAmountToCent(totalAmount);
+        if (callbackAmountCent == null || !callbackAmountCent.equals(order.getAmountCent())) {
+            redisClient.delete(idempotentKey);
+            return "failure";
         }
 
         if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
@@ -168,5 +195,30 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         return BigDecimal.valueOf(amountCent)
             .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
             .toPlainString();
+    }
+
+    private Integer parseAmountToCent(String amountText) {
+        if (amountText == null || amountText.isBlank()) {
+            return null;
+        }
+        try {
+            BigDecimal value = new BigDecimal(amountText.trim());
+            return value.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).intValueExact();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private PaymentOrderVO toVO(PaymentOrderEntity entity) {
+        PaymentOrderVO vo = new PaymentOrderVO();
+        vo.setId(entity.getId());
+        vo.setOrderNo(entity.getOrderNo());
+        vo.setAmountCent(entity.getAmountCent());
+        vo.setChannel(entity.getChannel());
+        vo.setStatus(entity.getStatus());
+        vo.setAlipayTradeNo(entity.getAlipayTradeNo());
+        vo.setCreatedAt(entity.getCreatedAt());
+        vo.setUpdatedAt(entity.getUpdatedAt());
+        return vo;
     }
 }

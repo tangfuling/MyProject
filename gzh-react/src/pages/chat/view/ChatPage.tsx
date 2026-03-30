@@ -23,6 +23,15 @@ export default function ChatPage() {
       <section className="page-panel chat-panel">
         <h2>AI 对话</h2>
         <div className="muted">会话ID: {vm.sessionId || '新会话'} {vm.reportId ? `· 报告 ${vm.reportId}` : ''}</div>
+        {vm.quickQuestions.length ? (
+          <div className="chip-row">
+            {vm.quickQuestions.map((question) => (
+              <button key={question} type="button" className="chip" onClick={() => vm.setInput(question)}>
+                {question}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <div className="chat-box">
           {vm.messages.map((message) => (
@@ -30,7 +39,9 @@ export default function ChatPage() {
               <div className="chat-role">{message.role === 'assistant' ? '助手' : '我'}</div>
               <div className="chat-content">{message.content}</div>
               {message.role === 'assistant' ? (
-                <div className="muted small">{message.aiModel} · ¥{(message.costCent / 100).toFixed(2)}</div>
+                <div className="muted small">
+                  {message.aiModel} · {message.inputTokens + message.outputTokens} tok · ¥{(message.costCent / 100).toFixed(2)}
+                </div>
               ) : null}
             </div>
           ))}

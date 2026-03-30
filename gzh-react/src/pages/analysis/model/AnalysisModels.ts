@@ -15,6 +15,15 @@ export type AnalysisReport = {
 
 export type AnalysisReportPage = PageResult<AnalysisReport>;
 
+export type AnalysisEstimate = {
+  range: string;
+  articleCount: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedCostCent: number;
+  aiModel: string;
+};
+
 export type AnalysisDoneEvent = {
   type: 'done';
   reportId: number;

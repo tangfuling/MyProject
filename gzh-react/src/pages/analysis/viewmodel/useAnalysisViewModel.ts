@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AnalysisApi from '../api/AnalysisApi';
+import { useAuthStore } from '../../../common/state/authStore';
 import type { AnalysisDoneEvent } from '../model/AnalysisModels';
 
 export function useAnalysisViewModel() {
@@ -11,6 +12,12 @@ export function useAnalysisViewModel() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
+  const aiModel = useAuthStore((s) => s.profile?.aiModel ?? 'qwen');
+
+  const estimateQuery = useQuery({
+    queryKey: ['analysis-estimate', range, aiModel],
+    queryFn: () => AnalysisApi.estimate(range),
+  });
 
   const reportsQuery = useQuery({
     queryKey: ['analysis-reports'],
@@ -22,10 +29,6 @@ export function useAnalysisViewModel() {
     queryFn: () => AnalysisApi.detail(selectedId as number),
     enabled: selectedId !== null,
   });
-
-  const estimate = useMemo(() => {
-    return range === '7d' ? 8 : range === '30d' ? 18 : range === '90d' ? 36 : 60;
-  }, [range]);
 
   const startGenerate = () => {
     setRunning(true);
@@ -39,6 +42,7 @@ export function useAnalysisViewModel() {
         setRunning(false);
         setLastDone(doneEvent);
         void queryClient.invalidateQueries({ queryKey: ['analysis-reports'] });
+        void queryClient.invalidateQueries({ queryKey: ['analysis-estimate'] });
       },
       (error) => {
         setRunning(false);
@@ -55,7 +59,7 @@ export function useAnalysisViewModel() {
   return {
     range,
     setRange,
-    estimate,
+    estimate: estimateQuery.data,
     reports: reportsQuery.data?.records ?? [],
     streamText,
     running,

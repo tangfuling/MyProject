@@ -66,6 +66,45 @@ button.ghost {
   font-size: 12px;
 }
 
+.status-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.state-label {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.state-label.ready {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.state-label.running {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.state-label.done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.state-label.warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.state-label.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 #progressBar {
   height: 8px;
   border-radius: 999px;
@@ -78,4 +117,12 @@ button.ghost {
   width: 0;
   height: 100%;
   background: #0f766e;
+}
+
+.step-text {
+  color: #475569;
+}
+
+.summary-text {
+  color: #0f172a;
 }

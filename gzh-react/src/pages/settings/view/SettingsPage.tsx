@@ -4,7 +4,12 @@ import AppLayout from '../../../common/ui/AppLayout';
 import PageWrapper from '../../../common/base/PageWrapper';
 import { useSettingsViewModel } from '../viewmodel/useSettingsViewModel';
 
-const models = ['qwen', 'doubao', 'gpt', 'claude'];
+const models = [
+  { code: 'qwen', name: '通义千问', price: '约 ¥2 / 百万输入', desc: '默认模型，性价比高' },
+  { code: 'doubao', name: '字节豆包', price: '约 ¥3 / 百万输入', desc: '中文理解能力强' },
+  { code: 'gpt', name: 'GPT', price: '约 ¥10 / 百万输入', desc: '综合能力更均衡' },
+  { code: 'claude', name: 'Claude', price: '约 ¥15 / 百万输入', desc: '推理与长文本表现强' },
+];
 
 export default function SettingsPage() {
   const vm = useSettingsViewModel();
@@ -25,16 +30,18 @@ export default function SettingsPage() {
 
           <div className="setting-card">
             <h3>AI 模型</h3>
-            <div className="chip-row">
+            <div className="model-grid">
               {models.map((model) => (
                 <button
-                  key={model}
+                  key={model.code}
                   type="button"
-                  className={`chip${vm.profile?.aiModel === model ? ' active' : ''}`}
-                  onClick={() => vm.updateModel(model)}
+                  className={`model-card${vm.profile?.aiModel === model.code ? ' active' : ''}`}
+                  onClick={() => vm.updateModel(model.code)}
                   disabled={vm.updatingModel}
                 >
-                  {model}
+                  <div className="model-name">{model.name}</div>
+                  <div className="model-desc">{model.desc}</div>
+                  <div className="model-price">{model.price}</div>
                 </button>
               ))}
             </div>
@@ -82,6 +89,42 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+            {vm.hasMoreTokenLogs ? (
+              <button type="button" className="ghost-btn" onClick={vm.loadMoreTokenLogs} disabled={vm.loadingMoreTokenLogs}>
+                {vm.loadingMoreTokenLogs ? '加载中...' : '加载更多'}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="setting-card">
+            <h3>充值记录</h3>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>渠道</th>
+                  <th>订单号</th>
+                  <th>金额</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vm.paymentOrders.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.createdAt?.slice(0, 16)}</td>
+                    <td>{item.channel}</td>
+                    <td>{item.orderNo}</td>
+                    <td>¥{(item.amountCent / 100).toFixed(2)}</td>
+                    <td>{item.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {vm.hasMorePaymentOrders ? (
+              <button type="button" className="ghost-btn" onClick={vm.loadMorePaymentOrders} disabled={vm.loadingMorePaymentOrders}>
+                {vm.loadingMorePaymentOrders ? '加载中...' : '加载更多'}
+              </button>
+            ) : null}
           </div>
 
           <button

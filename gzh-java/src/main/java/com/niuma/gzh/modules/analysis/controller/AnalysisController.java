@@ -5,6 +5,7 @@ import com.niuma.gzh.common.base.BaseController;
 import com.niuma.gzh.common.base.PageResult;
 import com.niuma.gzh.common.validation.PageParam;
 import com.niuma.gzh.modules.analysis.model.dto.GenerateAnalysisDTO;
+import com.niuma.gzh.modules.analysis.model.vo.AnalysisEstimateVO;
 import com.niuma.gzh.modules.analysis.model.vo.AnalysisReportVO;
 import com.niuma.gzh.modules.analysis.service.AnalysisService;
 import jakarta.validation.Valid;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -30,6 +32,11 @@ public class AnalysisController extends BaseController {
     @PostMapping("/generate")
     public SseEmitter generate(@RequestBody @Valid GenerateAnalysisDTO dto) {
         return analysisService.generate(dto);
+    }
+
+    @GetMapping("/estimate")
+    public ApiResponse<AnalysisEstimateVO> estimate(@RequestParam(value = "range", required = false) String range) {
+        return ApiResponse.success(analysisService.estimate(range));
     }
 
     @GetMapping("/reports")

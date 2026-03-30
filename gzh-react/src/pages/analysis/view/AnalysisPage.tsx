@@ -31,7 +31,11 @@ export default function AnalysisPage() {
               </button>
             ))}
           </div>
-          <p className="muted">预估分析文章数: {vm.estimate} 篇</p>
+          <p className="muted">将分析 {vm.estimate?.articleCount ?? 0} 篇文章</p>
+          <p className="muted">
+            预估消耗 {(vm.estimate?.estimatedInputTokens ?? 0) + (vm.estimate?.estimatedOutputTokens ?? 0)} tokens
+            （约 ¥{((vm.estimate?.estimatedCostCent ?? 0) / 100).toFixed(2)}，模型 {vm.estimate?.aiModel ?? '-'}）
+          </p>
           <div className="action-row">
             <button type="button" className="primary-btn" disabled={vm.running} onClick={vm.startGenerate}>生成分析报告</button>
             <button type="button" className="ghost-btn" disabled={!vm.running} onClick={vm.stopGenerate}>停止</button>
@@ -83,6 +87,9 @@ export default function AnalysisPage() {
           {vm.selectedReport ? (
             <div className="report-detail">
               <h4>报告详情</h4>
+              <div className="muted">
+                {vm.selectedReport.aiModel} · {vm.selectedReport.inputTokens + vm.selectedReport.outputTokens} tok · ¥{(vm.selectedReport.costCent / 100).toFixed(2)}
+              </div>
               <div className="action-row">
                 <button
                   type="button"

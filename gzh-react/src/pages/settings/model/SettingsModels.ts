@@ -7,6 +7,8 @@ export type UserProfile = {
   freeQuotaCent: number;
   aiModel: string;
   articleCount: number;
+  lastSyncAt?: string;
+  createdAt?: string;
 };
 
 export type TokenLog = {
@@ -26,3 +28,16 @@ export type PaymentCreateResult = {
   orderNo: string;
   payUrl: string;
 };
+
+export type PaymentOrder = {
+  id: number;
+  orderNo: string;
+  amountCent: number;
+  channel: string;
+  status: string;
+  alipayTradeNo?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaymentOrderPage = PageResult<PaymentOrder>;

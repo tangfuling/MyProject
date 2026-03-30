@@ -44,3 +44,8 @@ export type Article = {
 };
 
 export type ArticlePage = PageResult<Article>;
+
+export type UserProfileBrief = {
+  articleCount: number;
+  lastSyncAt?: string;
+};

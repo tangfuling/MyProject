@@ -12,6 +12,8 @@ import com.niuma.gzh.common.base.BaseService;
 import com.niuma.gzh.common.security.AuthContext;
 import com.niuma.gzh.common.util.IdUtil;
 import com.niuma.gzh.common.util.JsonUtil;
+import com.niuma.gzh.common.web.BizException;
+import com.niuma.gzh.common.web.ErrorCode;
 import com.niuma.gzh.modules.analysis.model.entity.AnalysisReportEntity;
 import com.niuma.gzh.modules.analysis.repository.AnalysisReportRepository;
 import com.niuma.gzh.modules.article.model.vo.ArticleVO;
@@ -88,6 +90,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     }
 
     private void runChat(Long userId, String sessionId, ChatSendDTO dto, SseEmitter emitter) {
+        AuthContext.setUserId(userId);
         try {
             UserEntity user = userService.getById(userId);
             AiClient client = aiClientFactory.getByModelCode(user.getAiModel());
@@ -179,10 +182,12 @@ public class ChatServiceImpl extends BaseService implements ChatService {
             emitter.complete();
         } catch (Exception ex) {
             try {
-                sendEvent(emitter, Map.of("type", "error", "message", ex.getMessage()));
+                sendEvent(emitter, Map.of("type", "error", "message", friendlyErrorMessage(ex)));
             } catch (IOException ignored) {
             }
             emitter.completeWithError(ex);
+        } finally {
+            AuthContext.clear();
         }
     }
 
@@ -352,6 +357,17 @@ public class ChatServiceImpl extends BaseService implements ChatService {
 
     private void sendEvent(SseEmitter emitter, Map<String, Object> event) throws IOException {
         emitter.send(SseEmitter.event().data(jsonUtil.toJson(event)));
+    }
+
+    private String friendlyErrorMessage(Exception ex) {
+        if (ex instanceof BizException bizException && bizException.getCode().equals(ErrorCode.THIRD_PARTY_ERROR.getCode())) {
+            return "当前模型暂时不可用，请切换其他模型重试";
+        }
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            return "对话生成失败，请稍后重试";
+        }
+        return message;
     }
 
     private record ToolCall(String name, String keyword) {

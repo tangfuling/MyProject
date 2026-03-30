@@ -1,5 +1,6 @@
 package com.niuma.gzh.modules.user.model.vo;
 
+import java.time.LocalDateTime;
 import lombok.Data;
 
 @Data
@@ -10,4 +11,6 @@ public class UserProfileVO {
     private Integer freeQuotaCent;
     private String aiModel;
     private Integer articleCount;
+    private LocalDateTime lastSyncAt;
+    private LocalDateTime createdAt;
 }

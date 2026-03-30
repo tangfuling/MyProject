@@ -98,6 +98,41 @@ body {
 
 .app-content {
   padding: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.app-topbar {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.model-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.model-switch select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
 }
 
 .page-panel {
@@ -401,6 +436,43 @@ body {
   gap: 6px;
 }
 
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.model-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.model-card.active {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: #f0fdfa;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.model-desc {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.model-price {
+  color: #0f766e;
+  font-size: 12px;
+}
+
 .loading-state,
 .error-state,
 .empty-state {
@@ -433,7 +505,16 @@ body {
     padding: 12px;
   }
 
+  .app-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .model-grid {
     grid-template-columns: 1fr;
   }
 }

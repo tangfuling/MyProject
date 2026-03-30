@@ -23,6 +23,14 @@ public enum AiModelProvider {
         return code;
     }
 
+    public int getInputPerMillionCent() {
+        return inputPerMillionCent;
+    }
+
+    public int getOutputPerMillionCent() {
+        return outputPerMillionCent;
+    }
+
     public int calcCostCent(int inputTokens, int outputTokens) {
         long inputCost = (long) inputTokens * inputPerMillionCent;
         long outputCost = (long) outputTokens * outputPerMillionCent;

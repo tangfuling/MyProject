@@ -14,6 +14,10 @@
         progress: payload.progress ?? 0,
         synced: payload.synced ?? 0,
         total: payload.total ?? 0,
+        newArticles: payload.newArticles ?? 0,
+        updatedArticles: payload.updatedArticles ?? 0,
+        failedMetrics: payload.failedMetrics ?? 0,
+        failedContent: payload.failedContent ?? 0,
         updatedAt: new Date().toISOString(),
       },
     });
@@ -68,7 +72,12 @@
     try {
       const token = parseTokenFromUrl();
       if (!token) {
-        throw new Error('未检测到微信后台 token，请确认页面已登录');
+        notifyState({
+          stage: 'login_expired',
+          message: '微信后台登录已过期，请刷新页面重新登录微信公众平台后再同步',
+          progress: 0,
+        });
+        return;
       }
 
       const storage = await getStorage(['gzhAuthToken', 'gzhApiBase', 'gzhSyncedArticleIds']);
@@ -77,13 +86,28 @@
       const syncedArticleIds = storage.gzhSyncedArticleIds || {};
 
       if (!authToken) {
-        throw new Error('请先在插件弹窗里配置 Web 登录 JWT');
+        notifyState({
+          stage: 'need_login_web',
+          message: '请先前往运营助手登录，才能同步数据',
+          progress: 0,
+        });
+        return;
       }
 
       notifyState({ stage: 'fetch_list', message: '正在读取文章列表...', progress: 5 });
       const articles = await fetchAllArticles(token);
 
       if (articles.length === 0) {
+        const lastSync = {
+          updatedAt: new Date().toISOString(),
+          total: 0,
+          synced: 0,
+          newArticles: 0,
+          updatedArticles: 0,
+          failedMetrics: 0,
+          failedContent: 0,
+        };
+        await setStorage({ gzhLastSync: lastSync });
         notifyState({ stage: 'done', message: '没有读取到可同步文章', progress: 100, total: 0, synced: 0 });
         return;
       }
@@ -91,6 +115,8 @@
       const snapshots = [];
       const syncArticles = [];
       const mergedIds = { ...syncedArticleIds };
+      let failedMetrics = 0;
+      let failedContent = 0;
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
@@ -104,10 +130,16 @@
           synced: index,
         });
 
-        const metrics = await fetchArticleMetrics(token, article).catch(() => ({}));
+        const metrics = await fetchArticleMetrics(token, article).catch(() => {
+          failedMetrics += 1;
+          return {};
+        });
 
         if (isNew) {
-          const content = await fetchArticleContent(article.contentUrl).catch(() => '');
+          const content = await fetchArticleContent(article.contentUrl).catch(() => {
+            failedContent += 1;
+            return '';
+          });
           syncArticles.push({
             wxArticleId: article.wxArticleId,
             title: article.title,
@@ -150,14 +182,44 @@
         throw new Error(json.message || '同步上传失败');
       }
 
-      await setStorage({ gzhSyncedArticleIds: mergedIds });
+      const newArticles = json.data?.newArticles ?? 0;
+      const updatedArticles = json.data?.updatedArticles ?? 0;
+      const lastSync = {
+        updatedAt: new Date().toISOString(),
+        total: articles.length,
+        synced: articles.length,
+        newArticles,
+        updatedArticles,
+        failedMetrics,
+        failedContent,
+      };
+
+      await setStorage({ gzhSyncedArticleIds: mergedIds, gzhLastSync: lastSync });
+
+      const failedCount = failedMetrics + failedContent;
+      if (failedCount > 0) {
+        notifyState({
+          stage: 'partial_failed',
+          message: `同步部分完成：新增 ${newArticles}，更新 ${updatedArticles}，失败 ${failedCount}`,
+          progress: 100,
+          total: articles.length,
+          synced: articles.length,
+          newArticles,
+          updatedArticles,
+          failedMetrics,
+          failedContent,
+        });
+        return;
+      }
 
       notifyState({
         stage: 'done',
-        message: `同步完成：新增 ${json.data?.newArticles ?? 0}，更新 ${json.data?.updatedArticles ?? 0}`,
+        message: `同步完成：新增 ${newArticles}，更新 ${updatedArticles}`,
         progress: 100,
         total: articles.length,
         synced: articles.length,
+        newArticles,
+        updatedArticles,
       });
     } catch (error) {
       notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
