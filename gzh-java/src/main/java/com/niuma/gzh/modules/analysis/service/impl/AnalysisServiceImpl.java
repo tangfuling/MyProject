@@ -237,6 +237,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         sb.append("分析范围: ").append(range).append("\n");
         sb.append("文章数量: ").append(overview.getArticleCount()).append("\n");
         sb.append("总阅读: ").append(overview.getMetrics().getTotalRead()).append("\n");
+        sb.append("总送达: ").append(overview.getMetrics().getTotalSend()).append("\n");
         sb.append("篇均阅读: ").append(overview.getMetrics().getAvgRead()).append("\n");
         sb.append("完读率: ").append(overview.getMetrics().getCompletionRate()).append("\n");
         sb.append("总分享: ").append(overview.getMetrics().getTotalShare()).append("\n");
@@ -247,6 +248,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         sb.append("文章详情:\n");
         for (ArticleVO article : articles) {
             sb.append("- ").append(article.getTitle()).append(" | 阅读=").append(article.getReadCount())
+                .append(" 送达=").append(article.getSendCount())
                 .append(" 分享=").append(article.getShareCount())
                 .append(" 点赞=").append(article.getLikeCount())
                 .append(" 完读率=").append(article.getCompletionRate())

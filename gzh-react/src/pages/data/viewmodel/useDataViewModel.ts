@@ -47,11 +47,12 @@ export function useDataViewModel() {
         acc.share += item.shareCount ?? 0;
         acc.like += item.likeCount ?? 0;
         acc.read += item.readCount ?? 0;
+        acc.send += item.sendCount ?? 0;
         acc.follow += item.newFollowers ?? 0;
         acc.completion += item.completionRate ?? 0;
         return acc;
       },
-      { wow: 0, comment: 0, save: 0, share: 0, like: 0, read: 0, follow: 0, completion: 0 }
+      { wow: 0, comment: 0, save: 0, share: 0, like: 0, read: 0, send: 0, follow: 0, completion: 0 }
     );
     const count = records.length || 1;
     return {
@@ -61,6 +62,7 @@ export function useDataViewModel() {
       totalShare: sum.share,
       totalLike: sum.like,
       totalRead: sum.read,
+      totalSend: sum.send,
       totalFollow: sum.follow,
       avgCompletion: Number((sum.completion / count).toFixed(2)),
     };

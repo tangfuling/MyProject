@@ -18,6 +18,7 @@ public class ArticleSnapshotEntity {
     private Long articleId;
     private String wxArticleId;
     private Integer readCount;
+    private Integer sendCount;
     private Integer shareCount;
     private Integer likeCount;
     private Integer wowCount;

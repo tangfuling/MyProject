@@ -68,6 +68,11 @@ export default function DataPage() {
               <div className="metric-change">{vm.overview?.changes.totalRead ?? 0}%</div>
             </div>
             <div className="metric-card">
+              <div className="metric-label">总送达</div>
+              <div className="metric-value">{vm.overview?.metrics.totalSend ?? 0}</div>
+              <div className="metric-change">{vm.overview?.changes.totalSend ?? 0}%</div>
+            </div>
+            <div className="metric-card">
               <div className="metric-label">篇均阅读</div>
               <div className="metric-value">{vm.overview?.metrics.avgRead ?? 0}</div>
               <div className="metric-change">{vm.overview?.changes.avgRead ?? 0}%</div>
@@ -117,6 +122,7 @@ export default function DataPage() {
             <div className="detail-drawer">
               <div className="metric-grid detail-grid">
                 <div className="metric-card"><div className="metric-label">总阅读</div><div className="metric-value">{vm.detailStats.totalRead}</div></div>
+                <div className="metric-card"><div className="metric-label">总送达</div><div className="metric-value">{vm.detailStats.totalSend}</div></div>
                 <div className="metric-card"><div className="metric-label">总分享</div><div className="metric-value">{vm.detailStats.totalShare}</div></div>
                 <div className="metric-card"><div className="metric-label">总点赞</div><div className="metric-value">{vm.detailStats.totalLike}</div></div>
                 <div className="metric-card"><div className="metric-label">总在看</div><div className="metric-value">{vm.detailStats.totalWow}</div></div>
@@ -134,6 +140,7 @@ export default function DataPage() {
                 <th>发布时间</th>
                 <th>标题</th>
                 <th>阅读</th>
+                <th>送达</th>
                 <th>分享</th>
                 <th>点赞</th>
                 <th>在看</th>
@@ -149,6 +156,7 @@ export default function DataPage() {
                   <td>{article.publishTime?.slice(0, 10)}</td>
                   <td>{article.title}</td>
                   <td>{article.readCount ?? 0}</td>
+                  <td>{article.sendCount ?? 0}</td>
                   <td>{article.shareCount ?? 0}</td>
                   <td>{article.likeCount ?? 0}</td>
                   <td>{article.wowCount ?? 0}</td>

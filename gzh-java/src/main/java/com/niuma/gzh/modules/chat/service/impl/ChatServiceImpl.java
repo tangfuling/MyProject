@@ -313,6 +313,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                 + "wxArticleId=" + wxId + "\n"
                 + "publishTime=" + article.getPublishTime() + "\n"
                 + "readCount=" + article.getReadCount() + "\n"
+                + "sendCount=" + article.getSendCount() + "\n"
                 + "content=" + content;
         }
         return "tool=get_article_content\nresult=未找到匹配文章，keyword=" + call.keyword();

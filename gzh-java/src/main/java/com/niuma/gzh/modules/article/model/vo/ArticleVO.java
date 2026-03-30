@@ -14,6 +14,7 @@ public class ArticleVO {
     private Integer wordCount;
     private LocalDateTime publishTime;
     private Integer readCount;
+    private Integer sendCount;
     private Integer shareCount;
     private Integer likeCount;
     private Integer wowCount;

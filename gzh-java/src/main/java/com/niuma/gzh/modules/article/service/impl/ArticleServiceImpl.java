@@ -81,6 +81,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setArticleId(article.getId());
             snapshot.setWxArticleId(snapshotItem.getWxArticleId());
             snapshot.setReadCount(defaultInt(snapshotItem.getReadCount()));
+            snapshot.setSendCount(defaultInt(snapshotItem.getSendCount()));
             snapshot.setShareCount(defaultInt(snapshotItem.getShareCount()));
             snapshot.setLikeCount(defaultInt(snapshotItem.getLikeCount()));
             snapshot.setWowCount(defaultInt(snapshotItem.getWowCount()));
@@ -134,6 +135,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
         OverviewVO.Metrics metrics = new OverviewVO.Metrics();
         metrics.setTotalRead(current.totalRead);
+        metrics.setTotalSend(current.totalSend);
         metrics.setAvgRead(current.avgRead);
         metrics.setCompletionRate(current.completionRate);
         metrics.setTotalShare(current.totalShare);
@@ -143,6 +145,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
         OverviewVO.Changes changes = new OverviewVO.Changes();
         changes.setTotalRead(pctChange(current.totalRead, previous.totalRead));
+        changes.setTotalSend(pctChange(current.totalSend, previous.totalSend));
         changes.setAvgRead(pctChange(current.avgRead, previous.avgRead));
         changes.setCompletionRate(pctChange(current.completionRate, previous.completionRate));
         changes.setTotalShare(pctChange(current.totalShare, previous.totalShare));
@@ -183,6 +186,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         ArticleSnapshotEntity latest = snapshotRepository.latestByArticle(article.getId());
         if (latest != null) {
             vo.setReadCount(latest.getReadCount());
+            vo.setSendCount(latest.getSendCount());
             vo.setShareCount(latest.getShareCount());
             vo.setLikeCount(latest.getLikeCount());
             vo.setWowCount(latest.getWowCount());
@@ -198,6 +202,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     private MetricsBundle calcMetrics(Long userId, LocalDateTime start, LocalDateTime end) {
         List<ArticleEntity> articles = articleRepository.listByUserAndRange(userId, start, end);
         int totalRead = 0;
+        int totalSend = 0;
         int totalShare = 0;
         int totalLike = 0;
         int newFollowers = 0;
@@ -211,6 +216,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 continue;
             }
             totalRead += defaultInt(latest.getReadCount());
+            totalSend += defaultInt(latest.getSendCount());
             totalShare += defaultInt(latest.getShareCount());
             totalLike += defaultInt(latest.getLikeCount());
             newFollowers += defaultInt(latest.getNewFollowers());
@@ -234,7 +240,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             trafficCount.forEach((k, v) -> trafficPercent.put(k, (int) Math.round(v * 100.0 / trafficTotal)));
         }
 
-        return new MetricsBundle(articleCount, totalRead, avgRead, completionRate, totalShare, totalLike, newFollowers, trafficPercent);
+        return new MetricsBundle(articleCount, totalRead, totalSend, avgRead, completionRate, totalShare, totalLike, newFollowers, trafficPercent);
     }
 
     private double pctChange(double current, double previous) {
@@ -265,6 +271,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     private record MetricsBundle(
         int articleCount,
         int totalRead,
+        int totalSend,
         int avgRead,
         double completionRate,
         int totalShare,

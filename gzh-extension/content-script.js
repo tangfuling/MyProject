@@ -152,6 +152,7 @@
         snapshots.push({
           wxArticleId: article.wxArticleId,
           readCount: metrics.readCount || 0,
+          sendCount: metrics.sendCount || 0,
           shareCount: metrics.shareCount || 0,
           likeCount: metrics.likeCount || 0,
           wowCount: metrics.wowCount || 0,
@@ -275,22 +276,32 @@
     const url = `/misc/appmsganalysis?action=detailpage&msgid=${msgId}_1&publish_date=${publishDate}&token=${token}&lang=zh_CN&f=json&ajax=1`;
     const response = await fetch(url, { credentials: 'include' });
     const json = await response.json();
+    const articleData = parseMaybeJson(json.articleData) || json.articleData || {};
+    const articleDataNew = parseMaybeJson(articleData.article_data_new || json.article_data_new)
+      || articleData.article_data_new
+      || json.article_data_new
+      || {};
+    const subsTransform = parseMaybeJson(articleData.subs_transform || json.subs_transform)
+      || articleData.subs_transform
+      || json.subs_transform
+      || {};
 
     return {
-      readCount: Number(json.int_page_read_user || json.read_num || 0),
-      shareCount: Number(json.share_user || json.share_count || 0),
-      likeCount: Number(json.like_num || 0),
-      wowCount: Number(json.old_like_num || json.wow_num || 0),
-      commentCount: Number(json.comment_id_count || 0),
-      saveCount: Number(json.fav_num || json.save_count || 0),
-      completionRate: Number(json.complete_read_rate || 0),
+      readCount: Number(json.int_page_read_user || json.read_num || articleDataNew.read_uv || 0),
+      sendCount: Number(subsTransform.send_uv || json.send_uv || 0),
+      shareCount: Number(json.share_user || json.share_count || articleDataNew.share_uv || 0),
+      likeCount: Number(json.like_num || articleDataNew.like_cnt || 0),
+      wowCount: Number(json.old_like_num || json.wow_num || articleDataNew.zaikan_cnt || 0),
+      commentCount: Number(json.comment_id_count || articleDataNew.comment_cnt || 0),
+      saveCount: Number(json.fav_num || json.save_count || articleDataNew.collection_uv || 0),
+      completionRate: Number(json.complete_read_rate || articleDataNew.finished_read_pv_ratio || 0),
       trafficSources: {
         '公众号消息': Number(json.frommsg || 0),
         '朋友圈': Number(json.fromfeed || 0),
         '搜一搜': Number(json.fromsogou || 0),
         '推荐': Number(json.fromrecommend || 0),
       },
-      newFollowers: Number(json.new_fans || 0),
+      newFollowers: Number(json.new_fans || articleDataNew.follow_after_read_uv || 0),
     };
   }
 

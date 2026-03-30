@@ -2,6 +2,7 @@ import type { PageResult } from '../../../common/network/ApiResponse';
 
 export type OverviewMetrics = {
   totalRead: number;
+  totalSend: number;
   avgRead: number;
   completionRate: number;
   totalShare: number;
@@ -11,6 +12,7 @@ export type OverviewMetrics = {
 
 export type OverviewChanges = {
   totalRead: number;
+  totalSend: number;
   avgRead: number;
   completionRate: number;
   totalShare: number;
@@ -33,6 +35,7 @@ export type Article = {
   wordCount: number;
   publishTime: string;
   readCount: number;
+  sendCount: number;
   shareCount: number;
   likeCount: number;
   wowCount: number;

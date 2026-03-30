@@ -14,6 +14,7 @@ public class OverviewVO {
     @Data
     public static class Metrics {
         private Integer totalRead;
+        private Integer totalSend;
         private Integer avgRead;
         private Double completionRate;
         private Integer totalShare;
@@ -24,6 +25,7 @@ public class OverviewVO {
     @Data
     public static class Changes {
         private Double totalRead;
+        private Double totalSend;
         private Double avgRead;
         private Double completionRate;
         private Double totalShare;

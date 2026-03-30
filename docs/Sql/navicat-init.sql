@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS gzh_article_snapshot (
     article_id BIGINT UNSIGNED NOT NULL COMMENT '文章ID',
     wx_article_id VARCHAR(128) NOT NULL COMMENT '微信文章ID',
     read_count INT NOT NULL DEFAULT 0 COMMENT '阅读数',
+    send_count INT NOT NULL DEFAULT 0 COMMENT '送达人数',
     share_count INT NOT NULL DEFAULT 0 COMMENT '分享数',
     like_count INT NOT NULL DEFAULT 0 COMMENT '点赞数',
     wow_count INT NOT NULL DEFAULT 0 COMMENT '在看数',
@@ -148,6 +149,22 @@ SET @gzh_payment_order_channel_sql = IF(
     'SELECT 1'
 );
 PREPARE gzh_stmt FROM @gzh_payment_order_channel_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_send_count_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'send_count'
+);
+SET @gzh_snapshot_send_count_sql = IF(
+    @gzh_snapshot_send_count_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN send_count INT NOT NULL DEFAULT 0 COMMENT ''送达人数'' AFTER read_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_send_count_sql;
 EXECUTE gzh_stmt;
 DEALLOCATE PREPARE gzh_stmt;
 
