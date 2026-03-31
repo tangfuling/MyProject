@@ -2,6 +2,11 @@ spring:
   config:
     activate:
       on-profile: dev
+  datasource:
+    # Synced from npower_java dev config.
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/gzh?characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:tfling123456}
 
 logging:
   level:

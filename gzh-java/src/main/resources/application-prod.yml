@@ -2,6 +2,11 @@ spring:
   config:
     activate:
       on-profile: prod
+  datasource:
+    # Synced from npower_java prod config.
+    url: ${MYSQL_URL:jdbc:mysql://rm-bp1padk678is2h0u3.mysql.rds.aliyuncs.com:3306/gzh?characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
+    username: ${MYSQL_USERNAME:tangfuling}
+    password: ${MYSQL_PASSWORD:NiuMa123456*}
 
 logging:
   level:
