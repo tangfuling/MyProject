@@ -70,7 +70,7 @@ function withDefaultState(state) {
   if (!latestAuthToken) {
     return {
       stage: 'need_login_web',
-      message: '请先前往运营助手登录，才能同步数据',
+      message: '请先前往公众号助手登录，才能同步数据',
       progress: 0,
       synced: 0,
       total: 0,
@@ -126,14 +126,14 @@ function renderButtons(state) {
   const stage = state.stage;
   syncBtn.disabled = RUNNING_STAGES.has(stage);
   if (stage === 'need_login_web') {
-    openWebBtn.textContent = '前往运营助手登录';
+    openWebBtn.textContent = '前往公众号助手登录';
     return;
   }
   if (stage === 'done' || stage === 'partial_failed') {
-    openWebBtn.textContent = '前往运营助手查看 →';
+    openWebBtn.textContent = '前往公众号助手查看 →';
     return;
   }
-  openWebBtn.textContent = '前往运营助手';
+  openWebBtn.textContent = '前往公众号助手';
 }
 
 function renderState(rawState) {

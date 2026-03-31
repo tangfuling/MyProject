@@ -28,8 +28,8 @@ export default function LandingPage() {
     <div className="landing-page">
       <header className="landing-header">
         <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
-          <div className="brand-icon">✦</div>
-          <div className="brand-name">公众号数据运营助手</div>
+          <img className="brand-icon" src="/site-icon-64.png" alt="公众号助手" />
+          <div className="brand-name">公众号助手</div>
         </a>
         <MainNavTabs />
         <div className="header-right">
@@ -39,7 +39,7 @@ export default function LandingPage() {
       </header>
 
       <section className="hero">
-        <div className="hero-eyebrow">给公众号创作者的 AI 运营助手</div>
+        <div className="hero-eyebrow">给公众号创作者的 AI 公众号助手</div>
         <h1 className="hero-title">
           同步数据，<span>AI 帮你看清</span><br />下一步该怎么做
         </h1>
@@ -103,7 +103,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="landing-footer">© 2026 公众号数据运营助手</footer>
+      <footer className="landing-footer">© 2026 公众号助手</footer>
     </div>
   );
 }

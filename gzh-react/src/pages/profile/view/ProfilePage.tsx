@@ -93,8 +93,8 @@ export default function ProfilePage() {
       <div className="profile-shell">
         <div className="app-topbar">
           <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
-            <div className="brand-icon">✦</div>
-            <div className="brand-name">运营助手</div>
+            <img className="brand-icon" src="/site-icon-64.png" alt="公众号助手" />
+            <div className="brand-name">公众号助手</div>
           </a>
           <MainNavTabs />
           <div className="topbar-right">

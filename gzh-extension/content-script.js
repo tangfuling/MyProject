@@ -29,7 +29,7 @@
     }
     const button = document.createElement('button');
     button.id = BTN_ID;
-    button.textContent = '📊 同步到运营助手';
+    button.textContent = '📊 同步到公众号助手';
     button.style.position = 'fixed';
     button.style.right = '20px';
     button.style.bottom = '20px';
@@ -88,7 +88,7 @@
       if (!authToken) {
         notifyState({
           stage: 'need_login_web',
-          message: '请先前往运营助手登录，才能同步数据',
+          message: '请先前往公众号助手登录，才能同步数据',
           progress: 0,
         });
         return;

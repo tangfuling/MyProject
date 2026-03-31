@@ -158,14 +158,9 @@ body {
 .brand-icon {
   width: 34px;
   height: 34px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  box-shadow: 0 2px 8px var(--accent-glow);
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand-name {
