@@ -16,6 +16,7 @@ import com.niuma.gzh.modules.user.model.entity.UserEntity;
 import com.niuma.gzh.modules.user.service.UserService;
 import java.time.Duration;
 import java.util.Random;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,16 +25,19 @@ public class AuthServiceImpl extends BaseService implements AuthService {
     private final SmsClient smsClient;
     private final UserService userService;
     private final JwtService jwtService;
+    private final boolean debugMode;
     private final Random random = new Random();
 
     public AuthServiceImpl(RedisClient redisClient,
                            SmsClient smsClient,
                            UserService userService,
-                           JwtService jwtService) {
+                           JwtService jwtService,
+                           @Value("${app.auth.debug-mode:false}") boolean debugMode) {
         this.redisClient = redisClient;
         this.smsClient = smsClient;
         this.userService = userService;
         this.jwtService = jwtService;
+        this.debugMode = debugMode;
     }
 
     @Override
@@ -45,18 +49,22 @@ public class AuthServiceImpl extends BaseService implements AuthService {
         }
 
         String code = String.format("%06d", random.nextInt(1_000_000));
-        smsClient.sendCode(phone, code);
+        if (!debugMode) {
+            smsClient.sendCode(phone, code);
+        }
         redisClient.set(CacheKey.authCode(phone), code, Duration.ofMinutes(5));
         redisClient.set(cooldownKey, "1", Duration.ofSeconds(60));
     }
 
     @Override
     public LoginVO login(LoginDTO dto) {
-        String cachedCode = redisClient.get(CacheKey.authCode(dto.getPhone()));
-        if (cachedCode == null || !cachedCode.equals(dto.getCode())) {
-            throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "验证码错误或已过期");
+        if (!debugMode) {
+            String cachedCode = redisClient.get(CacheKey.authCode(dto.getPhone()));
+            if (cachedCode == null || !cachedCode.equals(dto.getCode())) {
+                throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "验证码错误或已过期");
+            }
+            redisClient.delete(CacheKey.authCode(dto.getPhone()));
         }
-        redisClient.delete(CacheKey.authCode(dto.getPhone()));
 
         UserEntity user = userService.findOrCreateByPhone(dto.getPhone());
         LoginVO vo = new LoginVO();

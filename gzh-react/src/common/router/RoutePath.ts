@@ -1,8 +1,9 @@
 export const RoutePath = {
-  LOGIN: '/login',
+  ROOT: '/',
+  WORKSPACE: '/workspace',
+  PROFILE: '/profile',
   DATA: '/data',
   ANALYSIS: '/analysis',
   CHAT: '/chat',
   SETTINGS: '/settings',
-  ROOT: '/',
 } as const;

@@ -11,6 +11,5 @@ public class LoginDTO {
     private String phone;
 
     @NotBlank(message = "验证码不能为空")
-    @Pattern(regexp = "^\\d{6}$", message = "验证码格式错误")
     private String code;
 }
