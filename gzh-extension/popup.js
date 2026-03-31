@@ -63,7 +63,12 @@ function withDefaultState(state) {
   if (state && RUNNING_STAGES.has(state.stage)) {
     return state;
   }
-  if (state && (state.stage === 'done' || state.stage === 'partial_failed' || state.stage === 'login_expired' || state.stage === 'error' || state.stage === 'need_login_web')) {
+  if (state && state.stage === 'need_login_web') {
+    if (!latestAuthToken) {
+      return state;
+    }
+  }
+  if (state && (state.stage === 'done' || state.stage === 'partial_failed' || state.stage === 'login_expired' || state.stage === 'error')) {
     return state;
   }
 
@@ -192,7 +197,13 @@ syncBtn.addEventListener('click', () => {
 });
 
 openWebBtn.addEventListener('click', () => {
-  chrome.tabs.create({ url: 'http://localhost:5173' });
+  chrome.runtime.sendMessage({ type: 'get-state' }, (state) => {
+    const needLogin = !latestAuthToken || state?.stage === 'need_login_web';
+    const url = needLogin
+      ? 'http://localhost:5173?openLogin=1&redirect=%2Fworkspace'
+      : 'http://localhost:5173';
+    chrome.tabs.create({ url });
+  });
 });
 
 chrome.runtime.onMessage.addListener((message) => {

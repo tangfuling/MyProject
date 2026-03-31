@@ -16,6 +16,19 @@ h1 {
   font-size: 16px;
 }
 
+.popup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-title img {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: contain;
+}
+
 label {
   font-size: 12px;
   color: #4a5568;
@@ -47,7 +60,7 @@ button {
   border-radius: 8px;
   padding: 8px;
   color: white;
-  background: #0f766e;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   cursor: pointer;
   font-size: 12px;
 }
@@ -86,8 +99,8 @@ button.ghost {
 }
 
 .state-label.running {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: #ede9fe;
+  color: #5b21b6;
 }
 
 .state-label.done {
@@ -116,7 +129,7 @@ button.ghost {
   display: block;
   width: 0;
   height: 100%;
-  background: #0f766e;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
 }
 
 .step-text {

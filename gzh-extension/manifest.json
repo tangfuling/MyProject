@@ -9,9 +9,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "activeTab", "tabs"],
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://mp.weixin.qq.com/*",
+    "http://localhost:5173/*",
+    "https://gzh.niuma.com/*",
+    "https://gzh.niumatech.com/*",
     "http://127.0.0.1:8081/*",
     "https://api-gzh.niuma.com/*"
   ],
@@ -20,6 +23,21 @@
       "matches": ["https://mp.weixin.qq.com/*"],
       "js": ["content-script.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:5173/*",
+        "https://gzh.niuma.com/*",
+        "https://gzh.niumatech.com/*"
+      ],
+      "js": ["web-auth-sync.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["https://mp.weixin.qq.com/*"]
     }
   ],
   "background": {

@@ -17,11 +17,22 @@ export default function LandingPage() {
 
   useEffect(() => {
     const state = location.state as { loginRequired?: boolean; redirect?: string } | null;
-    if (!state?.loginRequired) {
+    const query = new URLSearchParams(location.search);
+    const queryOpenLogin = query.get('openLogin') === '1';
+    const queryRedirect = query.get('redirect') || undefined;
+
+    if (!state?.loginRequired && !queryOpenLogin) {
       return;
     }
-    openLoginModal(state.redirect || RoutePath.WORKSPACE);
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+
+    openLoginModal(state?.redirect || queryRedirect || RoutePath.WORKSPACE);
+
+    if (queryOpenLogin) {
+      query.delete('openLogin');
+      query.delete('redirect');
+    }
+    const cleanedSearch = query.toString();
+    navigate(`${location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ''}`, { replace: true, state: null });
   }, [location.pathname, location.search, location.state, navigate, openLoginModal]);
 
   return (
