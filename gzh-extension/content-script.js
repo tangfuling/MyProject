@@ -684,19 +684,23 @@
           return {};
         });
 
+        let content = null;
+        let wordCount = null;
         if (isNew) {
-          const content = await fetchArticleContent(article.contentUrl).catch(() => {
+          const fetchedContent = await fetchArticleContent(article.contentUrl).catch(() => {
             failedContent += 1;
             return '';
           });
-          syncArticles.push({
-            wxArticleId: article.wxArticleId,
-            title: article.title,
-            content,
-            wordCount: content.length,
-            publishTime: article.publishTime,
-          });
+          content = fetchedContent;
+          wordCount = fetchedContent.length;
         }
+        syncArticles.push({
+          wxArticleId: article.wxArticleId,
+          title: article.title,
+          content,
+          wordCount,
+          publishTime: article.publishTime,
+        });
 
         snapshots.push({
           wxArticleId: article.wxArticleId,
