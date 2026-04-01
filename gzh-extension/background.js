@@ -13,23 +13,56 @@ function isAllowedProxyUrl(rawUrl) {
 }
 
 function setState(state) {
-  chrome.storage.local.set({ [STORAGE_KEY]: state });
+  try {
+    chrome.storage.local.set({ [STORAGE_KEY]: state }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('[gzh-extension][bg] setState failed', chrome.runtime.lastError.message);
+      }
+    });
+  } catch (error) {
+    console.warn('[gzh-extension][bg] setState threw', error?.message || error);
+  }
+}
+
+function safeRespond(sendResponse, payload) {
+  try {
+    sendResponse(payload);
+  } catch (error) {
+    console.warn('[gzh-extension][bg] sendResponse failed', error?.message || error);
+  }
+}
+
+function safeBroadcast(payload) {
+  try {
+    chrome.runtime.sendMessage(payload, () => {
+      if (chrome.runtime.lastError) {
+        // No receiver is normal when popup/content-script is not open.
+      }
+    });
+  } catch (error) {
+    console.warn('[gzh-extension][bg] broadcast threw', error?.message || error);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   setState({ stage: 'idle', message: '等待同步', progress: 0, synced: 0, total: 0 });
-  chrome.storage.local.set({ gzhApiBase: 'http://127.0.0.1:8081' });
+  try {
+    chrome.storage.local.set({ gzhApiBase: 'http://127.0.0.1:8081' });
+  } catch (error) {
+    console.warn('[gzh-extension][bg] init api base failed', error?.message || error);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  try {
   if (message?.type === 'trigger-sync') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
       if (!tab?.id) {
         const state = { stage: 'error', message: '未找到当前页面，请重试', progress: 0, synced: 0, total: 0 };
         setState(state);
-        chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
-        sendResponse({ ok: false, error: 'no-active-tab' });
+        safeBroadcast({ type: 'sync-state-broadcast', payload: state });
+        safeRespond(sendResponse, { ok: false, error: 'no-active-tab' });
         return;
       }
       if (!tab.url || !tab.url.includes('https://mp.weixin.qq.com')) {
@@ -41,8 +74,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           total: 0,
         };
         setState(state);
-        chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
-        sendResponse({ ok: false, error: 'not-mp-page' });
+        safeBroadcast({ type: 'sync-state-broadcast', payload: state });
+        safeRespond(sendResponse, { ok: false, error: 'not-mp-page' });
         return;
       }
       chrome.tabs.sendMessage(tab.id, { type: 'start-sync' }, (response) => {
@@ -55,11 +88,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             total: 0,
           };
           setState(state);
-          chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: state });
-          sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+          safeBroadcast({ type: 'sync-state-broadcast', payload: state });
+          safeRespond(sendResponse, { ok: false, error: chrome.runtime.lastError.message });
           return;
         }
-        sendResponse({ ok: true, response });
+        safeRespond(sendResponse, { ok: true, response });
       });
     });
     return true;
@@ -67,7 +100,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === 'sync-state') {
     setState(message.payload);
-    chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: message.payload });
+    safeBroadcast({ type: 'sync-state-broadcast', payload: message.payload });
     return undefined;
   }
 
@@ -75,8 +108,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload = message.payload || {};
     const url = payload.url || '';
     if (!isAllowedProxyUrl(url)) {
-      sendResponse({ ok: false, error: 'proxy url not allowed' });
-      return true;
+      safeRespond(sendResponse, { ok: false, error: 'proxy url not allowed' });
+      return undefined;
     }
 
     const requestInit = {
@@ -96,7 +129,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } catch {
           body = { raw: text };
         }
-        sendResponse({
+        safeRespond(sendResponse, {
           ok: true,
           status: resp.status,
           httpOk: resp.ok,
@@ -104,17 +137,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       })
       .catch((error) => {
-        sendResponse({ ok: false, error: error?.message || 'proxy fetch failed' });
+        safeRespond(sendResponse, { ok: false, error: error?.message || 'proxy fetch failed' });
       });
     return true;
   }
 
   if (message?.type === 'get-state') {
     chrome.storage.local.get([STORAGE_KEY], (result) => {
-      sendResponse(result[STORAGE_KEY] ?? null);
+      safeRespond(sendResponse, result[STORAGE_KEY] ?? null);
     });
     return true;
   }
 
   return undefined;
+  } catch (error) {
+    console.error('[gzh-extension][bg] onMessage crash', {
+      type: message?.type,
+      error: error?.message || String(error),
+      stack: error?.stack || '',
+    });
+    safeRespond(sendResponse, { ok: false, error: error?.message || 'background crashed' });
+    return undefined;
+  }
+});
+
+self.addEventListener('unhandledrejection', (event) => {
+  console.error('[gzh-extension][bg] unhandledrejection', event?.reason || event);
+});
+
+self.addEventListener('error', (event) => {
+  console.error('[gzh-extension][bg] error', {
+    message: event?.message,
+    filename: event?.filename,
+    lineno: event?.lineno,
+    colno: event?.colno,
+  });
 });

@@ -63,8 +63,19 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         int updatedCount = 0;
         int snapshotSaved = 0;
         int snapshotMissedArticle = 0;
+        int snapshotAllZero = 0;
+        long snapshotReadTotal = 0;
+        long snapshotSendTotal = 0;
+        long snapshotShareTotal = 0;
+        long snapshotLikeTotal = 0;
+        long snapshotFollowTotal = 0;
+        int skippedDeletedArticle = 0;
 
         for (SyncArticlesDTO.ArticleItem item : dto.getArticles()) {
+            if (shouldSkipArticle(item.getTitle())) {
+                skippedDeletedArticle++;
+                continue;
+            }
             ArticleEntity existed = articleRepository.findByUserAndWxId(userId, item.getWxArticleId());
             if (existed == null) {
                 ArticleEntity created = new ArticleEntity();
@@ -112,11 +123,27 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setSnapshotTime(LocalDateTime.now());
             snapshotRepository.save(snapshot);
             snapshotSaved++;
+
+            int readCount = defaultInt(snapshotItem.getReadCount());
+            int sendCount = defaultInt(snapshotItem.getSendCount());
+            int shareCount = defaultInt(snapshotItem.getShareCount());
+            int likeCount = defaultInt(snapshotItem.getLikeCount()) + defaultInt(snapshotItem.getWowCount());
+            int followCount = defaultInt(snapshotItem.getNewFollowers());
+
+            snapshotReadTotal += readCount;
+            snapshotSendTotal += sendCount;
+            snapshotShareTotal += shareCount;
+            snapshotLikeTotal += likeCount;
+            snapshotFollowTotal += followCount;
+
+            if (readCount == 0 && sendCount == 0 && shareCount == 0 && likeCount == 0 && followCount == 0) {
+                snapshotAllZero++;
+            }
         }
 
         log.info(
-            "[sync/articles] done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}",
-            userId, newCount, updatedCount, snapshotSaved, snapshotMissedArticle
+            "[sync/articles] done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}, snapshotAllZero={}, skippedDeletedArticle={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}",
+            userId, newCount, updatedCount, snapshotSaved, snapshotMissedArticle, snapshotAllZero, skippedDeletedArticle, snapshotReadTotal, snapshotSendTotal, snapshotShareTotal, snapshotLikeTotal, snapshotFollowTotal
         );
 
         SyncResultVO vo = new SyncResultVO();
@@ -128,7 +155,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Override
     public PageResult<ArticleVO> pageArticles(ArticleListQuery query) {
         Long userId = AuthContext.requiredUserId();
-        String range = query.getRange() == null ? "30d" : query.getRange();
+        String range = query.getRange() == null ? "all" : query.getRange();
         LocalDateTime start = RangeUtil.rangeStart(range);
         LocalDateTime end = LocalDateTime.now();
 
@@ -143,7 +170,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Override
     public OverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
-        String realRange = range == null || range.isBlank() ? "30d" : range;
+        String realRange = range == null || range.isBlank() ? "all" : range;
 
         int days = RangeUtil.toDays(realRange);
         LocalDateTime now = LocalDateTime.now();
@@ -184,7 +211,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Override
     public List<ArticleVO> listRangeArticles(String range, int limit) {
         Long userId = AuthContext.requiredUserId();
-        String realRange = range == null || range.isBlank() ? "30d" : range;
+        String realRange = range == null || range.isBlank() ? "all" : range;
         LocalDateTime start = RangeUtil.rangeStart(realRange);
         LocalDateTime end = LocalDateTime.now();
         List<ArticleEntity> list = articleRepository.listByUserAndRange(userId, start, end);
@@ -290,6 +317,24 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 return LocalDateTime.now();
             }
         }
+    }
+
+    private boolean shouldSkipArticle(String title) {
+        if (title == null) {
+            return true;
+        }
+        String normalized = title.trim();
+        if (normalized.isEmpty()) {
+            return true;
+        }
+        return normalized.startsWith("已删除")
+            || normalized.startsWith("内容已删除")
+            || normalized.startsWith("该内容已被发布者删除")
+            || normalized.startsWith("已下架")
+            || normalized.startsWith("已失效")
+            || normalized.contains("[已删除]")
+            || normalized.contains("(已删除)")
+            || normalized.contains("（已删除）");
     }
 
     private record MetricsBundle(

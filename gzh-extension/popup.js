@@ -116,8 +116,8 @@ function renderSummary(state) {
     return;
   }
   if (state.stage === 'partial_failed') {
-    const failCount = (state.failedMetrics || 0) + (state.failedContent || 0);
-    summaryText.textContent = `已完成上传，失败 ${failCount}（指标 ${state.failedMetrics || 0} / 全文 ${state.failedContent || 0}）`;
+    const failCount = (state.failedMetrics || 0) + (state.failedContent || 0) + (state.failedUpload || 0);
+    summaryText.textContent = `已完成上传，失败 ${failCount}（指标 ${state.failedMetrics || 0} / 全文 ${state.failedContent || 0} / 上传 ${state.failedUpload || 0}）`;
     return;
   }
   if (state.stage === 'ready' && latestLastSync) {
@@ -217,6 +217,8 @@ chrome.runtime.onMessage.addListener((message) => {
         updatedArticles: message.payload.updatedArticles,
         failedMetrics: message.payload.failedMetrics,
         failedContent: message.payload.failedContent,
+        failedUpload: message.payload.failedUpload,
+        uploadedSnapshots: message.payload.uploadedSnapshots,
       };
     }
     renderState(message.payload);

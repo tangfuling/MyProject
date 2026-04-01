@@ -16,7 +16,8 @@
     "https://gzh.niuma.com/*",
     "https://gzh.niumatech.com/*",
     "http://127.0.0.1:8081/*",
-    "https://api-gzh.niuma.com/*"
+    "https://api-gzh.niuma.com/*",
+    "https://api-gzh.niumatech.com/*"
   ],
   "content_scripts": [
     {

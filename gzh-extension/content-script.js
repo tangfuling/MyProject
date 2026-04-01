@@ -23,6 +23,10 @@
   const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
   const WEB_URL = 'http://localhost:5173';
   const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
+  const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
+  const METRICS_FIRST_PASS_INTERVAL_MS = 35;
+  const METRICS_FREQ_RETRY_MIN_MS = 450;
+  const METRICS_FREQ_RETRY_JITTER_MS = 220;
 
   let latestAuthToken = '';
   let latestLastSync = null;
@@ -780,12 +784,190 @@
     return digits || first;
   }
 
+  function isLikelyArticleUrl(rawUrl) {
+    if (!rawUrl) {
+      return false;
+    }
+    try {
+      const url = new URL(rawUrl);
+      if (!/mp\.weixin\.qq\.com$/i.test(url.hostname)) {
+        return false;
+      }
+      if (url.pathname === '/s' || url.pathname.startsWith('/s/')) {
+        return true;
+      }
+      return url.searchParams.has('mid') || url.searchParams.has('__biz') || url.searchParams.has('idx');
+    } catch {
+      return false;
+    }
+  }
+
+  function isTruthyFlag(value) {
+    if (value === true) {
+      return true;
+    }
+    if (typeof value === 'number') {
+      return value > 0;
+    }
+    if (typeof value === 'string') {
+      const text = value.trim().toLowerCase();
+      return text === '1' || text === 'true' || text === 'yes' || text === 'y';
+    }
+    return false;
+  }
+
+  function hasDeleteKeywordInKey(key) {
+    const text = String(key || '').toLowerCase();
+    return text.includes('is_deleted')
+      || text.includes('is_delete')
+      || text.includes('deleted')
+      || text.includes('is_del')
+      || text.includes('del_flag')
+      || text.includes('delete_flag')
+      || text.includes('remove_flag')
+      || text.includes('is_invalid');
+  }
+
+  function titleLooksDeleted(title) {
+    const text = String(title || '').trim();
+    if (!text) {
+      return false;
+    }
+    return /^(已删除|内容已删除|该内容已被发布者删除|已下架|已失效)/.test(text)
+      || /\[已删除\]|\(已删除\)|（已删除）/.test(text);
+  }
+
+  function hasDeleteFlag(node, maxDepth = 2) {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+    const queue = [{ value: node, depth: 0 }];
+    const visited = new Set();
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const value = current?.value;
+      const depth = current?.depth ?? 0;
+      if (!value || typeof value !== 'object') {
+        continue;
+      }
+      if (visited.has(value)) {
+        continue;
+      }
+      visited.add(value);
+
+      if (Array.isArray(value)) {
+        if (depth < maxDepth) {
+          value.forEach((item) => queue.push({ value: item, depth: depth + 1 }));
+        }
+        continue;
+      }
+
+      for (const [key, one] of Object.entries(value)) {
+        if (hasDeleteKeywordInKey(key) && isTruthyFlag(one)) {
+          return true;
+        }
+        if (depth < maxDepth && one && typeof one === 'object') {
+          queue.push({ value: one, depth: depth + 1 });
+        }
+      }
+    }
+    return false;
+  }
+
+  function isDeletedArticleCandidate(node) {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+    if (hasDeleteFlag(node, 2)) {
+      return true;
+    }
+    const title = String(node.title || node.appmsg_title || node.name || '').trim();
+    if (titleLooksDeleted(title)) {
+      return true;
+    }
+    return false;
+  }
+
   function toPositiveInt(raw, fallback = 1) {
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {
       return fallback;
     }
     return Math.floor(value);
+  }
+
+  function sleep(ms) {
+    const waitMs = Math.max(0, Number(ms) || 0);
+    if (waitMs <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      setTimeout(resolve, waitMs);
+    });
+  }
+
+  function isFreqControlReason(reason) {
+    return FREQ_CONTROL_RE.test(String(reason || ''));
+  }
+
+  function safeLog(level, message, payload) {
+    try {
+      const fn = typeof console?.[level] === 'function' ? console[level] : console.log;
+      if (payload === undefined) {
+        fn.call(console, message);
+        return;
+      }
+      fn.call(console, message, payload);
+    } catch {
+      // ignore log failures in extension context
+    }
+  }
+
+  function buildSnapshotPayload(article, metrics) {
+    if (!article || !metrics) {
+      return null;
+    }
+    return {
+      wxArticleId: article.wxArticleId,
+      readCount: metrics.readCount || 0,
+      sendCount: metrics.sendCount || 0,
+      shareCount: metrics.shareCount || 0,
+      likeCount: metrics.likeCount || 0,
+      wowCount: metrics.wowCount || 0,
+      commentCount: metrics.commentCount || 0,
+      saveCount: metrics.saveCount || 0,
+      completionRate: metrics.completionRate || 0,
+      trafficSources: metrics.trafficSources || {},
+      newFollowers: metrics.newFollowers || 0,
+    };
+  }
+
+  async function uploadSyncChunk(apiBase, authToken, articles, snapshots) {
+    const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        articles: Array.isArray(articles) ? articles : [],
+        snapshots: Array.isArray(snapshots) ? snapshots : [],
+      }),
+    });
+    const response = {
+      status: proxyResponse.status,
+      ok: !!proxyResponse.httpOk,
+    };
+    const json = proxyResponse.body || {};
+    if (!response.ok || json.code !== 0) {
+      throw new Error(json.message || `同步上传失败(status=${response.status})`);
+    }
+    return {
+      newArticles: json.data?.newArticles ?? json.data?.new_articles ?? 0,
+      updatedArticles: json.data?.updatedArticles ?? json.data?.updated_articles ?? 0,
+      status: response.status,
+      message: json?.message || 'OK',
+    };
   }
 
   async function startSync() {
@@ -839,12 +1021,16 @@
         return;
       }
 
-      const snapshots = [];
-      const syncArticles = [];
       const mergedIds = { ...syncedArticleIds };
       let failedMetrics = 0;
       let failedContent = 0;
+      let failedUpload = 0;
       let newCandidates = 0;
+      let uploadedArticles = 0;
+      let uploadedSnapshots = 0;
+      let newArticles = 0;
+      let updatedArticles = 0;
+      let lastMetricsRequestedAt = 0;
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
@@ -861,107 +1047,165 @@
           synced: index,
         });
 
-        const metrics = await fetchArticleMetrics(token, article).catch(() => {
+        const contentPromise = isNew
+          ? fetchArticleContent(article.contentUrl)
+            .then((text) => ({ ok: true, text }))
+            .catch((error) => ({ ok: false, error }))
+          : null;
+
+        let metrics = null;
+        const elapsedMs = Date.now() - lastMetricsRequestedAt;
+        const waitMs = METRICS_FIRST_PASS_INTERVAL_MS - elapsedMs;
+        if (waitMs > 0) {
+          await sleep(waitMs + Math.floor(Math.random() * 25));
+        }
+        lastMetricsRequestedAt = Date.now();
+        let metricsError = await fetchArticleMetrics(token, article)
+          .then((result) => {
+            metrics = result;
+            return null;
+          })
+          .catch((error) => error);
+        if (metricsError && isFreqControlReason(metricsError?.message || String(metricsError))) {
+          await sleep(METRICS_FREQ_RETRY_MIN_MS + Math.floor(Math.random() * METRICS_FREQ_RETRY_JITTER_MS));
+          lastMetricsRequestedAt = Date.now();
+          metricsError = await fetchArticleMetrics(token, article)
+            .then((result) => {
+              metrics = result;
+              return null;
+            })
+            .catch((error) => error);
+        }
+        if (metricsError) {
           failedMetrics += 1;
-          return {};
-        });
+          if (failedMetrics <= 5) {
+            safeLog('info', '[gzh-extension] metrics fetch failed', {
+              index,
+              wxArticleId: article?.wxArticleId ?? '',
+              title: article?.title ?? '',
+              reason: metricsError?.message || String(metricsError),
+            });
+          }
+        }
 
         let content = null;
         let wordCount = null;
-        if (isNew) {
-          const fetchedContent = await fetchArticleContent(article.contentUrl).catch(() => {
+        if (isNew && contentPromise) {
+          const contentResult = await contentPromise;
+          if (!contentResult.ok) {
+            const error = contentResult.error;
             failedContent += 1;
-            return '';
-          });
-          content = fetchedContent;
-          wordCount = fetchedContent.length;
+            if (failedContent <= 5) {
+              safeLog('info', '[gzh-extension] content fetch failed', {
+                index,
+                wxArticleId: article?.wxArticleId ?? '',
+                title: article?.title ?? '',
+                reason: error?.message || String(error),
+              });
+            }
+            content = '';
+            wordCount = 0;
+          } else {
+            content = contentResult.text;
+            wordCount = contentResult.text.length;
+          }
         }
-        syncArticles.push({
+        const syncItem = {
           wxArticleId: article.wxArticleId,
           title: article.title,
           content,
           wordCount,
           publishTime: article.publishTime,
-        });
+        };
 
-        snapshots.push({
-          wxArticleId: article.wxArticleId,
-          readCount: metrics.readCount || 0,
-          sendCount: metrics.sendCount || 0,
-          shareCount: metrics.shareCount || 0,
-          likeCount: metrics.likeCount || 0,
-          wowCount: metrics.wowCount || 0,
-          commentCount: metrics.commentCount || 0,
-          saveCount: metrics.saveCount || 0,
-          completionRate: metrics.completionRate || 0,
-          trafficSources: metrics.trafficSources || {},
-          newFollowers: metrics.newFollowers || 0,
+        const snapshot = buildSnapshotPayload(article, metrics);
+        notifyState({
+          stage: 'upload',
+          message: `正在上传 ${index + 1}/${articles.length}...`,
+          progress: 70 + Math.round(((index + 1) / Math.max(1, articles.length)) * 28),
+          total: articles.length,
+          synced: uploadedArticles,
         });
-
-        mergedIds[article.wxArticleId] = true;
+        try {
+          const uploadResult = await uploadSyncChunk(
+            apiBase,
+            authToken,
+            [syncItem],
+            snapshot ? [snapshot] : []
+          );
+          newArticles += Number(uploadResult.newArticles || 0);
+          updatedArticles += Number(uploadResult.updatedArticles || 0);
+          uploadedArticles += 1;
+          if (snapshot) {
+            uploadedSnapshots += 1;
+          }
+          mergedIds[article.wxArticleId] = true;
+          if (index < 3 || (index + 1) % 10 === 0 || index + 1 === articles.length) {
+            safeLog('info', '[gzh-extension] sync incremental progress', {
+              index: index + 1,
+              total: articles.length,
+              uploadedArticles,
+              uploadedSnapshots,
+              newArticles,
+              updatedArticles,
+              failedMetrics,
+              failedContent,
+              failedUpload,
+            });
+          }
+        } catch (error) {
+          failedUpload += 1;
+          if (failedUpload <= 5) {
+            safeLog('info', '[gzh-extension] upload failed', {
+              index,
+              wxArticleId: article?.wxArticleId ?? '',
+              title: article?.title ?? '',
+              reason: error?.message || String(error),
+            });
+          }
+        }
       }
 
-      notifyState({ stage: 'upload', message: '正在上传到后端...', progress: 92, total: articles.length, synced: articles.length });
       console.info('[gzh-extension] sync upload payload', {
         apiBase,
         fetchedArticles: articles.length,
-        uploadArticles: syncArticles.length,
-        snapshots: snapshots.length,
+        uploadArticles: uploadedArticles,
+        snapshots: uploadedSnapshots,
         newCandidates,
         failedMetrics,
         failedContent,
+        failedUpload,
+        newArticles,
+        updatedArticles,
       });
-
-      const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ articles: syncArticles, snapshots }),
-      });
-      const response = {
-        status: proxyResponse.status,
-        ok: !!proxyResponse.httpOk,
-      };
-      const json = proxyResponse.body || {};
-      console.info('[gzh-extension] sync upload response', {
-        status: response.status,
-        ok: response.ok,
-        code: json?.code,
-        message: json?.message,
-        data: json?.data,
-      });
-      if (!response.ok || json.code !== 0) {
-        throw new Error(json.message || '同步上传失败');
-      }
-
-      const newArticles = json.data?.newArticles ?? json.data?.new_articles ?? 0;
-      const updatedArticles = json.data?.updatedArticles ?? json.data?.updated_articles ?? 0;
       const lastSync = {
         updatedAt: new Date().toISOString(),
         total: articles.length,
-        synced: articles.length,
+        synced: uploadedArticles,
         newArticles,
         updatedArticles,
         failedMetrics,
         failedContent,
+        failedUpload,
+        uploadedSnapshots,
       };
 
       await setStorage({ gzhSyncedArticleIds: mergedIds, gzhLastSync: lastSync });
 
-      const failedCount = failedMetrics + failedContent;
+      const failedCount = failedMetrics + failedContent + failedUpload;
       if (failedCount > 0) {
         notifyState({
           stage: 'partial_failed',
           message: `同步部分完成：新增 ${newArticles}，更新 ${updatedArticles}，失败 ${failedCount}`,
           progress: 100,
           total: articles.length,
-          synced: articles.length,
+          synced: uploadedArticles,
           newArticles,
           updatedArticles,
           failedMetrics,
           failedContent,
+          failedUpload,
+          uploadedSnapshots,
         });
         return;
       }
@@ -971,9 +1215,10 @@
         message: `同步完成：新增 ${newArticles}，更新 ${updatedArticles}`,
         progress: 100,
         total: articles.length,
-        synced: articles.length,
+        synced: uploadedArticles,
         newArticles,
         updatedArticles,
+        uploadedSnapshots,
       });
     } catch (error) {
       notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
@@ -999,7 +1244,16 @@
         },
       });
       const text = await response.text();
-      const json = parseMaybeJson(text);
+      let json = parseMaybeJson(text);
+      if (!json || typeof json !== 'object') {
+        const htmlPublishPage = parsePublishPageFromHtml(text);
+        if (htmlPublishPage) {
+          json = {
+            base_resp: { ret: 0, err_msg: '' },
+            publish_page: htmlPublishPage,
+          };
+        }
+      }
       if (!json || typeof json !== 'object') {
         console.warn('[gzh-extension] appmsgpublish response not json', {
           begin,
@@ -1067,6 +1321,9 @@
   }
 
   function parseArticlesFromPublishItem(item, itemIndex) {
+    if (isDeletedArticleCandidate(item)) {
+      return [];
+    }
     const candidates = [];
     const info = parseMaybeJson(item?.publish_info)
       || parseMaybeJson(item?.publishInfo)
@@ -1077,16 +1334,27 @@
     collectArticleCandidates(item, candidates, 0);
 
     const seen = new Set();
-    const publishTsFallback = Number(item?.publish_time || 0) || Math.floor(Date.now() / 1000);
+    const publishTsFallback = Number(item?.publish_time || item?.create_time || 0);
     const result = [];
     candidates.forEach((article, idx) => {
+      if (isDeletedArticleCandidate(article)) {
+        return;
+      }
       const articleUrlRaw = article.link || article.content_url || article.url || article.contentUrl || article.article_url || '';
       const articleUrl = normalizeMpUrl(articleUrlRaw);
+      if (!isLikelyArticleUrl(articleUrl)) {
+        return;
+      }
+      const rawTitle = String(article.title || article.appmsg_title || article.name || '').trim();
+      if (!rawTitle) {
+        return;
+      }
+      const midFromUrl = parseMidFromUrl(articleUrl);
       const metricMsgId = sanitizeMsgId(
-        article.appmsgid
-          || article.appmsg_id
+        midFromUrl
           || article.msgid
-          || parseMidFromUrl(articleUrl)
+          || article.appmsgid
+          || article.appmsg_id
       );
       const metricMsgIndex = toPositiveInt(
         article.idx
@@ -1097,14 +1365,15 @@
           || 1,
         1
       );
-      const title = String(article.title || article.appmsg_title || article.name || '').trim() || '未命名文章';
-      const publishTs = Number(article.create_time || article.publish_time || publishTsFallback) || publishTsFallback;
+      const title = rawTitle;
+      const publishTs = Number(article.create_time || article.publish_time || article.update_time || publishTsFallback || 0);
       const wxArticleId = String(
         article.aid
+          || `${midFromUrl || metricMsgId || ''}_${metricMsgIndex}`
           || article.appmsgid
           || article.appmsg_id
           || article.msgid
-          || parseMidFromUrl(articleUrl)
+          || midFromUrl
           || `${title}-${publishTs}-${itemIndex}-${idx}`
       );
 
@@ -1120,7 +1389,8 @@
         wxArticleId,
         title,
         contentUrl: articleUrl,
-        publishTime: new Date(publishTs * 1000).toISOString(),
+        publishTime: publishTs > 0 ? new Date(publishTs * 1000).toISOString() : '',
+        publishDate: publishTs > 0 ? formatChinaDateFromUnixSeconds(publishTs) : '',
         metricMsgId,
         metricMsgIndex,
       });
@@ -1181,6 +1451,76 @@
     return `https://mp.weixin.qq.com${protocolRelative.startsWith('/') ? protocolRelative : `/${protocolRelative}`}`;
   }
 
+  function pad2(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function formatChinaDateFromUnixSeconds(seconds) {
+    const ts = Number(seconds);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return '';
+    }
+    const shifted = new Date(ts * 1000 + 8 * 60 * 60 * 1000);
+    const y = shifted.getUTCFullYear();
+    const m = shifted.getUTCMonth() + 1;
+    const d = shifted.getUTCDate();
+    return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  function formatDateFromDateWithOffset(date, offsetHours) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const shifted = new Date(date.getTime() + offsetHours * 60 * 60 * 1000);
+    const y = shifted.getUTCFullYear();
+    const m = shifted.getUTCMonth() + 1;
+    const d = shifted.getUTCDate();
+    return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  function shiftYmd(ymd, days) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd))) {
+      return '';
+    }
+    const [y, m, d] = String(ymd).split('-').map((item) => Number(item));
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    const yy = dt.getUTCFullYear();
+    const mm = dt.getUTCMonth() + 1;
+    const dd = dt.getUTCDate();
+    return `${yy}-${pad2(mm)}-${pad2(dd)}`;
+  }
+
+  function buildPublishDateCandidates(article) {
+    const candidates = [];
+    const pushIfValid = (value) => {
+      const text = String(value || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return;
+      }
+      if (!candidates.includes(text)) {
+        candidates.push(text);
+      }
+    };
+
+    pushIfValid(article.publishDate);
+
+    if (article.publishTime) {
+      const date = new Date(article.publishTime);
+      pushIfValid(formatDateFromDateWithOffset(date, 8));
+      pushIfValid(formatDateFromDateWithOffset(date, 0));
+    }
+
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const base = candidates[0];
+    pushIfValid(shiftYmd(base, -1));
+    pushIfValid(shiftYmd(base, 1));
+    return candidates;
+  }
+
   function responseRet(payload) {
     return Number(payload?.base_resp?.ret ?? payload?.ret ?? 0);
   }
@@ -1189,21 +1529,246 @@
     return String(payload?.base_resp?.err_msg || payload?.err_msg || '');
   }
 
+  function extractBalancedBlock(text, startIndex) {
+    if (typeof text !== 'string' || startIndex < 0 || startIndex >= text.length) {
+      return '';
+    }
+    const open = text[startIndex];
+    const close = open === '{' ? '}' : (open === '[' ? ']' : '');
+    if (!close) {
+      return '';
+    }
+    let depth = 0;
+    let quote = '';
+    let escaped = false;
+    for (let i = startIndex; i < text.length; i += 1) {
+      const ch = text[i];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (ch === '"' || ch === '\'' || ch === '`') {
+        quote = ch;
+        continue;
+      }
+      if (ch === open) {
+        depth += 1;
+        continue;
+      }
+      if (ch === close) {
+        depth -= 1;
+        if (depth === 0) {
+          return text.slice(startIndex, i + 1);
+        }
+      }
+    }
+    return '';
+  }
+
+  function parseLooseJsonObject(raw) {
+    if (!raw || typeof raw !== 'string') {
+      return null;
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const strict = parseMaybeJson(trimmed);
+    if (strict && typeof strict === 'object') {
+      return strict;
+    }
+    try {
+      return (new Function(`return (${trimmed});`))();
+    } catch {
+      return null;
+    }
+  }
+
+  function extractValueByToken(raw, token) {
+    if (typeof raw !== 'string' || !token) {
+      return '';
+    }
+    const index = raw.indexOf(token);
+    if (index < 0) {
+      return '';
+    }
+    let pos = index + token.length;
+    while (pos < raw.length && /\s/.test(raw[pos])) {
+      pos += 1;
+    }
+    if (pos >= raw.length) {
+      return '';
+    }
+    const ch = raw[pos];
+    if (ch === '{' || ch === '[') {
+      return extractBalancedBlock(raw, pos);
+    }
+    if (ch === '"' || ch === '\'') {
+      const start = pos;
+      let escaped = false;
+      for (let i = pos + 1; i < raw.length; i += 1) {
+        const one = raw[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (one === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (one === ch) {
+          return raw.slice(start, i + 1);
+        }
+      }
+    }
+    let end = pos;
+    while (end < raw.length && !/[,\n;\r]/.test(raw[end])) {
+      end += 1;
+    }
+    return raw.slice(pos, end).trim();
+  }
+
+  function parseMetricsPayloadFromHtml(raw) {
+    if (!raw || typeof raw !== 'string') {
+      return null;
+    }
+    const cgiDataRaw = extractValueByToken(raw, 'window.wx.cgiData=')
+      || extractValueByToken(raw, 'window.wx.cgiData =')
+      || extractValueByToken(raw, 'wx.cgiData=')
+      || extractValueByToken(raw, 'wx.cgiData =');
+    const cgiData = parseLooseJsonObject(cgiDataRaw);
+    if (cgiData && typeof cgiData === 'object') {
+      return cgiData;
+    }
+
+    const articleDataRaw = extractValueByToken(raw, 'articleData:')
+      || extractValueByToken(raw, 'articleData =');
+    const articleSummaryDataRaw = extractValueByToken(raw, 'articleSummaryData:')
+      || extractValueByToken(raw, 'articleSummaryData =');
+    const subsTransformRaw = extractValueByToken(raw, 'subs_transform:')
+      || extractValueByToken(raw, 'subs_transform =');
+    const baseRespRaw = extractValueByToken(raw, 'base_resp:')
+      || extractValueByToken(raw, 'base_resp =');
+    const retRaw = extractValueByToken(raw, 'ret:')
+      || extractValueByToken(raw, 'ret =');
+    const errMsgRaw = extractValueByToken(raw, 'err_msg:')
+      || extractValueByToken(raw, 'err_msg =');
+
+    const payload = {};
+    const articleData = parseLooseJsonObject(articleDataRaw);
+    const articleSummaryData = parseLooseJsonObject(articleSummaryDataRaw);
+    const subsTransform = parseLooseJsonObject(subsTransformRaw);
+    const baseResp = parseLooseJsonObject(baseRespRaw);
+    const ret = toLooseNumber(retRaw);
+    const errMsg = String(errMsgRaw || '').replace(/^['"]|['"]$/g, '').trim();
+
+    if (articleData && typeof articleData === 'object') {
+      payload.articleData = articleData;
+    }
+    if (articleSummaryData) {
+      payload.articleSummaryData = articleSummaryData;
+    }
+    if (subsTransform && typeof subsTransform === 'object') {
+      payload.subs_transform = subsTransform;
+    }
+    if (baseResp && typeof baseResp === 'object') {
+      payload.base_resp = baseResp;
+    } else if (Number.isFinite(ret) || errMsg) {
+      payload.base_resp = {
+        ret: Number.isFinite(ret) ? ret : 0,
+        err_msg: errMsg,
+      };
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return null;
+    }
+    return payload;
+  }
+
+  function parsePublishPageFromHtml(raw) {
+    if (!raw || typeof raw !== 'string') {
+      return null;
+    }
+    const publishPageRaw = extractValueByToken(raw, 'publish_page:')
+      || extractValueByToken(raw, 'publish_page =')
+      || extractValueByToken(raw, 'publishPage:')
+      || extractValueByToken(raw, 'publishPage =');
+    const publishPage = parseLooseJsonObject(publishPageRaw);
+    if (publishPage && typeof publishPage === 'object') {
+      return publishPage;
+    }
+    const cgiDataRaw = extractValueByToken(raw, 'window.wx.cgiData=')
+      || extractValueByToken(raw, 'window.wx.cgiData =')
+      || extractValueByToken(raw, 'wx.cgiData=')
+      || extractValueByToken(raw, 'wx.cgiData =');
+    const cgiData = parseLooseJsonObject(cgiDataRaw);
+    if (cgiData && typeof cgiData === 'object') {
+      const one = parseMaybeJson(cgiData.publish_page) || cgiData.publish_page;
+      if (one && typeof one === 'object') {
+        return one;
+      }
+    }
+    return null;
+  }
+
   async function requestMetricsPayload(token, msgId, publishDate) {
-    const url = `/misc/appmsganalysis?action=detailpage&msgid=${encodeURIComponent(msgId)}&publish_date=${publishDate}&type=int&pageVersion=1&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
+    const url = `/misc/appmsganalysis?action=detailpage&msgid=${encodeURIComponent(msgId)}&publish_date=${publishDate}&type=int&pageVersion=1&token=${encodeURIComponent(token)}&lang=zh_CN`;
     const response = await fetch(url, {
       credentials: 'include',
       headers: {
-        Accept: 'application/json, text/plain, */*',
-        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       },
     });
     const text = await response.text();
-    const json = parseMaybeJson(text);
+    const json = parseMaybeJson(text) || parseMetricsPayloadFromHtml(text);
     if (!json || typeof json !== 'object') {
-      throw new Error('文章指标接口返回格式异常');
+      throw new Error(`文章指标接口返回格式异常(status=${response.status})`);
     }
     return json;
+  }
+
+  async function requestMetricsWithFallback(token, msgIdBase, msgIndex, publishDate) {
+    let json = await requestMetricsPayload(token, `${msgIdBase}_${msgIndex}`, publishDate);
+    let ret = responseRet(json);
+    if (ret !== 0 && msgIndex !== 1) {
+      const fallback = await requestMetricsPayload(token, `${msgIdBase}_1`, publishDate).catch(() => null);
+      if (fallback) {
+        json = fallback;
+        ret = responseRet(json);
+      }
+    }
+    return { json, ret };
+  }
+
+  function toLooseNumber(value) {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : NaN;
+    }
+    if (typeof value !== 'string') {
+      return NaN;
+    }
+    const text = value.trim();
+    if (!text) {
+      return NaN;
+    }
+    const normalized = text.replace(/,/g, '').replace(/%/g, '');
+    const matched = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (!matched) {
+      return NaN;
+    }
+    const num = Number(matched[0]);
+    return Number.isFinite(num) ? num : NaN;
   }
 
   function findFirstNumberByKeys(root, keys) {
@@ -1236,7 +1801,7 @@
         if (!keySet.has(key.toLowerCase())) {
           return;
         }
-        const num = Number(value);
+        const num = toLooseNumber(value);
         if (!Number.isFinite(num)) {
           return;
         }
@@ -1327,6 +1892,69 @@
     return byScene;
   }
 
+  function extractMetricsFromPayload(payload) {
+    const articleData = parseMaybeJson(payload.articleData) || payload.articleData || {};
+    const articleDataNew = parseMaybeJson(articleData.article_data_new || payload.article_data_new)
+      || articleData.article_data_new
+      || payload.article_data_new
+      || {};
+    const subsTransform = parseMaybeJson(articleData.subs_transform || payload.subs_transform)
+      || articleData.subs_transform
+      || payload.subs_transform
+      || {};
+
+    const root = { json: payload, articleData, articleDataNew, subsTransform };
+    return {
+      readCount: findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']),
+      sendCount: findFirstNumberByKeys(root, ['send_uv']),
+      shareCount: findFirstNumberByKeys(root, ['share_user', 'share_count', 'share_uv']),
+      likeCount: findFirstNumberByKeys(root, ['like_num', 'like_cnt']),
+      wowCount: findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']),
+      commentCount: findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']),
+      saveCount: findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']),
+      completionRate: findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']),
+      newFollowers: findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']),
+      trafficSources: buildTrafficSources(root),
+      topKeys: safeObjectKeys(payload),
+    };
+  }
+
+  function isCoreMetricsZero(metrics) {
+    return metrics.readCount === 0
+      && metrics.sendCount === 0
+      && metrics.shareCount === 0
+      && metrics.likeCount === 0
+      && metrics.wowCount === 0
+      && metrics.commentCount === 0
+      && metrics.saveCount === 0;
+  }
+
+  function parseArticleMetaFromHtml(html, fallbackUrl) {
+    const text = String(html || '');
+    const midMatch = text.match(/(?:var|window\.)\s*mid\s*=\s*["']?(\d{4,})["']?/i)
+      || text.match(/[?&]mid=(\d{4,})/i)
+      || String(fallbackUrl || '').match(/[?&]mid=(\d{4,})/i);
+    const ctMatch = text.match(/(?:var|window\.)\s*ct\s*=\s*["']?(\d{9,})["']?/i)
+      || text.match(/publish_time["']?\s*:\s*["']?(\d{9,})["']?/i);
+    const msgIdBase = sanitizeMsgId(midMatch?.[1] || '');
+    const publishDate = formatChinaDateFromUnixSeconds(ctMatch?.[1]);
+    return { msgIdBase, publishDate };
+  }
+
+  async function resolveMetricParamsFromArticlePage(article) {
+    const secureUrl = normalizeMpUrl(article?.contentUrl || '');
+    if (!secureUrl) {
+      return null;
+    }
+    const response = await fetch(secureUrl, { credentials: 'include' });
+    const html = await response.text();
+    const meta = parseArticleMetaFromHtml(html, secureUrl);
+    if (!meta.msgIdBase) {
+      return null;
+    }
+    return meta;
+  }
+
   async function fetchArticleMetrics(token, article) {
     const msgIdBase = sanitizeMsgId(article.metricMsgId || parseMidFromUrl(article.contentUrl) || String(article.wxArticleId).split('_')[0]);
     if (!msgIdBase) {
@@ -1334,74 +1962,114 @@
     }
 
     const msgIndex = toPositiveInt(article.metricMsgIndex, 1);
-    const publishDate = (article.publishTime || '').slice(0, 10);
+    const publishDateCandidates = buildPublishDateCandidates(article);
+    let usedPublishDate = publishDateCandidates[0] || '';
 
-    let json = await requestMetricsPayload(token, `${msgIdBase}_${msgIndex}`, publishDate);
-    let ret = responseRet(json);
-    if (ret !== 0 && msgIndex !== 1) {
-      const fallback = await requestMetricsPayload(token, `${msgIdBase}_1`, publishDate).catch(() => null);
-      if (fallback) {
-        json = fallback;
-        ret = responseRet(json);
+    let resolvedFromArticlePage = false;
+    let currentMsgIdBase = msgIdBase;
+    if (!usedPublishDate) {
+      const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      if (resolved?.msgIdBase) {
+        resolvedFromArticlePage = true;
+        currentMsgIdBase = resolved.msgIdBase;
+        if (resolved.publishDate) {
+          usedPublishDate = resolved.publishDate;
+          if (!publishDateCandidates.includes(resolved.publishDate)) {
+            publishDateCandidates.unshift(resolved.publishDate);
+          }
+        }
       }
     }
-    if (ret !== 0) {
-      const errMsg = responseErrMsg(json);
-      throw new Error(`文章指标接口异常(${ret})${errMsg ? `: ${errMsg}` : ''}`);
+    if (!usedPublishDate) {
+      throw new Error('文章指标接口参数缺失: publish_date');
     }
 
-    const articleData = parseMaybeJson(json.articleData) || json.articleData || {};
-    const articleDataNew = parseMaybeJson(articleData.article_data_new || json.article_data_new)
-      || articleData.article_data_new
-      || json.article_data_new
-      || {};
-    const subsTransform = parseMaybeJson(articleData.subs_transform || json.subs_transform)
-      || articleData.subs_transform
-      || json.subs_transform
-      || {};
+    let requestResult = await requestMetricsWithFallback(token, currentMsgIdBase, msgIndex, usedPublishDate);
+    if (requestResult.ret !== 0 && /invalid args/i.test(responseErrMsg(requestResult.json))) {
+      const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      if (resolved?.msgIdBase) {
+        resolvedFromArticlePage = true;
+        currentMsgIdBase = resolved.msgIdBase;
+        if (resolved.publishDate && !publishDateCandidates.includes(resolved.publishDate)) {
+          publishDateCandidates.unshift(resolved.publishDate);
+          usedPublishDate = publishDateCandidates[0];
+        }
+        requestResult = await requestMetricsWithFallback(token, currentMsgIdBase, msgIndex, usedPublishDate);
+      }
+    }
+    if (requestResult.ret !== 0) {
+      const errMsg = responseErrMsg(requestResult.json);
+      throw new Error(`文章指标接口异常(${requestResult.ret})${errMsg ? `: ${errMsg}` : ''}`);
+    }
+    let metrics = extractMetricsFromPayload(requestResult.json);
 
-    const root = { json, articleData, articleDataNew, subsTransform };
-    const readCount = findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']);
-    const sendCount = findFirstNumberByKeys(root, ['send_uv']);
-    const shareCount = findFirstNumberByKeys(root, ['share_user', 'share_count', 'share_uv']);
-    const likeCount = findFirstNumberByKeys(root, ['like_num', 'like_cnt']);
-    const wowCount = findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']);
-    const commentCount = findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']);
-    const saveCount = findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']);
-    const completionRate = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
-    const newFollowers = findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']);
-    const trafficSources = buildTrafficSources(root);
+    if (isCoreMetricsZero(metrics) && !resolvedFromArticlePage && article?.contentUrl) {
+      const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      if (resolved?.msgIdBase && resolved.publishDate) {
+        const resolvedResult = await requestMetricsWithFallback(token, resolved.msgIdBase, msgIndex, resolved.publishDate).catch(() => null);
+        if (resolvedResult && resolvedResult.ret === 0) {
+          const resolvedMetrics = extractMetricsFromPayload(resolvedResult.json);
+          if (!isCoreMetricsZero(resolvedMetrics)) {
+            metrics = resolvedMetrics;
+            currentMsgIdBase = resolved.msgIdBase;
+            usedPublishDate = resolved.publishDate;
+            resolvedFromArticlePage = true;
+            if (!publishDateCandidates.includes(resolved.publishDate)) {
+              publishDateCandidates.unshift(resolved.publishDate);
+            }
+          }
+        }
+      }
+    }
 
-    if (
-      zeroMetricsLogCount < 5
-      && readCount === 0
-      && sendCount === 0
-      && shareCount === 0
-      && likeCount === 0
-      && wowCount === 0
-      && commentCount === 0
-      && saveCount === 0
-    ) {
+    if (isCoreMetricsZero(metrics) && publishDateCandidates.length > 1) {
+      for (let i = 1; i < publishDateCandidates.length; i += 1) {
+        const oneDate = publishDateCandidates[i];
+        if (!oneDate || oneDate === usedPublishDate) {
+          continue;
+        }
+        const oneResult = await requestMetricsWithFallback(token, msgIdBase, msgIndex, oneDate).catch(() => null);
+        if (!oneResult || oneResult.ret !== 0) {
+          continue;
+        }
+        const oneMetrics = extractMetricsFromPayload(oneResult.json);
+        if (!isCoreMetricsZero(oneMetrics)) {
+          metrics = oneMetrics;
+          usedPublishDate = oneDate;
+          console.info('[gzh-extension] metrics recovered by publish_date retry', {
+            msgIdBase,
+            msgIndex,
+            originDate: publishDateCandidates[0],
+            resolvedDate: oneDate,
+          });
+          break;
+        }
+      }
+    }
+
+    if (zeroMetricsLogCount < 5 && isCoreMetricsZero(metrics)) {
       zeroMetricsLogCount += 1;
-      console.warn('[gzh-extension] metrics all zero', {
-        msgIdBase,
+      console.info('[gzh-extension] metrics all zero', {
+        msgIdBase: currentMsgIdBase,
         msgIndex,
-        publishDate,
-        topKeys: Object.keys(json || {}),
+        publishDateCandidates,
+        usedPublishDate,
+        resolvedFromArticlePage,
+        topKeys: metrics.topKeys,
       });
     }
 
     return {
-      readCount,
-      sendCount,
-      shareCount,
-      likeCount,
-      wowCount,
-      commentCount,
-      saveCount,
-      completionRate,
-      trafficSources,
-      newFollowers,
+      readCount: metrics.readCount,
+      sendCount: metrics.sendCount,
+      shareCount: metrics.shareCount,
+      likeCount: metrics.likeCount,
+      wowCount: metrics.wowCount,
+      commentCount: metrics.commentCount,
+      saveCount: metrics.saveCount,
+      completionRate: metrics.completionRate,
+      trafficSources: metrics.trafficSources,
+      newFollowers: metrics.newFollowers,
     };
   }
 
@@ -1455,6 +2123,17 @@
     return null;
   }
 
+  function safeObjectKeys(value) {
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+    try {
+      return Object.keys(value);
+    } catch {
+      return [];
+    }
+  }
+
   function decodeHtmlEntities(text) {
     if (!text) {
       return '';
@@ -1466,8 +2145,41 @@
 
   function dedupeById(items) {
     const map = new Map();
+    const score = (item) => {
+      let val = 0;
+      if (item?.contentUrl) {
+        val += 2;
+      }
+      if (item?.metricMsgId) {
+        val += 2;
+      }
+      if (item?.title && item.title !== '未命名文章') {
+        val += 2;
+      }
+      if (item?.publishDate) {
+        val += 1;
+      }
+      return val;
+    };
     items.forEach((item) => {
-      map.set(item.wxArticleId, item);
+      const prev = map.get(item.wxArticleId);
+      if (!prev) {
+        map.set(item.wxArticleId, item);
+        return;
+      }
+      const prevScore = score(prev);
+      const nextScore = score(item);
+      if (nextScore > prevScore) {
+        map.set(item.wxArticleId, item);
+        return;
+      }
+      if (nextScore === prevScore) {
+        const prevLen = String(prev.contentUrl || '').length;
+        const nextLen = String(item.contentUrl || '').length;
+        if (nextLen > prevLen) {
+          map.set(item.wxArticleId, item);
+        }
+      }
     });
     return Array.from(map.values());
   }

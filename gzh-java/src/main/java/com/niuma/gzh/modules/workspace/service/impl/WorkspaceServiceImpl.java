@@ -18,8 +18,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 public class WorkspaceServiceImpl extends BaseService implements WorkspaceService {
     private static final DateTimeFormatter TREND_LABEL_FORMAT = DateTimeFormatter.ofPattern("MM-dd", Locale.CHINA);
@@ -50,6 +52,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     public WorkspaceOverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
         String realRange = normalizeRange(range);
+        log.info("[workspace.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
 
         UserEntity user = userService.getById(userId);
         UserProfileVO profile = userService.profile();
@@ -72,6 +75,11 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         vo.setQuickQuestions(questions);
 
         vo.setArticles(buildArticles(allArticles, 8));
+        Integer totalRead = vo.getDataPanel() == null || vo.getDataPanel().getMetrics() == null
+            ? null : vo.getDataPanel().getMetrics().getTotalRead();
+        Integer articleCount = vo.getHeader() == null ? null : vo.getHeader().getArticleCount();
+        log.info("[workspace.overview] done userId={}, range={}, articleCount={}, totalRead={}, articleCards={}",
+            userId, realRange, articleCount, totalRead, vo.getArticles().size());
         return vo;
     }
 
@@ -227,7 +235,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         if ("7d".equals(range) || "30d".equals(range) || "90d".equals(range) || "all".equals(range)) {
             return range;
         }
-        return "30d";
+        return "all";
     }
 
     private int nullToZero(Integer value) {

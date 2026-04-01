@@ -9,6 +9,8 @@ import type { AnalysisDoneEvent } from '../../analysis/model/AnalysisModels';
 import AnalysisApi from '../../analysis/api/AnalysisApi';
 import SettingsApi from '../../settings/api/SettingsApi';
 import WorkspaceApi from '../api/WorkspaceApi';
+import { ApiConfig } from '../../../common/network/ApiConfig';
+import { useAuthStore } from '../../../common/state/authStore';
 
 const modelOptions = [
   { code: 'qwen', label: '千问', price: '¥2/百万tok' },
@@ -31,6 +33,29 @@ function formatDate(value?: string) {
   return value.replace('T', ' ').slice(5, 10);
 }
 
+function formatRangeLabel(range: string) {
+  switch (range) {
+    case '7d':
+      return '7天';
+    case '30d':
+      return '30天';
+    case '90d':
+      return '90天';
+    case 'all':
+      return '全部';
+    default:
+      return range;
+  }
+}
+
+function toTimestamp(value?: string) {
+  if (!value) {
+    return 0;
+  }
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 function percentText(value: number) {
   const abs = Math.abs(value).toFixed(0);
   if (value > 0) {
@@ -48,7 +73,8 @@ function renderTraffic(items: Record<string, number>) {
 
 export default function WorkspacePage() {
   const navigate = useNavigate();
-  const [range, setRange] = useState('30d');
+  const token = useAuthStore((s) => s.token);
+  const [range, setRange] = useState('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [sessionId, setSessionId] = useState('');
@@ -72,10 +98,52 @@ export default function WorkspacePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    console.info('[gzh-react][workspace] mounted', {
+      path: window.location.pathname,
+      hasToken: !!token,
+      apiBase: ApiConfig.baseUrl,
+    });
+  }, [token]);
+
   const overviewQuery = useQuery({
     queryKey: ['workspace-overview', range],
-    queryFn: () => WorkspaceApi.overview(range),
+    queryFn: async () => {
+      if (import.meta.env.DEV) {
+        console.info('[gzh-react][workspace] request overview', { range, apiBase: ApiConfig.baseUrl });
+      }
+      const data = await WorkspaceApi.overview(range);
+      if (import.meta.env.DEV) {
+        console.info('[gzh-react][workspace] response overview', {
+          range,
+          articleCount: data?.header?.articleCount,
+          totalRead: data?.dataPanel?.metrics?.totalRead,
+          articles: data?.articles?.length,
+        });
+      }
+      return data;
+    },
+    networkMode: 'always',
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
+    staleTime: 0,
   });
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    console.info('[gzh-react][workspace] query state', {
+      range,
+      status: overviewQuery.status,
+      fetchStatus: overviewQuery.fetchStatus,
+      hasData: !!overviewQuery.data,
+      isError: overviewQuery.isError,
+    });
+  }, [overviewQuery.status, overviewQuery.fetchStatus, overviewQuery.data, overviewQuery.isError, range]);
 
   const updateModelMutation = useMutation({
     mutationFn: async (model: string) => SettingsApi.updateModel(model),
@@ -87,10 +155,21 @@ export default function WorkspacePage() {
   const overview = overviewQuery.data;
   const analysisPanel = overview?.analysisPanel;
   const reportId = analysisPanel?.reportId;
+  const rangeLabel = formatRangeLabel(range);
+  const orderedArticles = useMemo(() => {
+    const list = [...(overview?.articles ?? [])];
+    list.sort((a, b) => {
+      const diff = toTimestamp(b.publishTime) - toTimestamp(a.publishTime);
+      if (diff !== 0) {
+        return diff;
+      }
+      return (b.id ?? 0) - (a.id ?? 0);
+    });
+    return list;
+  }, [overview?.articles]);
 
   const drawerStats = useMemo(() => {
-    const articles = overview?.articles ?? [];
-    return articles.reduce(
+    return orderedArticles.reduce(
       (acc, item) => {
         acc.totalRead += item.readCount ?? 0;
         acc.totalSend += item.sendCount ?? 0;
@@ -115,12 +194,12 @@ export default function WorkspacePage() {
         completion: 0,
       }
     );
-  }, [overview?.articles]);
+  }, [orderedArticles]);
 
   const avgCompletion = useMemo(() => {
-    const size = overview?.articles.length || 1;
+    const size = orderedArticles.length || 1;
     return (drawerStats.completion / size).toFixed(0);
-  }, [drawerStats.completion, overview?.articles.length]);
+  }, [drawerStats.completion, orderedArticles.length]);
 
   const onSend = () => {
     const message = input.trim();
@@ -263,6 +342,8 @@ export default function WorkspacePage() {
               <div className="time-tabs">
                 <button type="button" className={`time-tab${range === '7d' ? ' active' : ''}`} onClick={() => setRange('7d')}>7天</button>
                 <button type="button" className={`time-tab${range === '30d' ? ' active' : ''}`} onClick={() => setRange('30d')}>30天</button>
+                <button type="button" className={`time-tab${range === '90d' ? ' active' : ''}`} onClick={() => setRange('90d')}>90天</button>
+                <button type="button" className={`time-tab${range === 'all' ? ' active' : ''}`} onClick={() => setRange('all')}>全部</button>
               </div>
             </div>
 
@@ -301,7 +382,7 @@ export default function WorkspacePage() {
               </div>
 
               <div className="mini-trend">
-                <div className="mini-trend-label">阅读趋势（近 30 天）</div>
+                <div className="mini-trend-label">阅读趋势（{rangeLabel}）</div>
                 <svg className="sparkline" viewBox="0 0 240 40" preserveAspectRatio="none">
                   <polyline
                     fill="none"
@@ -413,8 +494,8 @@ export default function WorkspacePage() {
       <div className={`drawer${drawerOpen ? ' open' : ''}`}>
         <div className="drawer-head">
           <div>
-            <div className="drawer-head-title">文章数据 · {range}</div>
-            <div className="drawer-head-sub">{overview?.articles.length ?? 0} 篇 · 上次同步 {formatDateTime(overview?.header.lastSyncAt)}</div>
+            <div className="drawer-head-title">文章数据 · {rangeLabel}</div>
+            <div className="drawer-head-sub">{orderedArticles.length} 篇 · 上次同步 {formatDateTime(overview?.header.lastSyncAt)}</div>
           </div>
           <button type="button" className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
         </div>
@@ -422,7 +503,7 @@ export default function WorkspacePage() {
         <div className="drawer-body">
           <div className="drawer-stat-grid">
             <div className="dstat"><div className="dstat-label">总阅读</div><div className="dstat-val">{drawerStats.totalRead}</div></div>
-            <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{overview?.articles.length ? Math.round(drawerStats.totalRead / overview.articles.length) : 0}</div></div>
+            <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{orderedArticles.length ? Math.round(drawerStats.totalRead / orderedArticles.length) : 0}</div></div>
             <div className="dstat"><div className="dstat-label">完读率</div><div className="dstat-val">{avgCompletion}%</div></div>
             <div className="dstat"><div className="dstat-label">新增关注</div><div className="dstat-val">{drawerStats.totalFollow}</div></div>
             <div className="dstat"><div className="dstat-label">总分享</div><div className="dstat-val">{drawerStats.totalShare}</div></div>
@@ -439,7 +520,7 @@ export default function WorkspacePage() {
           </div>
 
           <div className="drawer-section-title">文章列表</div>
-          {(overview?.articles ?? []).map((article) => (
+          {orderedArticles.map((article) => (
             <div key={article.id} className="art-row">
               <div className="art-top">
                 <div className="art-title">{article.title}</div>
