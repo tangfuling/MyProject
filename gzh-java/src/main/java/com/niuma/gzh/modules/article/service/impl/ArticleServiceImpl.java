@@ -24,9 +24,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class ArticleServiceImpl extends BaseService implements ArticleService {
     private final ArticleRepository articleRepository;
@@ -45,8 +48,21 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Transactional(rollbackFor = Exception.class)
     public SyncResultVO syncArticles(SyncArticlesDTO dto) {
         Long userId = AuthContext.requiredUserId();
+        int articleInputSize = dto.getArticles() == null ? 0 : dto.getArticles().size();
+        int snapshotInputSize = dto.getSnapshots() == null ? 0 : dto.getSnapshots().size();
+        log.info("[sync/articles] start userId={}, articleInputSize={}, snapshotInputSize={}", userId, articleInputSize, snapshotInputSize);
+        if (articleInputSize > 0) {
+            String sample = dto.getArticles().stream()
+                .limit(5)
+                .map(SyncArticlesDTO.ArticleItem::getWxArticleId)
+                .collect(Collectors.joining(","));
+            log.info("[sync/articles] article sample wxArticleIds={}", sample);
+        }
+
         int newCount = 0;
         int updatedCount = 0;
+        int snapshotSaved = 0;
+        int snapshotMissedArticle = 0;
 
         for (SyncArticlesDTO.ArticleItem item : dto.getArticles()) {
             ArticleEntity existed = articleRepository.findByUserAndWxId(userId, item.getWxArticleId());
@@ -75,6 +91,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         for (SyncArticlesDTO.SnapshotItem snapshotItem : dto.getSnapshots()) {
             ArticleEntity article = articleRepository.findByUserAndWxId(userId, snapshotItem.getWxArticleId());
             if (article == null) {
+                snapshotMissedArticle++;
                 continue;
             }
             ArticleSnapshotEntity snapshot = new ArticleSnapshotEntity();
@@ -94,7 +111,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setTrafficSourcesJson(jsonUtil.toJson(snapshotItem.getTrafficSources() == null ? Map.of() : snapshotItem.getTrafficSources()));
             snapshot.setSnapshotTime(LocalDateTime.now());
             snapshotRepository.save(snapshot);
+            snapshotSaved++;
         }
+
+        log.info(
+            "[sync/articles] done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}",
+            userId, newCount, updatedCount, snapshotSaved, snapshotMissedArticle
+        );
 
         SyncResultVO vo = new SyncResultVO();
         vo.setNewArticles(newCount);

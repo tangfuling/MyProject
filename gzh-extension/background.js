@@ -1,4 +1,16 @@
 const STORAGE_KEY = 'gzh_extension_state';
+const ALLOWED_PROXY_PREFIXES = [
+  'http://127.0.0.1:8081/',
+  'https://api-gzh.niuma.com/',
+  'https://api-gzh.niumatech.com/',
+];
+
+function isAllowedProxyUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return false;
+  }
+  return ALLOWED_PROXY_PREFIXES.some((prefix) => rawUrl.startsWith(prefix));
+}
 
 function setState(state) {
   chrome.storage.local.set({ [STORAGE_KEY]: state });
@@ -56,6 +68,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'sync-state') {
     setState(message.payload);
     chrome.runtime.sendMessage({ type: 'sync-state-broadcast', payload: message.payload });
+    return undefined;
+  }
+
+  if (message?.type === 'proxy-fetch-json') {
+    const payload = message.payload || {};
+    const url = payload.url || '';
+    if (!isAllowedProxyUrl(url)) {
+      sendResponse({ ok: false, error: 'proxy url not allowed' });
+      return true;
+    }
+
+    const requestInit = {
+      method: payload.method || 'GET',
+      headers: payload.headers || {},
+      body: payload.body || undefined,
+      credentials: 'omit',
+      redirect: 'follow',
+    };
+
+    fetch(url, requestInit)
+      .then(async (resp) => {
+        const text = await resp.text();
+        let body;
+        try {
+          body = text ? JSON.parse(text) : {};
+        } catch {
+          body = { raw: text };
+        }
+        sendResponse({
+          ok: true,
+          status: resp.status,
+          httpOk: resp.ok,
+          body,
+        });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || 'proxy fetch failed' });
+      });
+    return true;
   }
 
   if (message?.type === 'get-state') {

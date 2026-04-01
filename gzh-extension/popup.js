@@ -201,7 +201,7 @@ openWebBtn.addEventListener('click', () => {
     const needLogin = !latestAuthToken || state?.stage === 'need_login_web';
     const url = needLogin
       ? 'http://localhost:5173?openLogin=1&redirect=%2Fworkspace'
-      : 'http://localhost:5173';
+      : 'http://localhost:5173/workspace';
     chrome.tabs.create({ url });
   });
 });

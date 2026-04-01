@@ -18,6 +18,7 @@ type AuthState = {
 
 const TOKEN_KEY = 'gzh_token';
 const PROFILE_KEY = 'gzh_profile';
+const LOGOUT_FLAG_KEY = 'gzh_logout_flag';
 
 function loadToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -41,11 +42,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: (token, profile) => {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    localStorage.removeItem(LOGOUT_FLAG_KEY);
     set({ token, profile });
   },
   clearAuth: () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(PROFILE_KEY);
+    localStorage.setItem(LOGOUT_FLAG_KEY, String(Date.now()));
     set({ token: null, profile: null });
   },
   updateProfile: (partial) => {

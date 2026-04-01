@@ -22,9 +22,12 @@
 
   const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
   const WEB_URL = 'http://localhost:5173';
+  const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
 
   let latestAuthToken = '';
   let latestLastSync = null;
+  let lastAutoSyncAuthToken = '';
+  let zeroMetricsLogCount = 0;
   let panelState = {
     stage: 'idle',
     message: '等待同步',
@@ -32,6 +35,84 @@
     synced: 0,
     total: 0,
   };
+
+  function isRuntimeAvailable() {
+    try {
+      return !!(chrome && chrome.runtime && chrome.runtime.id);
+    } catch {
+      return false;
+    }
+  }
+
+  function isContextInvalidatedError(errorOrMessage) {
+    const msg = typeof errorOrMessage === 'string'
+      ? errorOrMessage
+      : String(errorOrMessage?.message || errorOrMessage || '');
+    return CONTEXT_INVALIDATED_RE.test(msg);
+  }
+
+  function safeSendMessage(payload) {
+    if (!isRuntimeAvailable()) {
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage(payload);
+    } catch (error) {
+      if (!isContextInvalidatedError(error)) {
+        console.warn('[gzh-extension] sendMessage threw', error);
+      }
+    }
+  }
+
+  function proxyFetchJson(url, options) {
+    return new Promise((resolve, reject) => {
+      if (!isRuntimeAvailable()) {
+        reject(new Error('扩展上下文不可用'));
+        return;
+      }
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: 'proxy-fetch-json',
+            payload: {
+              url,
+              method: options?.method || 'GET',
+              headers: options?.headers || {},
+              body: options?.body || null,
+            },
+          },
+          (response) => {
+            const err = chrome.runtime?.lastError;
+            if (err) {
+              reject(new Error(err.message || '请求代理失败'));
+              return;
+            }
+            if (!response?.ok) {
+              reject(new Error(response?.error || '请求代理失败'));
+              return;
+            }
+            resolve(response);
+          }
+        );
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  function runtimeGetURL(path) {
+    if (!isRuntimeAvailable()) {
+      return '';
+    }
+    try {
+      return chrome.runtime.getURL(path);
+    } catch (error) {
+      if (!isContextInvalidatedError(error)) {
+        console.warn('[gzh-extension] getURL failed', error);
+      }
+      return '';
+    }
+  }
 
   function stageClass(stage) {
     if (stage === 'done') {
@@ -302,13 +383,51 @@
 
   function getStorage(keys) {
     return new Promise((resolve) => {
-      chrome.storage.local.get(keys, (result) => resolve(result));
+      if (!isRuntimeAvailable() || !chrome.storage?.local) {
+        resolve({});
+        return;
+      }
+      try {
+        chrome.storage.local.get(keys, (result) => {
+          const err = chrome.runtime?.lastError;
+          if (err) {
+            if (!isContextInvalidatedError(err.message)) {
+              console.warn('[gzh-extension] storage.get failed', err.message);
+            }
+            resolve({});
+            return;
+          }
+          resolve(result || {});
+        });
+      } catch (error) {
+        if (!isContextInvalidatedError(error)) {
+          console.warn('[gzh-extension] storage.get threw', error);
+        }
+        resolve({});
+      }
     });
   }
 
   function setStorage(payload) {
     return new Promise((resolve) => {
-      chrome.storage.local.set(payload, () => resolve());
+      if (!isRuntimeAvailable() || !chrome.storage?.local) {
+        resolve(false);
+        return;
+      }
+      try {
+        chrome.storage.local.set(payload, () => {
+          const err = chrome.runtime?.lastError;
+          if (err && !isContextInvalidatedError(err.message)) {
+            console.warn('[gzh-extension] storage.set failed', err.message);
+          }
+          resolve(!err);
+        });
+      } catch (error) {
+        if (!isContextInvalidatedError(error)) {
+          console.warn('[gzh-extension] storage.set threw', error);
+        }
+        resolve(false);
+      }
     });
   }
 
@@ -419,7 +538,7 @@
       secondaryAction = 'close';
       secondaryText = '收起';
     } else if (state.stage === 'done' || state.stage === 'partial_failed') {
-      primaryAction = 'open_web';
+      primaryAction = 'open_workspace';
       primaryText = '前往公众号助手查看 →';
       secondaryAction = 'start';
       secondaryText = '重新同步';
@@ -446,6 +565,10 @@
     }
     if (action === 'open_web') {
       window.open(WEB_URL, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (action === 'open_workspace') {
+      window.open(`${WEB_URL}/workspace`, '_blank', 'noopener,noreferrer');
       return;
     }
     if (action === 'open_web_login') {
@@ -475,11 +598,14 @@
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
     panel.className = 'hidden';
-    const iconUrl = chrome.runtime.getURL('icons/icon-32.png');
+    const iconUrl = runtimeGetURL('icons/icon-32.png');
+    const titleIcon = iconUrl
+      ? `<img class="gzh-sync-title-icon" src="${iconUrl}" alt="公众号助手" />`
+      : '<span class="gzh-sync-title-icon" aria-hidden="true"></span>';
     panel.innerHTML = `
       <div class="gzh-sync-head">
         <div class="gzh-sync-title-wrap">
-          <img class="gzh-sync-title-icon" src="${iconUrl}" alt="公众号助手" />
+          ${titleIcon}
           <div class="gzh-sync-title">公众号助手</div>
         </div>
         <button type="button" class="gzh-sync-close" id="gzh-sync-close">✕</button>
@@ -534,8 +660,9 @@
     const launcher = document.createElement('button');
     launcher.id = LAUNCHER_ID;
     launcher.type = 'button';
-    const iconUrl = chrome.runtime.getURL('icons/icon-32.png');
-    launcher.innerHTML = `<img src="${iconUrl}" alt="公众号助手" /><span>同步到公众号助手</span>`;
+    const iconUrl = runtimeGetURL('icons/icon-32.png');
+    const launcherIcon = iconUrl ? `<img src="${iconUrl}" alt="公众号助手" />` : '';
+    launcher.innerHTML = `${launcherIcon}<span>同步到公众号助手</span>`;
     launcher.addEventListener('click', () => {
       createPanel();
       openPanel();
@@ -577,10 +704,40 @@
     panelState = state;
     renderPanel(state);
 
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       type: 'sync-state',
       payload: state,
     });
+  }
+
+  function maybeAutoStartSyncOnAuthReady(prevToken, nextToken, source) {
+    const oldToken = (prevToken || '').trim();
+    const newToken = (nextToken || '').trim();
+    if (!newToken) {
+      lastAutoSyncAuthToken = '';
+      return;
+    }
+    if (oldToken) {
+      return;
+    }
+    if (STATE.syncing) {
+      return;
+    }
+    if (lastAutoSyncAuthToken === newToken) {
+      return;
+    }
+
+    const mpToken = parseTokenFromUrl();
+    if (!mpToken) {
+      console.info('[gzh-extension] skip auto sync: no mp token in page', { source });
+      return;
+    }
+
+    lastAutoSyncAuthToken = newToken;
+    console.info('[gzh-extension] auto start sync after auth ready', { source });
+    createPanel();
+    openPanel();
+    void startSync();
   }
 
   function parseTokenFromUrl() {
@@ -608,6 +765,27 @@
     } catch {
       return '';
     }
+  }
+
+  function sanitizeMsgId(raw) {
+    if (raw == null) {
+      return '';
+    }
+    const text = String(raw).trim();
+    if (!text) {
+      return '';
+    }
+    const first = text.split('_')[0];
+    const digits = first.match(/\d+/)?.[0];
+    return digits || first;
+  }
+
+  function toPositiveInt(raw, fallback = 1) {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      return fallback;
+    }
+    return Math.floor(value);
   }
 
   async function startSync() {
@@ -666,10 +844,14 @@
       const mergedIds = { ...syncedArticleIds };
       let failedMetrics = 0;
       let failedContent = 0;
+      let newCandidates = 0;
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
         const isNew = !mergedIds[article.wxArticleId];
+        if (isNew) {
+          newCandidates += 1;
+        }
 
         notifyState({
           stage: 'fetch_detail',
@@ -720,24 +902,42 @@
       }
 
       notifyState({ stage: 'upload', message: '正在上传到后端...', progress: 92, total: articles.length, synced: articles.length });
+      console.info('[gzh-extension] sync upload payload', {
+        apiBase,
+        fetchedArticles: articles.length,
+        uploadArticles: syncArticles.length,
+        snapshots: snapshots.length,
+        newCandidates,
+        failedMetrics,
+        failedContent,
+      });
 
-      const response = await fetch(`${apiBase}/sync/articles`, {
+      const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
         method: 'POST',
-        credentials: 'omit',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({ articles: syncArticles, snapshots }),
       });
-
-      const json = await response.json();
+      const response = {
+        status: proxyResponse.status,
+        ok: !!proxyResponse.httpOk,
+      };
+      const json = proxyResponse.body || {};
+      console.info('[gzh-extension] sync upload response', {
+        status: response.status,
+        ok: response.ok,
+        code: json?.code,
+        message: json?.message,
+        data: json?.data,
+      });
       if (!response.ok || json.code !== 0) {
         throw new Error(json.message || '同步上传失败');
       }
 
-      const newArticles = json.data?.newArticles ?? 0;
-      const updatedArticles = json.data?.updatedArticles ?? 0;
+      const newArticles = json.data?.newArticles ?? json.data?.new_articles ?? 0;
+      const updatedArticles = json.data?.updatedArticles ?? json.data?.updated_articles ?? 0;
       const lastSync = {
         updatedAt: new Date().toISOString(),
         total: articles.length,
@@ -787,49 +987,369 @@
     const all = [];
     let begin = 0;
     const pageSize = 10;
+    let pageIndex = 0;
 
     while (begin < 1000) {
       const url = `/cgi-bin/appmsgpublish?sub=list&begin=${begin}&count=${pageSize}&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
-      const response = await fetch(url, { credentials: 'include' });
-      const json = await response.json();
-      const publishPage = parseMaybeJson(json.publish_page) || {};
-      const publishList = publishPage.publish_list || [];
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      const text = await response.text();
+      const json = parseMaybeJson(text);
+      if (!json || typeof json !== 'object') {
+        console.warn('[gzh-extension] appmsgpublish response not json', {
+          begin,
+          status: response.status,
+          bodyHead: String(text).slice(0, 180),
+        });
+        throw new Error('读取文章列表失败：接口返回格式异常');
+      }
+
+      const ret = Number(json.base_resp?.ret ?? json.ret ?? 0);
+      const errMsg = String(json.base_resp?.err_msg || json.err_msg || '');
+      if (ret !== 0) {
+        console.warn('[gzh-extension] appmsgpublish returned non-zero ret', { ret, errMsg, begin });
+        if (ret === 200013 || /invalid|expired|登录|token/i.test(errMsg)) {
+          throw new Error('微信后台登录已过期，请刷新页面重新登录后再同步');
+        }
+        throw new Error(`读取文章列表失败(${ret})：${errMsg || '未知错误'}`);
+      }
+
+      const publishPage = parseMaybeJson(json.publish_page) || parseMaybeJson(json.publishPage) || {};
+      const publishListRaw = publishPage.publish_list
+        ?? publishPage.publishList
+        ?? publishPage.list
+        ?? json.publish_list
+        ?? json.publishList
+        ?? json.list
+        ?? [];
+      const publishListParsed = Array.isArray(publishListRaw)
+        ? publishListRaw
+        : (parseMaybeJson(publishListRaw) || []);
+      const publishList = Array.isArray(publishListParsed) ? publishListParsed : [];
+
+      const parsed = publishList.flatMap((item, itemIndex) => parseArticlesFromPublishItem(item, itemIndex));
+      console.info('[gzh-extension] appmsgpublish page', {
+        pageIndex,
+        begin,
+        publishList: publishList.length,
+        parsed: parsed.length,
+      });
+      if (publishList.length > 0 && parsed.length === 0) {
+        const sample = publishList[0] || {};
+        console.warn('[gzh-extension] publish list parse empty on non-empty page', {
+          sampleKeys: Object.keys(sample),
+          samplePublishInfoHead: String(sample.publish_info || sample.publishInfo || '').slice(0, 180),
+        });
+      }
       if (publishList.length === 0) {
         break;
       }
 
-      const parsed = publishList.flatMap((item) => {
-        const info = parseMaybeJson(item.publish_info) || {};
-        const appmsgList = info.appmsgex || [];
-        return appmsgList.map((article) => {
-          const articleUrl = article.link || article.content_url || '';
-          const wxArticleId = article.aid || article.appmsgid || articleUrl || `${article.title}-${article.create_time}`;
-          const publishTs = article.create_time || item.publish_time || Math.floor(Date.now() / 1000);
-          return {
-            wxArticleId: String(wxArticleId),
-            title: article.title || '未命名文章',
-            contentUrl: articleUrl,
-            publishTime: new Date(publishTs * 1000).toISOString(),
-          };
-        });
-      });
-
       all.push(...parsed);
       begin += pageSize;
+      pageIndex += 1;
       if (publishList.length < pageSize) {
         break;
       }
     }
 
-    return dedupeById(all);
+    const deduped = dedupeById(all);
+    console.info('[gzh-extension] appmsgpublish done', {
+      rawCount: all.length,
+      dedupedCount: deduped.length,
+    });
+    return deduped;
+  }
+
+  function parseArticlesFromPublishItem(item, itemIndex) {
+    const candidates = [];
+    const info = parseMaybeJson(item?.publish_info)
+      || parseMaybeJson(item?.publishInfo)
+      || item?.publish_info
+      || item?.publishInfo
+      || {};
+    collectArticleCandidates(info, candidates, 0);
+    collectArticleCandidates(item, candidates, 0);
+
+    const seen = new Set();
+    const publishTsFallback = Number(item?.publish_time || 0) || Math.floor(Date.now() / 1000);
+    const result = [];
+    candidates.forEach((article, idx) => {
+      const articleUrlRaw = article.link || article.content_url || article.url || article.contentUrl || article.article_url || '';
+      const articleUrl = normalizeMpUrl(articleUrlRaw);
+      const metricMsgId = sanitizeMsgId(
+        article.appmsgid
+          || article.appmsg_id
+          || article.msgid
+          || parseMidFromUrl(articleUrl)
+      );
+      const metricMsgIndex = toPositiveInt(
+        article.idx
+          || article.itemidx
+          || article.item_idx
+          || article.article_idx
+          || article.sn_idx
+          || 1,
+        1
+      );
+      const title = String(article.title || article.appmsg_title || article.name || '').trim() || '未命名文章';
+      const publishTs = Number(article.create_time || article.publish_time || publishTsFallback) || publishTsFallback;
+      const wxArticleId = String(
+        article.aid
+          || article.appmsgid
+          || article.appmsg_id
+          || article.msgid
+          || parseMidFromUrl(articleUrl)
+          || `${title}-${publishTs}-${itemIndex}-${idx}`
+      );
+
+      if (!wxArticleId) {
+        return;
+      }
+      const uniqKey = `${wxArticleId}|${title}|${articleUrl}`;
+      if (seen.has(uniqKey)) {
+        return;
+      }
+      seen.add(uniqKey);
+      result.push({
+        wxArticleId,
+        title,
+        contentUrl: articleUrl,
+        publishTime: new Date(publishTs * 1000).toISOString(),
+        metricMsgId,
+        metricMsgIndex,
+      });
+    });
+
+    return result;
+  }
+
+  function collectArticleCandidates(node, output, depth) {
+    if (!node || depth > 8) {
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item) => collectArticleCandidates(item, output, depth + 1));
+      return;
+    }
+    if (typeof node !== 'object') {
+      return;
+    }
+
+    const title = node.title || node.appmsg_title;
+    const url = node.link || node.content_url || node.url || node.contentUrl || node.article_url;
+    const id = node.aid || node.appmsgid || node.appmsg_id || node.msgid;
+    if ((title && url) || id || (url && parseMidFromUrl(String(url)))) {
+      output.push(node);
+    }
+
+    Object.values(node).forEach((value) => {
+      if (value && (typeof value === 'object')) {
+        collectArticleCandidates(value, output, depth + 1);
+      }
+    });
+  }
+
+  function normalizeMpUrl(rawUrl) {
+    if (!rawUrl) {
+      return '';
+    }
+    const source = String(rawUrl).trim();
+    if (!source) {
+      return '';
+    }
+
+    const protocolRelative = source.startsWith('//') ? `https:${source}` : source;
+    if (/^https?:\/\//i.test(protocolRelative)) {
+      try {
+        const parsed = new URL(protocolRelative);
+        if (parsed.protocol === 'http:') {
+          parsed.protocol = 'https:';
+          return parsed.toString();
+        }
+        return protocolRelative;
+      } catch {
+        return protocolRelative.replace(/^http:\/\//i, 'https://');
+      }
+    }
+
+    return `https://mp.weixin.qq.com${protocolRelative.startsWith('/') ? protocolRelative : `/${protocolRelative}`}`;
+  }
+
+  function responseRet(payload) {
+    return Number(payload?.base_resp?.ret ?? payload?.ret ?? 0);
+  }
+
+  function responseErrMsg(payload) {
+    return String(payload?.base_resp?.err_msg || payload?.err_msg || '');
+  }
+
+  async function requestMetricsPayload(token, msgId, publishDate) {
+    const url = `/misc/appmsganalysis?action=detailpage&msgid=${encodeURIComponent(msgId)}&publish_date=${publishDate}&type=int&pageVersion=1&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    const text = await response.text();
+    const json = parseMaybeJson(text);
+    if (!json || typeof json !== 'object') {
+      throw new Error('文章指标接口返回格式异常');
+    }
+    return json;
+  }
+
+  function findFirstNumberByKeys(root, keys) {
+    if (!root || !keys?.length) {
+      return 0;
+    }
+    const keySet = new Set(keys.map((k) => String(k).toLowerCase()));
+    const queue = [root];
+    const visited = new Set();
+    let fallback = null;
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') {
+        continue;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      if (Array.isArray(current)) {
+        current.forEach((item) => queue.push(item));
+        continue;
+      }
+
+      Object.entries(current).forEach(([key, value]) => {
+        if (value && typeof value === 'object') {
+          queue.push(value);
+        }
+        if (!keySet.has(key.toLowerCase())) {
+          return;
+        }
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return;
+        }
+        if (num > 0) {
+          fallback = num;
+          queue.length = 0;
+          return;
+        }
+        if (fallback == null) {
+          fallback = num;
+        }
+      });
+    }
+    return Number(fallback ?? 0);
+  }
+
+  function collectSceneItems(root) {
+    const result = [];
+    const queue = [root];
+    const visited = new Set();
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') {
+        continue;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      if (Array.isArray(current)) {
+        current.forEach((item) => {
+          if (item && typeof item === 'object') {
+            if (Object.prototype.hasOwnProperty.call(item, 'scene')
+              || Object.prototype.hasOwnProperty.call(item, 'scene_id')
+              || Object.prototype.hasOwnProperty.call(item, 'source_scene')) {
+              result.push(item);
+            }
+            queue.push(item);
+          }
+        });
+        continue;
+      }
+
+      Object.values(current).forEach((value) => {
+        if (value && typeof value === 'object') {
+          queue.push(value);
+        }
+      });
+    }
+    return result;
+  }
+
+  function buildTrafficSources(root) {
+    const direct = {
+      '公众号消息': findFirstNumberByKeys(root, ['frommsg']),
+      '朋友圈': findFirstNumberByKeys(root, ['fromfeed']),
+      '搜一搜': findFirstNumberByKeys(root, ['fromsogou']),
+      '推荐': findFirstNumberByKeys(root, ['fromrecommend']),
+    };
+    if (Object.values(direct).some((v) => v > 0)) {
+      return direct;
+    }
+
+    const byScene = {
+      '公众号消息': 0,
+      '朋友圈': 0,
+      '搜一搜': 0,
+      '推荐': 0,
+    };
+    const sceneItems = collectSceneItems(root);
+    sceneItems.forEach((item) => {
+      const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
+      const count = findFirstNumberByKeys(item, ['int_page_read_user', 'read_num', 'read_uv', 'read_count', 'value', 'count']);
+      if (!Number.isFinite(scene) || !Number.isFinite(count) || count <= 0) {
+        return;
+      }
+      if (scene === 0) {
+        byScene['公众号消息'] += count;
+      } else if (scene === 2) {
+        byScene['朋友圈'] += count;
+      } else if (scene === 7) {
+        byScene['搜一搜'] += count;
+      } else if (scene === 6) {
+        byScene['推荐'] += count;
+      }
+    });
+    return byScene;
   }
 
   async function fetchArticleMetrics(token, article) {
-    const mid = parseMidFromUrl(article.contentUrl) || String(article.wxArticleId).split('_')[0];
-    const publishDate = article.publishTime.slice(0, 10);
-    const url = `/misc/appmsganalysis?action=detailpage&msgid=${mid}_1&publish_date=${publishDate}&type=int&pageVersion=1&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
-    const response = await fetch(url, { credentials: 'include' });
-    const json = await response.json();
+    const msgIdBase = sanitizeMsgId(article.metricMsgId || parseMidFromUrl(article.contentUrl) || String(article.wxArticleId).split('_')[0]);
+    if (!msgIdBase) {
+      throw new Error('缺少文章 msgid');
+    }
+
+    const msgIndex = toPositiveInt(article.metricMsgIndex, 1);
+    const publishDate = (article.publishTime || '').slice(0, 10);
+
+    let json = await requestMetricsPayload(token, `${msgIdBase}_${msgIndex}`, publishDate);
+    let ret = responseRet(json);
+    if (ret !== 0 && msgIndex !== 1) {
+      const fallback = await requestMetricsPayload(token, `${msgIdBase}_1`, publishDate).catch(() => null);
+      if (fallback) {
+        json = fallback;
+        ret = responseRet(json);
+      }
+    }
+    if (ret !== 0) {
+      const errMsg = responseErrMsg(json);
+      throw new Error(`文章指标接口异常(${ret})${errMsg ? `: ${errMsg}` : ''}`);
+    }
+
     const articleData = parseMaybeJson(json.articleData) || json.articleData || {};
     const articleDataNew = parseMaybeJson(articleData.article_data_new || json.article_data_new)
       || articleData.article_data_new
@@ -840,22 +1360,48 @@
       || json.subs_transform
       || {};
 
+    const root = { json, articleData, articleDataNew, subsTransform };
+    const readCount = findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']);
+    const sendCount = findFirstNumberByKeys(root, ['send_uv']);
+    const shareCount = findFirstNumberByKeys(root, ['share_user', 'share_count', 'share_uv']);
+    const likeCount = findFirstNumberByKeys(root, ['like_num', 'like_cnt']);
+    const wowCount = findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']);
+    const commentCount = findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']);
+    const saveCount = findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']);
+    const completionRate = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
+    const newFollowers = findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']);
+    const trafficSources = buildTrafficSources(root);
+
+    if (
+      zeroMetricsLogCount < 5
+      && readCount === 0
+      && sendCount === 0
+      && shareCount === 0
+      && likeCount === 0
+      && wowCount === 0
+      && commentCount === 0
+      && saveCount === 0
+    ) {
+      zeroMetricsLogCount += 1;
+      console.warn('[gzh-extension] metrics all zero', {
+        msgIdBase,
+        msgIndex,
+        publishDate,
+        topKeys: Object.keys(json || {}),
+      });
+    }
+
     return {
-      readCount: Number(json.int_page_read_user || json.read_num || articleDataNew.read_uv || 0),
-      sendCount: Number(subsTransform.send_uv || json.send_uv || 0),
-      shareCount: Number(json.share_user || json.share_count || articleDataNew.share_uv || 0),
-      likeCount: Number(json.like_num || articleDataNew.like_cnt || 0),
-      wowCount: Number(json.old_like_num || json.wow_num || articleDataNew.zaikan_cnt || 0),
-      commentCount: Number(json.comment_id_count || articleDataNew.comment_cnt || 0),
-      saveCount: Number(json.fav_num || json.save_count || articleDataNew.collection_uv || 0),
-      completionRate: Number(json.complete_read_rate || articleDataNew.finished_read_pv_ratio || 0),
-      trafficSources: {
-        '公众号消息': Number(json.frommsg || 0),
-        '朋友圈': Number(json.fromfeed || 0),
-        '搜一搜': Number(json.fromsogou || 0),
-        '推荐': Number(json.fromrecommend || 0),
-      },
-      newFollowers: Number(json.new_fans || articleDataNew.follow_after_read_uv || 0),
+      readCount,
+      sendCount,
+      shareCount,
+      likeCount,
+      wowCount,
+      commentCount,
+      saveCount,
+      completionRate,
+      trafficSources,
+      newFollowers,
     };
   }
 
@@ -863,7 +1409,11 @@
     if (!url) {
       return '';
     }
-    const response = await fetch(url, { credentials: 'include' });
+    const secureUrl = normalizeMpUrl(url);
+    if (!secureUrl) {
+      return '';
+    }
+    const response = await fetch(secureUrl, { credentials: 'include' });
     const html = await response.text();
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -877,11 +1427,41 @@
     if (typeof value === 'object') {
       return value;
     }
-    try {
-      return JSON.parse(value);
-    } catch {
+    if (typeof value !== 'string') {
       return null;
     }
+
+    const raw = value.trim();
+    if (!raw) {
+      return null;
+    }
+
+    const candidates = [
+      raw,
+      raw.replace(/^\)\]\}',?\s*/, ''),
+      decodeHtmlEntities(raw),
+      decodeHtmlEntities(raw).replace(/^\)\]\}',?\s*/, ''),
+    ];
+    for (const one of candidates) {
+      if (!one) {
+        continue;
+      }
+      try {
+        return JSON.parse(one);
+      } catch {
+        // keep trying
+      }
+    }
+    return null;
+  }
+
+  function decodeHtmlEntities(text) {
+    if (!text) {
+      return '';
+    }
+    const el = document.createElement('textarea');
+    el.innerHTML = text;
+    return el.value;
   }
 
   function dedupeById(items) {
@@ -892,46 +1472,73 @@
     return Array.from(map.values());
   }
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === 'start-sync') {
-      createPanel();
-      openPanel();
-      void startSync();
-      sendResponse({ ok: true });
-      return true;
+  try {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message?.type === 'start-sync') {
+        createPanel();
+        openPanel();
+        void startSync();
+        sendResponse({ ok: true });
+        return true;
+      }
+      return undefined;
+    });
+  } catch (error) {
+    if (!isContextInvalidatedError(error)) {
+      console.warn('[gzh-extension] bind runtime listener failed', error);
     }
-    return undefined;
-  });
+  }
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local') {
-      return;
-    }
+  try {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') {
+        return;
+      }
 
-    let shouldRender = false;
-    if (Object.prototype.hasOwnProperty.call(changes, 'gzhAuthToken')) {
-      latestAuthToken = changes.gzhAuthToken?.newValue || '';
-      shouldRender = true;
-    }
-    if (Object.prototype.hasOwnProperty.call(changes, 'gzhLastSync')) {
-      latestLastSync = changes.gzhLastSync?.newValue || null;
-      shouldRender = true;
-    }
+      let prevAuthToken = latestAuthToken;
+      let shouldRender = false;
+      if (Object.prototype.hasOwnProperty.call(changes, 'gzhAuthToken')) {
+        latestAuthToken = changes.gzhAuthToken?.newValue || '';
+        shouldRender = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(changes, 'gzhLastSync')) {
+        latestLastSync = changes.gzhLastSync?.newValue || null;
+        shouldRender = true;
+      }
 
-    if (shouldRender) {
+      if (shouldRender) {
+        renderPanel(panelState);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(changes, 'gzhAuthToken')) {
+        maybeAutoStartSyncOnAuthReady(prevAuthToken, latestAuthToken, 'storage.onChanged');
+      }
+    });
+  } catch (error) {
+    if (!isContextInvalidatedError(error)) {
+      console.warn('[gzh-extension] bind storage listener failed', error);
+    }
+  }
+
+  async function refreshFromStorage(allowAutoSync = true) {
+    try {
+      const prevAuthToken = latestAuthToken;
+      const storage = await getStorage(['gzhAuthToken', 'gzhLastSync']);
+      latestAuthToken = storage.gzhAuthToken || '';
+      latestLastSync = storage.gzhLastSync || null;
       renderPanel(panelState);
+      if (allowAutoSync) {
+        maybeAutoStartSyncOnAuthReady(prevAuthToken, latestAuthToken, 'refreshFromStorage');
+      }
+    } catch (error) {
+      if (!isContextInvalidatedError(error)) {
+        console.warn('[gzh-extension] refreshFromStorage failed', error);
+      }
     }
-  });
-
-  async function refreshFromStorage() {
-    const storage = await getStorage(['gzhAuthToken', 'gzhLastSync']);
-    latestAuthToken = storage.gzhAuthToken || '';
-    latestLastSync = storage.gzhLastSync || null;
-    renderPanel(panelState);
   }
 
   async function init() {
-    await refreshFromStorage();
+    await refreshFromStorage(false);
     createLauncher();
     createPanel();
     renderPanel(panelState);
@@ -947,5 +1554,9 @@
     });
   }
 
-  void init();
+  void init().catch((error) => {
+    if (!isContextInvalidatedError(error)) {
+      console.warn('[gzh-extension] init failed', error);
+    }
+  });
 })();

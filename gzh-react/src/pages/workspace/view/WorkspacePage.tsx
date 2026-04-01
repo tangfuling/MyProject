@@ -214,7 +214,14 @@ export default function WorkspacePage() {
   return (
     <div className="workspace-page">
       <div className="app-topbar">
-        <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
+        <a
+          className="brand"
+          href={RoutePath.ROOT}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate(RoutePath.ROOT);
+          }}
+        >
           <img className="brand-icon" src="/site-icon-64.png" alt="公众号助手" />
           <div className="brand-name">公众号助手</div>
         </a>
