@@ -37,14 +37,16 @@ public class ArticleRepository extends BaseRepository {
             new LambdaQueryWrapper<ArticleEntity>()
                 .eq(ArticleEntity::getUserId, userId)
                 .between(start != null && end != null, ArticleEntity::getPublishTime, start, end)
-                .orderByDesc(ArticleEntity::getPublishTime));
+                .orderByDesc(ArticleEntity::getPublishTime)
+                .orderByDesc(ArticleEntity::getId));
     }
 
     public List<ArticleEntity> listByUserAndRange(Long userId, LocalDateTime start, LocalDateTime end) {
         return articleMapper.selectList(new LambdaQueryWrapper<ArticleEntity>()
             .eq(ArticleEntity::getUserId, userId)
             .between(start != null && end != null, ArticleEntity::getPublishTime, start, end)
-            .orderByDesc(ArticleEntity::getPublishTime));
+            .orderByDesc(ArticleEntity::getPublishTime)
+            .orderByDesc(ArticleEntity::getId));
     }
 
     public int countByUser(Long userId) {

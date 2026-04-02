@@ -24,9 +24,12 @@
   const WEB_URL = 'http://localhost:5173';
   const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
   const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
-  const METRICS_FIRST_PASS_INTERVAL_MS = 35;
-  const METRICS_FREQ_RETRY_MIN_MS = 450;
-  const METRICS_FREQ_RETRY_JITTER_MS = 220;
+  const LOG_PREFIX = '[tfling]';
+  const METRICS_BASE_INTERVAL_MS = 180;
+  const METRICS_MIN_INTERVAL_MS = 120;
+  const METRICS_MAX_INTERVAL_MS = 1400;
+  const METRICS_FREQ_RETRY_MIN_MS = 900;
+  const METRICS_FREQ_RETRY_JITTER_MS = 350;
 
   let latestAuthToken = '';
   let latestLastSync = null;
@@ -63,7 +66,9 @@
       chrome.runtime.sendMessage(payload);
     } catch (error) {
       if (!isContextInvalidatedError(error)) {
-        console.warn('[gzh-extension] sendMessage threw', error);
+        safeLog('warn', 'sendMessage threw', {
+          reason: error?.message || String(error),
+        });
       }
     }
   }
@@ -112,7 +117,9 @@
       return chrome.runtime.getURL(path);
     } catch (error) {
       if (!isContextInvalidatedError(error)) {
-        console.warn('[gzh-extension] getURL failed', error);
+        safeLog('warn', 'getURL failed', {
+          reason: error?.message || String(error),
+        });
       }
       return '';
     }
@@ -396,7 +403,7 @@
           const err = chrome.runtime?.lastError;
           if (err) {
             if (!isContextInvalidatedError(err.message)) {
-              console.warn('[gzh-extension] storage.get failed', err.message);
+              safeLog('warn', 'storage.get failed', { reason: err.message });
             }
             resolve({});
             return;
@@ -405,7 +412,9 @@
         });
       } catch (error) {
         if (!isContextInvalidatedError(error)) {
-          console.warn('[gzh-extension] storage.get threw', error);
+          safeLog('warn', 'storage.get threw', {
+            reason: error?.message || String(error),
+          });
         }
         resolve({});
       }
@@ -422,13 +431,15 @@
         chrome.storage.local.set(payload, () => {
           const err = chrome.runtime?.lastError;
           if (err && !isContextInvalidatedError(err.message)) {
-            console.warn('[gzh-extension] storage.set failed', err.message);
+            safeLog('warn', 'storage.set failed', { reason: err.message });
           }
           resolve(!err);
         });
       } catch (error) {
         if (!isContextInvalidatedError(error)) {
-          console.warn('[gzh-extension] storage.set threw', error);
+          safeLog('warn', 'storage.set threw', {
+            reason: error?.message || String(error),
+          });
         }
         resolve(false);
       }
@@ -511,8 +522,8 @@
     if (state.stage === 'done') {
       summaryEl.textContent = `新增 ${state.newArticles || 0}，更新 ${state.updatedArticles || 0}`;
     } else if (state.stage === 'partial_failed') {
-      const failCount = (state.failedMetrics || 0) + (state.failedContent || 0);
-      summaryEl.textContent = `已完成上传，失败 ${failCount}（指标 ${state.failedMetrics || 0} / 全文 ${state.failedContent || 0}）`;
+      const failCount = (state.failedMetrics || 0) + (state.failedContent || 0) + (state.failedUpload || 0);
+      summaryEl.textContent = `已完成上传，失败 ${failCount}（指标 ${state.failedMetrics || 0} / 全文 ${state.failedContent || 0} / 上传 ${state.failedUpload || 0}）`;
     } else if (state.stage === 'ready' && latestLastSync) {
       summaryEl.textContent = `上次同步 ${formatTime(latestLastSync.updatedAt)} · ${latestLastSync.total || 0} 篇`;
     } else {
@@ -690,6 +701,9 @@
       updatedArticles: payload.updatedArticles ?? 0,
       failedMetrics: payload.failedMetrics ?? 0,
       failedContent: payload.failedContent ?? 0,
+      failedUpload: payload.failedUpload ?? 0,
+      uploadedSnapshots: payload.uploadedSnapshots ?? 0,
+      uploadedSnapshotsWithMetrics: payload.uploadedSnapshotsWithMetrics ?? 0,
       updatedAt: new Date().toISOString(),
     };
 
@@ -702,6 +716,9 @@
         updatedArticles: state.updatedArticles,
         failedMetrics: state.failedMetrics,
         failedContent: state.failedContent,
+        failedUpload: state.failedUpload,
+        uploadedSnapshots: state.uploadedSnapshots,
+        uploadedSnapshotsWithMetrics: state.uploadedSnapshotsWithMetrics,
       };
     }
 
@@ -733,12 +750,12 @@
 
     const mpToken = parseTokenFromUrl();
     if (!mpToken) {
-      console.info('[gzh-extension] skip auto sync: no mp token in page', { source });
+      safeLog('info', 'skip auto sync: no mp token in page', { source });
       return;
     }
 
     lastAutoSyncAuthToken = newToken;
-    console.info('[gzh-extension] auto start sync after auth ready', { source });
+    safeLog('info', 'auto start sync after auth ready', { source });
     createPanel();
     openPanel();
     void startSync();
@@ -913,11 +930,12 @@
   function safeLog(level, message, payload) {
     try {
       const fn = typeof console?.[level] === 'function' ? console[level] : console.log;
+      const text = `${LOG_PREFIX} ${message}`;
       if (payload === undefined) {
-        fn.call(console, message);
+        fn.call(console, text);
         return;
       }
-      fn.call(console, message, payload);
+      fn.call(console, text, payload);
     } catch {
       // ignore log failures in extension context
     }
@@ -940,6 +958,20 @@
       trafficSources: metrics.trafficSources || {},
       newFollowers: metrics.newFollowers || 0,
     };
+  }
+
+  function hasSnapshotCoreMetrics(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return false;
+    }
+    return Number(snapshot.readCount || 0) > 0
+      || Number(snapshot.sendCount || 0) > 0
+      || Number(snapshot.shareCount || 0) > 0
+      || Number(snapshot.likeCount || 0) > 0
+      || Number(snapshot.wowCount || 0) > 0
+      || Number(snapshot.commentCount || 0) > 0
+      || Number(snapshot.saveCount || 0) > 0
+      || Number(snapshot.newFollowers || 0) > 0;
   }
 
   async function uploadSyncChunk(apiBase, authToken, articles, snapshots) {
@@ -1028,9 +1060,11 @@
       let newCandidates = 0;
       let uploadedArticles = 0;
       let uploadedSnapshots = 0;
+      let uploadedSnapshotsWithMetrics = 0;
       let newArticles = 0;
       let updatedArticles = 0;
       let lastMetricsRequestedAt = 0;
+      let metricsRequestIntervalMs = METRICS_BASE_INTERVAL_MS;
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
@@ -1055,9 +1089,9 @@
 
         let metrics = null;
         const elapsedMs = Date.now() - lastMetricsRequestedAt;
-        const waitMs = METRICS_FIRST_PASS_INTERVAL_MS - elapsedMs;
+        const waitMs = metricsRequestIntervalMs - elapsedMs;
         if (waitMs > 0) {
-          await sleep(waitMs + Math.floor(Math.random() * 25));
+          await sleep(waitMs + Math.floor(Math.random() * 40));
         }
         lastMetricsRequestedAt = Date.now();
         let metricsError = await fetchArticleMetrics(token, article)
@@ -1067,6 +1101,10 @@
           })
           .catch((error) => error);
         if (metricsError && isFreqControlReason(metricsError?.message || String(metricsError))) {
+          metricsRequestIntervalMs = Math.min(
+            METRICS_MAX_INTERVAL_MS,
+            Math.max(metricsRequestIntervalMs + 220, METRICS_BASE_INTERVAL_MS + 120)
+          );
           await sleep(METRICS_FREQ_RETRY_MIN_MS + Math.floor(Math.random() * METRICS_FREQ_RETRY_JITTER_MS));
           lastMetricsRequestedAt = Date.now();
           metricsError = await fetchArticleMetrics(token, article)
@@ -1076,14 +1114,21 @@
             })
             .catch((error) => error);
         }
+        if (!metricsError) {
+          metricsRequestIntervalMs = Math.max(
+            METRICS_MIN_INTERVAL_MS,
+            Math.floor(metricsRequestIntervalMs * 0.95)
+          );
+        }
         if (metricsError) {
           failedMetrics += 1;
           if (failedMetrics <= 5) {
-            safeLog('info', '[gzh-extension] metrics fetch failed', {
+            safeLog('warn', 'metrics fetch failed', {
               index,
               wxArticleId: article?.wxArticleId ?? '',
               title: article?.title ?? '',
               reason: metricsError?.message || String(metricsError),
+              intervalMs: metricsRequestIntervalMs,
             });
           }
         }
@@ -1096,7 +1141,7 @@
             const error = contentResult.error;
             failedContent += 1;
             if (failedContent <= 5) {
-              safeLog('info', '[gzh-extension] content fetch failed', {
+              safeLog('warn', 'content fetch failed', {
                 index,
                 wxArticleId: article?.wxArticleId ?? '',
                 title: article?.title ?? '',
@@ -1119,6 +1164,7 @@
         };
 
         const snapshot = buildSnapshotPayload(article, metrics);
+        const snapshotHasMetrics = hasSnapshotCoreMetrics(snapshot);
         notifyState({
           stage: 'upload',
           message: `正在上传 ${index + 1}/${articles.length}...`,
@@ -1138,25 +1184,30 @@
           uploadedArticles += 1;
           if (snapshot) {
             uploadedSnapshots += 1;
+            if (snapshotHasMetrics) {
+              uploadedSnapshotsWithMetrics += 1;
+            }
           }
           mergedIds[article.wxArticleId] = true;
           if (index < 3 || (index + 1) % 10 === 0 || index + 1 === articles.length) {
-            safeLog('info', '[gzh-extension] sync incremental progress', {
+            safeLog('info', 'sync incremental progress', {
               index: index + 1,
               total: articles.length,
               uploadedArticles,
               uploadedSnapshots,
+              uploadedSnapshotsWithMetrics,
               newArticles,
               updatedArticles,
               failedMetrics,
               failedContent,
               failedUpload,
+              metricsRequestIntervalMs,
             });
           }
         } catch (error) {
           failedUpload += 1;
           if (failedUpload <= 5) {
-            safeLog('info', '[gzh-extension] upload failed', {
+            safeLog('warn', 'upload failed', {
               index,
               wxArticleId: article?.wxArticleId ?? '',
               title: article?.title ?? '',
@@ -1166,11 +1217,12 @@
         }
       }
 
-      console.info('[gzh-extension] sync upload payload', {
+      safeLog('info', 'sync done summary', {
         apiBase,
         fetchedArticles: articles.length,
         uploadArticles: uploadedArticles,
         snapshots: uploadedSnapshots,
+        snapshotsWithMetrics: uploadedSnapshotsWithMetrics,
         newCandidates,
         failedMetrics,
         failedContent,
@@ -1188,6 +1240,7 @@
         failedContent,
         failedUpload,
         uploadedSnapshots,
+        uploadedSnapshotsWithMetrics,
       };
 
       await setStorage({ gzhSyncedArticleIds: mergedIds, gzhLastSync: lastSync });
@@ -1206,6 +1259,7 @@
           failedContent,
           failedUpload,
           uploadedSnapshots,
+          uploadedSnapshotsWithMetrics,
         });
         return;
       }
@@ -1219,6 +1273,7 @@
         newArticles,
         updatedArticles,
         uploadedSnapshots,
+        uploadedSnapshotsWithMetrics,
       });
     } catch (error) {
       notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
@@ -1232,7 +1287,6 @@
     const all = [];
     let begin = 0;
     const pageSize = 10;
-    let pageIndex = 0;
 
     while (begin < 1000) {
       const url = `/cgi-bin/appmsgpublish?sub=list&begin=${begin}&count=${pageSize}&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
@@ -1255,7 +1309,7 @@
         }
       }
       if (!json || typeof json !== 'object') {
-        console.warn('[gzh-extension] appmsgpublish response not json', {
+        safeLog('warn', 'appmsgpublish response not json', {
           begin,
           status: response.status,
           bodyHead: String(text).slice(0, 180),
@@ -1266,7 +1320,7 @@
       const ret = Number(json.base_resp?.ret ?? json.ret ?? 0);
       const errMsg = String(json.base_resp?.err_msg || json.err_msg || '');
       if (ret !== 0) {
-        console.warn('[gzh-extension] appmsgpublish returned non-zero ret', { ret, errMsg, begin });
+        safeLog('warn', 'appmsgpublish returned non-zero ret', { ret, errMsg, begin });
         if (ret === 200013 || /invalid|expired|登录|token/i.test(errMsg)) {
           throw new Error('微信后台登录已过期，请刷新页面重新登录后再同步');
         }
@@ -1287,15 +1341,9 @@
       const publishList = Array.isArray(publishListParsed) ? publishListParsed : [];
 
       const parsed = publishList.flatMap((item, itemIndex) => parseArticlesFromPublishItem(item, itemIndex));
-      console.info('[gzh-extension] appmsgpublish page', {
-        pageIndex,
-        begin,
-        publishList: publishList.length,
-        parsed: parsed.length,
-      });
       if (publishList.length > 0 && parsed.length === 0) {
         const sample = publishList[0] || {};
-        console.warn('[gzh-extension] publish list parse empty on non-empty page', {
+        safeLog('warn', 'publish list parse empty on non-empty page', {
           sampleKeys: Object.keys(sample),
           samplePublishInfoHead: String(sample.publish_info || sample.publishInfo || '').slice(0, 180),
         });
@@ -1306,14 +1354,13 @@
 
       all.push(...parsed);
       begin += pageSize;
-      pageIndex += 1;
       if (publishList.length < pageSize) {
         break;
       }
     }
 
     const deduped = dedupeById(all);
-    console.info('[gzh-extension] appmsgpublish done', {
+    safeLog('info', 'appmsgpublish done', {
       rawCount: all.length,
       dedupedCount: deduped.length,
     });
@@ -1366,7 +1413,7 @@
         1
       );
       const title = rawTitle;
-      const publishTs = Number(article.create_time || article.publish_time || article.update_time || publishTsFallback || 0);
+      const publishTs = Number(article.publish_time || article.create_time || publishTsFallback || 0);
       const wxArticleId = String(
         article.aid
           || `${midFromUrl || metricMsgId || ''}_${metricMsgIndex}`
@@ -1465,6 +1512,14 @@
     const m = shifted.getUTCMonth() + 1;
     const d = shifted.getUTCDate();
     return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  function formatIsoFromUnixSeconds(seconds) {
+    const ts = Number(seconds);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return '';
+    }
+    return new Date(ts * 1000).toISOString();
   }
 
   function formatDateFromDateWithOffset(date, offsetHours) {
@@ -1665,12 +1720,28 @@
       || extractValueByToken(raw, 'err_msg =');
 
     const payload = {};
-    const articleData = parseLooseJsonObject(articleDataRaw);
-    const articleSummaryData = parseLooseJsonObject(articleSummaryDataRaw);
-    const subsTransform = parseLooseJsonObject(subsTransformRaw);
+    let articleData = parseLooseJsonObject(articleDataRaw);
+    let articleSummaryData = parseLooseJsonObject(articleSummaryDataRaw);
+    let subsTransform = parseLooseJsonObject(subsTransformRaw);
     const baseResp = parseLooseJsonObject(baseRespRaw);
     const ret = toLooseNumber(retRaw);
     const errMsg = String(errMsgRaw || '').replace(/^['"]|['"]$/g, '').trim();
+
+    if (!articleData) {
+      const articleDataMatch = raw.match(/articleData\s*:\s*(\{[\s\S]*?\})\s*,\s*articleSummaryData\s*:/i);
+      if (articleDataMatch?.[1]) {
+        articleData = parseLooseJsonObject(articleDataMatch[1]);
+      }
+    }
+    if (!articleSummaryData) {
+      const summaryMatch = raw.match(/articleSummaryData\s*:\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*,\s*detailData\s*:/i);
+      if (summaryMatch?.[1]) {
+        articleSummaryData = parseLooseJsonObject(summaryMatch[1]);
+      }
+    }
+    if (!subsTransform && articleData && typeof articleData === 'object') {
+      subsTransform = parseLooseJsonObject(articleData.subs_transform);
+    }
 
     if (articleData && typeof articleData === 'object') {
       payload.articleData = articleData;
@@ -1694,6 +1765,84 @@
       return null;
     }
     return payload;
+  }
+
+  function extractMetricNumberFromRaw(raw, key) {
+    if (typeof raw !== 'string' || !raw || !key) {
+      return 0;
+    }
+    const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const reg = new RegExp(`["']${escapedKey}["']\\s*:\\s*["']?(-?\\d+(?:\\.\\d+)?)`, 'i');
+    const matched = raw.match(reg);
+    if (!matched?.[1]) {
+      return 0;
+    }
+    const parsed = Number(matched[1]);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function extractMetricsFromRawHtml(raw) {
+    if (!raw || typeof raw !== 'string') {
+      return null;
+    }
+    const readCount = extractMetricNumberFromRaw(raw, 'read_uv')
+      || extractMetricNumberFromRaw(raw, 'read_num')
+      || extractMetricNumberFromRaw(raw, 'int_page_read_user');
+    const sendCount = extractMetricNumberFromRaw(raw, 'send_uv');
+    const shareCount = extractMetricNumberFromRaw(raw, 'share_uv')
+      || extractMetricNumberFromRaw(raw, 'share_user')
+      || extractMetricNumberFromRaw(raw, 'share_count');
+    const likeCount = extractMetricNumberFromRaw(raw, 'like_cnt')
+      || extractMetricNumberFromRaw(raw, 'like_num');
+    const wowCount = extractMetricNumberFromRaw(raw, 'zaikan_cnt')
+      || extractMetricNumberFromRaw(raw, 'wow_num')
+      || extractMetricNumberFromRaw(raw, 'old_like_num');
+    const commentCount = extractMetricNumberFromRaw(raw, 'comment_cnt')
+      || extractMetricNumberFromRaw(raw, 'comment_id_count');
+    const saveCount = extractMetricNumberFromRaw(raw, 'collection_uv')
+      || extractMetricNumberFromRaw(raw, 'fav_num')
+      || extractMetricNumberFromRaw(raw, 'save_count');
+    const completionRate = extractMetricNumberFromRaw(raw, 'finished_read_pv_ratio')
+      || extractMetricNumberFromRaw(raw, 'complete_read_rate');
+    const newFollowers = extractMetricNumberFromRaw(raw, 'follow_after_read_uv')
+      || extractMetricNumberFromRaw(raw, 'new_fans');
+
+    return {
+      readCount,
+      sendCount,
+      shareCount,
+      likeCount,
+      wowCount,
+      commentCount,
+      saveCount,
+      completionRate,
+      newFollowers,
+    };
+  }
+
+  function mergeMetricsByPositiveValue(base, fallback) {
+    if (!fallback || typeof fallback !== 'object') {
+      return base;
+    }
+    const merged = { ...(base || {}) };
+    [
+      'readCount',
+      'sendCount',
+      'shareCount',
+      'likeCount',
+      'wowCount',
+      'commentCount',
+      'saveCount',
+      'completionRate',
+      'newFollowers',
+    ].forEach((key) => {
+      const baseValue = Number(merged[key] || 0);
+      const fallbackValue = Number(fallback[key] || 0);
+      if (baseValue <= 0 && fallbackValue > 0) {
+        merged[key] = fallbackValue;
+      }
+    });
+    return merged;
   }
 
   function parsePublishPageFromHtml(raw) {
@@ -1735,20 +1884,20 @@
     if (!json || typeof json !== 'object') {
       throw new Error(`文章指标接口返回格式异常(status=${response.status})`);
     }
-    return json;
+    return { json, raw: text };
   }
 
   async function requestMetricsWithFallback(token, msgIdBase, msgIndex, publishDate) {
-    let json = await requestMetricsPayload(token, `${msgIdBase}_${msgIndex}`, publishDate);
-    let ret = responseRet(json);
+    let result = await requestMetricsPayload(token, `${msgIdBase}_${msgIndex}`, publishDate);
+    let ret = responseRet(result?.json);
     if (ret !== 0 && msgIndex !== 1) {
       const fallback = await requestMetricsPayload(token, `${msgIdBase}_1`, publishDate).catch(() => null);
       if (fallback) {
-        json = fallback;
-        ret = responseRet(json);
+        result = fallback;
+        ret = responseRet(result?.json);
       }
     }
-    return { json, ret };
+    return { json: result?.json, raw: result?.raw, ret };
   }
 
   function toLooseNumber(value) {
@@ -1937,8 +2086,10 @@
     const ctMatch = text.match(/(?:var|window\.)\s*ct\s*=\s*["']?(\d{9,})["']?/i)
       || text.match(/publish_time["']?\s*:\s*["']?(\d{9,})["']?/i);
     const msgIdBase = sanitizeMsgId(midMatch?.[1] || '');
-    const publishDate = formatChinaDateFromUnixSeconds(ctMatch?.[1]);
-    return { msgIdBase, publishDate };
+    const publishTimestamp = Number(ctMatch?.[1] || 0);
+    const publishDate = formatChinaDateFromUnixSeconds(publishTimestamp);
+    const publishTime = formatIsoFromUnixSeconds(publishTimestamp);
+    return { msgIdBase, publishDate, publishTime, publishTimestamp };
   }
 
   async function resolveMetricParamsFromArticlePage(article) {
@@ -1949,7 +2100,7 @@
     const response = await fetch(secureUrl, { credentials: 'include' });
     const html = await response.text();
     const meta = parseArticleMetaFromHtml(html, secureUrl);
-    if (!meta.msgIdBase) {
+    if (!meta.msgIdBase && !meta.publishDate && !meta.publishTime) {
       return null;
     }
     return meta;
@@ -1965,19 +2116,32 @@
     const publishDateCandidates = buildPublishDateCandidates(article);
     let usedPublishDate = publishDateCandidates[0] || '';
 
+    const applyResolvedPublishMeta = (resolved) => {
+      if (!resolved || typeof resolved !== 'object') {
+        return;
+      }
+      if (resolved.publishTime) {
+        article.publishTime = resolved.publishTime;
+      }
+      if (resolved.publishDate) {
+        article.publishDate = resolved.publishDate;
+        if (!publishDateCandidates.includes(resolved.publishDate)) {
+          publishDateCandidates.unshift(resolved.publishDate);
+        }
+      }
+    };
+
     let resolvedFromArticlePage = false;
     let currentMsgIdBase = msgIdBase;
     if (!usedPublishDate) {
       const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      applyResolvedPublishMeta(resolved);
+      if (resolved?.publishDate && !usedPublishDate) {
+        usedPublishDate = resolved.publishDate;
+      }
       if (resolved?.msgIdBase) {
-        resolvedFromArticlePage = true;
         currentMsgIdBase = resolved.msgIdBase;
-        if (resolved.publishDate) {
-          usedPublishDate = resolved.publishDate;
-          if (!publishDateCandidates.includes(resolved.publishDate)) {
-            publishDateCandidates.unshift(resolved.publishDate);
-          }
-        }
+        resolvedFromArticlePage = true;
       }
     }
     if (!usedPublishDate) {
@@ -1987,12 +2151,12 @@
     let requestResult = await requestMetricsWithFallback(token, currentMsgIdBase, msgIndex, usedPublishDate);
     if (requestResult.ret !== 0 && /invalid args/i.test(responseErrMsg(requestResult.json))) {
       const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      applyResolvedPublishMeta(resolved);
       if (resolved?.msgIdBase) {
         resolvedFromArticlePage = true;
         currentMsgIdBase = resolved.msgIdBase;
-        if (resolved.publishDate && !publishDateCandidates.includes(resolved.publishDate)) {
-          publishDateCandidates.unshift(resolved.publishDate);
-          usedPublishDate = publishDateCandidates[0];
+        if (resolved.publishDate) {
+          usedPublishDate = resolved.publishDate;
         }
         requestResult = await requestMetricsWithFallback(token, currentMsgIdBase, msgIndex, usedPublishDate);
       }
@@ -2002,21 +2166,24 @@
       throw new Error(`文章指标接口异常(${requestResult.ret})${errMsg ? `: ${errMsg}` : ''}`);
     }
     let metrics = extractMetricsFromPayload(requestResult.json);
+    const metricsFromRaw = extractMetricsFromRawHtml(requestResult.raw);
+    metrics = mergeMetricsByPositiveValue(metrics, metricsFromRaw);
 
     if (isCoreMetricsZero(metrics) && !resolvedFromArticlePage && article?.contentUrl) {
       const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
+      applyResolvedPublishMeta(resolved);
       if (resolved?.msgIdBase && resolved.publishDate) {
         const resolvedResult = await requestMetricsWithFallback(token, resolved.msgIdBase, msgIndex, resolved.publishDate).catch(() => null);
         if (resolvedResult && resolvedResult.ret === 0) {
-          const resolvedMetrics = extractMetricsFromPayload(resolvedResult.json);
+          const resolvedMetrics = mergeMetricsByPositiveValue(
+            extractMetricsFromPayload(resolvedResult.json),
+            extractMetricsFromRawHtml(resolvedResult.raw)
+          );
           if (!isCoreMetricsZero(resolvedMetrics)) {
             metrics = resolvedMetrics;
             currentMsgIdBase = resolved.msgIdBase;
             usedPublishDate = resolved.publishDate;
             resolvedFromArticlePage = true;
-            if (!publishDateCandidates.includes(resolved.publishDate)) {
-              publishDateCandidates.unshift(resolved.publishDate);
-            }
           }
         }
       }
@@ -2032,11 +2199,14 @@
         if (!oneResult || oneResult.ret !== 0) {
           continue;
         }
-        const oneMetrics = extractMetricsFromPayload(oneResult.json);
+        const oneMetrics = mergeMetricsByPositiveValue(
+          extractMetricsFromPayload(oneResult.json),
+          extractMetricsFromRawHtml(oneResult.raw)
+        );
         if (!isCoreMetricsZero(oneMetrics)) {
           metrics = oneMetrics;
           usedPublishDate = oneDate;
-          console.info('[gzh-extension] metrics recovered by publish_date retry', {
+          safeLog('info', 'metrics recovered by publish_date retry', {
             msgIdBase,
             msgIndex,
             originDate: publishDateCandidates[0],
@@ -2049,7 +2219,9 @@
 
     if (zeroMetricsLogCount < 5 && isCoreMetricsZero(metrics)) {
       zeroMetricsLogCount += 1;
-      console.info('[gzh-extension] metrics all zero', {
+      safeLog('warn', 'metrics all zero', {
+        wxArticleId: article?.wxArticleId ?? '',
+        title: article?.title ?? '',
         msgIdBase: currentMsgIdBase,
         msgIndex,
         publishDateCandidates,
@@ -2197,7 +2369,9 @@
     });
   } catch (error) {
     if (!isContextInvalidatedError(error)) {
-      console.warn('[gzh-extension] bind runtime listener failed', error);
+      safeLog('warn', 'bind runtime listener failed', {
+        reason: error?.message || String(error),
+      });
     }
   }
 
@@ -2228,7 +2402,9 @@
     });
   } catch (error) {
     if (!isContextInvalidatedError(error)) {
-      console.warn('[gzh-extension] bind storage listener failed', error);
+      safeLog('warn', 'bind storage listener failed', {
+        reason: error?.message || String(error),
+      });
     }
   }
 
@@ -2244,7 +2420,9 @@
       }
     } catch (error) {
       if (!isContextInvalidatedError(error)) {
-        console.warn('[gzh-extension] refreshFromStorage failed', error);
+        safeLog('warn', 'refreshFromStorage failed', {
+          reason: error?.message || String(error),
+        });
       }
     }
   }
@@ -2268,7 +2446,9 @@
 
   void init().catch((error) => {
     if (!isContextInvalidatedError(error)) {
-      console.warn('[gzh-extension] init failed', error);
+      safeLog('warn', 'init failed', {
+        reason: error?.message || String(error),
+      });
     }
   });
 })();

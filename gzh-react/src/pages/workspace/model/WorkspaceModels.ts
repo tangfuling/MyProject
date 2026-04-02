@@ -1,3 +1,5 @@
+import type { PageResult } from '../../../common/network/ApiResponse';
+
 export type WorkspaceOverview = {
   range: string;
   header: WorkspaceHeader;
@@ -71,3 +73,5 @@ export type WorkspaceArticleCard = {
   completionRate?: number;
   trafficSources: Record<string, number>;
 };
+
+export type WorkspaceArticlePage = PageResult<WorkspaceArticleCard>;

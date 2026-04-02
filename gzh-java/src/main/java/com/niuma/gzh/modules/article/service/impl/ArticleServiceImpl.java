@@ -18,8 +18,13 @@ import com.niuma.gzh.modules.article.repository.ArticleSnapshotRepository;
 import com.niuma.gzh.modules.article.service.ArticleService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +37,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 public class ArticleServiceImpl extends BaseService implements ArticleService {
+    private static final List<DateTimeFormatter> LOCAL_DATE_TIME_FORMATTERS = List.of(
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
+    );
+    private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = List.of(
+        DateTimeFormatter.ISO_LOCAL_DATE,
+        DateTimeFormatter.ofPattern("yyyy/MM/dd")
+    );
+
     private final ArticleRepository articleRepository;
     private final ArticleSnapshotRepository snapshotRepository;
     private final JsonUtil jsonUtil;
@@ -50,13 +66,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         Long userId = AuthContext.requiredUserId();
         int articleInputSize = dto.getArticles() == null ? 0 : dto.getArticles().size();
         int snapshotInputSize = dto.getSnapshots() == null ? 0 : dto.getSnapshots().size();
-        log.info("[sync/articles] start userId={}, articleInputSize={}, snapshotInputSize={}", userId, articleInputSize, snapshotInputSize);
+        log.info("[tfling] sync/articles start userId={}, articleInputSize={}, snapshotInputSize={}", userId, articleInputSize, snapshotInputSize);
         if (articleInputSize > 0) {
             String sample = dto.getArticles().stream()
                 .limit(5)
                 .map(SyncArticlesDTO.ArticleItem::getWxArticleId)
                 .collect(Collectors.joining(","));
-            log.info("[sync/articles] article sample wxArticleIds={}", sample);
+            log.info("[tfling] sync/articles article sample wxArticleIds={}", sample);
         }
 
         int newCount = 0;
@@ -76,6 +92,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 skippedDeletedArticle++;
                 continue;
             }
+            LocalDateTime parsedPublishTime = parseDateTime(item.getPublishTime());
             ArticleEntity existed = articleRepository.findByUserAndWxId(userId, item.getWxArticleId());
             if (existed == null) {
                 ArticleEntity created = new ArticleEntity();
@@ -84,7 +101,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 created.setTitle(item.getTitle());
                 created.setContent(item.getContent());
                 created.setWordCount(item.getWordCount() == null ? 0 : item.getWordCount());
-                created.setPublishTime(parseDateTime(item.getPublishTime()));
+                created.setPublishTime(parsedPublishTime == null ? LocalDateTime.now() : parsedPublishTime);
                 articleRepository.save(created);
                 newCount++;
             } else {
@@ -93,7 +110,9 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                     existed.setContent(item.getContent());
                 }
                 existed.setWordCount(item.getWordCount() == null ? existed.getWordCount() : item.getWordCount());
-                existed.setPublishTime(parseDateTime(item.getPublishTime()));
+                if (parsedPublishTime != null) {
+                    existed.setPublishTime(parsedPublishTime);
+                }
                 articleRepository.save(existed);
                 updatedCount++;
             }
@@ -142,7 +161,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         }
 
         log.info(
-            "[sync/articles] done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}, snapshotAllZero={}, skippedDeletedArticle={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}",
+            "[tfling] sync/articles done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}, snapshotAllZero={}, skippedDeletedArticle={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}",
             userId, newCount, updatedCount, snapshotSaved, snapshotMissedArticle, snapshotAllZero, skippedDeletedArticle, snapshotReadTotal, snapshotSendTotal, snapshotShareTotal, snapshotLikeTotal, snapshotFollowTotal
         );
 
@@ -308,15 +327,43 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     }
 
     private LocalDateTime parseDateTime(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String trimmed = text.trim();
         try {
-            return OffsetDateTime.parse(text).toLocalDateTime();
+            return OffsetDateTime.parse(trimmed).toLocalDateTime();
         } catch (Exception ignore) {
+        }
+        try {
+            return Instant.parse(trimmed).atZone(ZoneId.systemDefault()).toLocalDateTime();
+        } catch (Exception ignore) {
+        }
+        try {
+            return LocalDateTime.parse(trimmed);
+        } catch (Exception ignore) {
+        }
+        if (trimmed.matches("^\\d{10}$")) {
+            long seconds = Long.parseLong(trimmed);
+            return Instant.ofEpochSecond(seconds).atZone(ZoneId.systemDefault()).toLocalDateTime();
+        }
+        if (trimmed.matches("^\\d{13}$")) {
+            long millis = Long.parseLong(trimmed);
+            return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDateTime();
+        }
+        for (DateTimeFormatter formatter : LOCAL_DATE_TIME_FORMATTERS) {
             try {
-                return LocalDateTime.parse(text);
-            } catch (Exception ex) {
-                return LocalDateTime.now();
+                return LocalDateTime.parse(trimmed, formatter);
+            } catch (DateTimeParseException ignore) {
             }
         }
+        for (DateTimeFormatter formatter : LOCAL_DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(trimmed, formatter).atStartOfDay();
+            } catch (DateTimeParseException ignore) {
+            }
+        }
+        return null;
     }
 
     private boolean shouldSkipArticle(String title) {

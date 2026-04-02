@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
 import MainNavTabs from '../../../common/ui/MainNavTabs';
@@ -18,19 +18,13 @@ const modelOptions = [
   { code: 'claude', label: 'Claude', price: '¥15/百万tok' },
   { code: 'gpt', label: 'GPT', price: '¥10/百万tok' },
 ];
+const ARTICLE_PAGE_SIZE = 20;
 
 function formatDateTime(value?: string) {
   if (!value) {
     return '--';
   }
   return value.replace('T', ' ').slice(0, 16);
-}
-
-function formatDate(value?: string) {
-  if (!value) {
-    return '--';
-  }
-  return value.replace('T', ' ').slice(5, 10);
 }
 
 function formatRangeLabel(range: string) {
@@ -86,6 +80,7 @@ export default function WorkspacePage() {
   const [chatDone, setChatDone] = useState<ChatDoneEvent | null>(null);
   const streamTextRef = useRef('');
   const chatAbortRef = useRef<AbortController | null>(null);
+  const drawerBodyRef = useRef<HTMLDivElement | null>(null);
 
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -145,6 +140,24 @@ export default function WorkspacePage() {
     });
   }, [overviewQuery.status, overviewQuery.fetchStatus, overviewQuery.data, overviewQuery.isError, range]);
 
+  const articleListQuery = useInfiniteQuery({
+    queryKey: ['workspace-articles', range],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => WorkspaceApi.articles(range, pageParam, ARTICLE_PAGE_SIZE),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.records.length, 0);
+      if (loaded >= lastPage.total) {
+        return undefined;
+      }
+      return allPages.length + 1;
+    },
+    enabled: drawerOpen,
+    networkMode: 'always',
+    refetchOnMount: 'always',
+    refetchOnReconnect: 'always',
+    staleTime: 0,
+  });
+
   const updateModelMutation = useMutation({
     mutationFn: async (model: string) => SettingsApi.updateModel(model),
     onSuccess: () => {
@@ -156,8 +169,12 @@ export default function WorkspacePage() {
   const analysisPanel = overview?.analysisPanel;
   const reportId = analysisPanel?.reportId;
   const rangeLabel = formatRangeLabel(range);
+  const pagedArticles = useMemo(
+    () => articleListQuery.data?.pages.flatMap((page) => page.records) ?? [],
+    [articleListQuery.data]
+  );
   const orderedArticles = useMemo(() => {
-    const list = [...(overview?.articles ?? [])];
+    const list = [...pagedArticles];
     list.sort((a, b) => {
       const diff = toTimestamp(b.publishTime) - toTimestamp(a.publishTime);
       if (diff !== 0) {
@@ -166,7 +183,9 @@ export default function WorkspacePage() {
       return (b.id ?? 0) - (a.id ?? 0);
     });
     return list;
-  }, [overview?.articles]);
+  }, [pagedArticles]);
+  const drawerTotal = articleListQuery.data?.pages[0]?.total ?? 0;
+  const drawerLoaded = orderedArticles.length;
 
   const drawerStats = useMemo(() => {
     return orderedArticles.reduce(
@@ -200,6 +219,30 @@ export default function WorkspacePage() {
     const size = orderedArticles.length || 1;
     return (drawerStats.completion / size).toFixed(0);
   }, [drawerStats.completion, orderedArticles.length]);
+
+  const onDrawerBodyScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (!articleListQuery.hasNextPage || articleListQuery.isFetchingNextPage) {
+      return;
+    }
+    const target = event.currentTarget;
+    const remain = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (remain < 120) {
+      void articleListQuery.fetchNextPage();
+    }
+  };
+
+  useEffect(() => {
+    if (!drawerOpen || !articleListQuery.hasNextPage || articleListQuery.isFetchingNextPage) {
+      return;
+    }
+    const element = drawerBodyRef.current;
+    if (!element) {
+      return;
+    }
+    if (element.scrollHeight <= element.clientHeight + 8) {
+      void articleListQuery.fetchNextPage();
+    }
+  }, [drawerOpen, articleListQuery.hasNextPage, articleListQuery.isFetchingNextPage, articleListQuery.data, articleListQuery.fetchNextPage]);
 
   const onSend = () => {
     const message = input.trim();
@@ -495,12 +538,12 @@ export default function WorkspacePage() {
         <div className="drawer-head">
           <div>
             <div className="drawer-head-title">文章数据 · {rangeLabel}</div>
-            <div className="drawer-head-sub">{orderedArticles.length} 篇 · 上次同步 {formatDateTime(overview?.header.lastSyncAt)}</div>
+            <div className="drawer-head-sub">已加载 {drawerLoaded}/{drawerTotal || drawerLoaded} 篇 · 按发布时间倒序</div>
           </div>
           <button type="button" className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
         </div>
 
-        <div className="drawer-body">
+        <div ref={drawerBodyRef} className="drawer-body" onScroll={onDrawerBodyScroll}>
           <div className="drawer-stat-grid">
             <div className="dstat"><div className="dstat-label">总阅读</div><div className="dstat-val">{drawerStats.totalRead}</div></div>
             <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{orderedArticles.length ? Math.round(drawerStats.totalRead / orderedArticles.length) : 0}</div></div>
@@ -520,18 +563,21 @@ export default function WorkspacePage() {
           </div>
 
           <div className="drawer-section-title">文章列表</div>
+          {articleListQuery.isPending ? <div className="drawer-list-tip">加载中...</div> : null}
+          {articleListQuery.isError ? <div className="drawer-list-tip">加载失败，请稍后重试</div> : null}
+          {!articleListQuery.isPending && !articleListQuery.isError && orderedArticles.length === 0 ? <div className="drawer-list-tip">暂无文章</div> : null}
           {orderedArticles.map((article) => (
             <div key={article.id} className="art-row">
               <div className="art-top">
                 <div className="art-title">{article.title}</div>
-                <div className="art-date">{formatDate(article.publishTime)}</div>
+                <div className="art-date">{formatDateTime(article.publishTime)}</div>
               </div>
               <div className="art-stats">
-                <div className="art-stat">阅读 <b>{article.readCount}</b></div>
-                <div className="art-stat">分享 <b>{article.shareCount}</b></div>
-                <div className="art-stat">点赞 <b>{article.likeCount}</b></div>
-                <div className="art-stat">在看 <b>{article.wowCount}</b></div>
-                <div className="art-stat">留言 <b>{article.commentCount}</b></div>
+                <div className="art-stat">阅读 <b>{article.readCount ?? 0}</b></div>
+                <div className="art-stat">分享 <b>{article.shareCount ?? 0}</b></div>
+                <div className="art-stat">点赞 <b>{article.likeCount ?? 0}</b></div>
+                <div className="art-stat">在看 <b>{article.wowCount ?? 0}</b></div>
+                <div className="art-stat">留言 <b>{article.commentCount ?? 0}</b></div>
                 <div className="art-stat">完读 <b>{Math.round(Number(article.completionRate ?? 0))}%</b></div>
               </div>
               <div className="src-labels compact">
@@ -541,6 +587,13 @@ export default function WorkspacePage() {
               </div>
             </div>
           ))}
+          {articleListQuery.isFetchingNextPage ? <div className="drawer-list-tip">加载更多中...</div> : null}
+          {!articleListQuery.isPending && !articleListQuery.isFetchingNextPage && articleListQuery.hasNextPage ? (
+            <div className="drawer-list-tip">向下滑动加载更多</div>
+          ) : null}
+          {!articleListQuery.isPending && !articleListQuery.hasNextPage && orderedArticles.length > 0 ? (
+            <div className="drawer-list-tip">已加载全部</div>
+          ) : null}
         </div>
       </div>
     </div>

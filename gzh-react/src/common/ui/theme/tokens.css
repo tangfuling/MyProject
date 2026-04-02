@@ -1116,6 +1116,13 @@ body {
   color: var(--text-muted);
 }
 
+.drawer-list-tip {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
 .profile-page {
   min-height: 100vh;
   background: var(--bg);

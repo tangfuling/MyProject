@@ -4,6 +4,16 @@ const ALLOWED_PROXY_PREFIXES = [
   'https://api-gzh.niuma.com/',
   'https://api-gzh.niumatech.com/',
 ];
+const LOG_PREFIX = '[tfling]';
+
+function bgLog(level, message, payload) {
+  const fn = typeof console?.[level] === 'function' ? console[level] : console.log;
+  if (payload === undefined) {
+    fn(`${LOG_PREFIX} ${message}`);
+    return;
+  }
+  fn(`${LOG_PREFIX} ${message}`, payload);
+}
 
 function isAllowedProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') {
@@ -16,11 +26,11 @@ function setState(state) {
   try {
     chrome.storage.local.set({ [STORAGE_KEY]: state }, () => {
       if (chrome.runtime.lastError) {
-        console.warn('[gzh-extension][bg] setState failed', chrome.runtime.lastError.message);
+        bgLog('warn', 'bg setState failed', chrome.runtime.lastError.message);
       }
     });
   } catch (error) {
-    console.warn('[gzh-extension][bg] setState threw', error?.message || error);
+    bgLog('warn', 'bg setState threw', error?.message || error);
   }
 }
 
@@ -28,7 +38,7 @@ function safeRespond(sendResponse, payload) {
   try {
     sendResponse(payload);
   } catch (error) {
-    console.warn('[gzh-extension][bg] sendResponse failed', error?.message || error);
+    bgLog('warn', 'bg sendResponse failed', error?.message || error);
   }
 }
 
@@ -40,7 +50,7 @@ function safeBroadcast(payload) {
       }
     });
   } catch (error) {
-    console.warn('[gzh-extension][bg] broadcast threw', error?.message || error);
+    bgLog('warn', 'bg broadcast threw', error?.message || error);
   }
 }
 
@@ -49,7 +59,7 @@ chrome.runtime.onInstalled.addListener(() => {
   try {
     chrome.storage.local.set({ gzhApiBase: 'http://127.0.0.1:8081' });
   } catch (error) {
-    console.warn('[gzh-extension][bg] init api base failed', error?.message || error);
+    bgLog('warn', 'bg init api base failed', error?.message || error);
   }
 });
 
@@ -101,6 +111,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'sync-state') {
     setState(message.payload);
     safeBroadcast({ type: 'sync-state-broadcast', payload: message.payload });
+    if (message.payload?.stage === 'done' || message.payload?.stage === 'partial_failed') {
+      bgLog('info', 'sync state summary', {
+        stage: message.payload?.stage,
+        total: message.payload?.total,
+        synced: message.payload?.synced,
+        failedMetrics: message.payload?.failedMetrics ?? 0,
+        failedContent: message.payload?.failedContent ?? 0,
+        failedUpload: message.payload?.failedUpload ?? 0,
+        uploadedSnapshots: message.payload?.uploadedSnapshots ?? 0,
+        uploadedSnapshotsWithMetrics: message.payload?.uploadedSnapshotsWithMetrics ?? 0,
+      });
+    }
     return undefined;
   }
 
@@ -151,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return undefined;
   } catch (error) {
-    console.error('[gzh-extension][bg] onMessage crash', {
+    bgLog('error', 'bg onMessage crash', {
       type: message?.type,
       error: error?.message || String(error),
       stack: error?.stack || '',
@@ -162,11 +184,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 self.addEventListener('unhandledrejection', (event) => {
-  console.error('[gzh-extension][bg] unhandledrejection', event?.reason || event);
+  bgLog('error', 'bg unhandledrejection', event?.reason || event);
 });
 
 self.addEventListener('error', (event) => {
-  console.error('[gzh-extension][bg] error', {
+  bgLog('error', 'bg error', {
     message: event?.message,
     filename: event?.filename,
     lineno: event?.lineno,
