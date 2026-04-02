@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS gzh_article_snapshot (
     comment_count INT NOT NULL DEFAULT 0 COMMENT '评论数',
     save_count INT NOT NULL DEFAULT 0 COMMENT '收藏数',
     completion_rate DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT '完读率',
+    avg_read_time_sec INT NOT NULL DEFAULT 0 COMMENT '平均阅读时长(秒)',
     new_followers INT NOT NULL DEFAULT 0 COMMENT '新增关注',
     traffic_sources_json TEXT NULL COMMENT '流量来源JSON',
     snapshot_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
@@ -165,6 +166,22 @@ SET @gzh_snapshot_send_count_sql = IF(
     'SELECT 1'
 );
 PREPARE gzh_stmt FROM @gzh_snapshot_send_count_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_avg_read_time_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'avg_read_time_sec'
+);
+SET @gzh_snapshot_avg_read_time_sql = IF(
+    @gzh_snapshot_avg_read_time_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN avg_read_time_sec INT NOT NULL DEFAULT 0 COMMENT ''平均阅读时长(秒)'' AFTER completion_rate',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_avg_read_time_sql;
 EXECUTE gzh_stmt;
 DEALLOCATE PREPARE gzh_stmt;
 

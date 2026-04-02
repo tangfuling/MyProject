@@ -69,6 +69,7 @@ export type WorkspaceArticleCard = {
   wowCount: number;
   commentCount: number;
   saveCount: number;
+  avgReadTimeSec?: number;
   newFollowers: number;
   completionRate?: number;
   trafficSources: Record<string, number>;

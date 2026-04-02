@@ -955,6 +955,7 @@
       commentCount: metrics.commentCount || 0,
       saveCount: metrics.saveCount || 0,
       completionRate: metrics.completionRate || 0,
+      avgReadTimeSec: metrics.avgReadTimeSec || 0,
       trafficSources: metrics.trafficSources || {},
       newFollowers: metrics.newFollowers || 0,
     };
@@ -971,6 +972,7 @@
       || Number(snapshot.wowCount || 0) > 0
       || Number(snapshot.commentCount || 0) > 0
       || Number(snapshot.saveCount || 0) > 0
+      || Number(snapshot.avgReadTimeSec || 0) > 0
       || Number(snapshot.newFollowers || 0) > 0;
   }
 
@@ -1341,7 +1343,7 @@
       const publishList = Array.isArray(publishListParsed) ? publishListParsed : [];
 
       const parsed = publishList.flatMap((item, itemIndex) => parseArticlesFromPublishItem(item, itemIndex));
-      if (publishList.length > 0 && parsed.length === 0) {
+      if (publishList.length > 0 && parsed.length === 0 && maybeHasArticleShape(publishList[0])) {
         const sample = publishList[0] || {};
         safeLog('warn', 'publish list parse empty on non-empty page', {
           sampleKeys: Object.keys(sample),
@@ -1781,6 +1783,30 @@
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  function normalizeCompletionRate(rawValue) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 0;
+    }
+    if (value <= 1) {
+      return Math.round(value * 10000) / 100;
+    }
+    if (value > 10000) {
+      return 100;
+    }
+    return Math.round(value * 100) / 100;
+  }
+
+  function normalizeAvgReadTimeSec(rawValue) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 0;
+    }
+    // Some endpoints may return milliseconds instead of seconds.
+    const seconds = value > 24 * 60 * 60 ? (value / 1000) : value;
+    return Math.max(0, Math.round(seconds));
+  }
+
   function extractMetricsFromRawHtml(raw) {
     if (!raw || typeof raw !== 'string') {
       return null;
@@ -1804,6 +1830,9 @@
       || extractMetricNumberFromRaw(raw, 'save_count');
     const completionRate = extractMetricNumberFromRaw(raw, 'finished_read_pv_ratio')
       || extractMetricNumberFromRaw(raw, 'complete_read_rate');
+    const avgReadTimeSec = extractMetricNumberFromRaw(raw, 'avg_article_read_time')
+      || extractMetricNumberFromRaw(raw, 'avg_read_time')
+      || extractMetricNumberFromRaw(raw, 'avg_read_duration');
     const newFollowers = extractMetricNumberFromRaw(raw, 'follow_after_read_uv')
       || extractMetricNumberFromRaw(raw, 'new_fans');
 
@@ -1815,7 +1844,8 @@
       wowCount,
       commentCount,
       saveCount,
-      completionRate,
+      completionRate: normalizeCompletionRate(completionRate),
+      avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeSec),
       newFollowers,
     };
   }
@@ -1834,6 +1864,7 @@
       'commentCount',
       'saveCount',
       'completionRate',
+      'avgReadTimeSec',
       'newFollowers',
     ].forEach((key) => {
       const baseValue = Number(merged[key] || 0);
@@ -2053,6 +2084,8 @@
       || {};
 
     const root = { json: payload, articleData, articleDataNew, subsTransform };
+    const completionRateRaw = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
+    const avgReadTimeRaw = findFirstNumberByKeys(root, ['avg_article_read_time', 'avg_read_time', 'avg_read_duration', 'read_time_avg']);
     return {
       readCount: findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']),
       sendCount: findFirstNumberByKeys(root, ['send_uv']),
@@ -2061,7 +2094,8 @@
       wowCount: findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']),
       commentCount: findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']),
       saveCount: findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']),
-      completionRate: findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']),
+      completionRate: normalizeCompletionRate(completionRateRaw),
+      avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeRaw),
       newFollowers: findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']),
       trafficSources: buildTrafficSources(root),
       topKeys: safeObjectKeys(payload),
@@ -2240,6 +2274,7 @@
       commentCount: metrics.commentCount,
       saveCount: metrics.saveCount,
       completionRate: metrics.completionRate,
+      avgReadTimeSec: metrics.avgReadTimeSec,
       trafficSources: metrics.trafficSources,
       newFollowers: metrics.newFollowers,
     };
@@ -2354,6 +2389,19 @@
       }
     });
     return Array.from(map.values());
+  }
+
+  function maybeHasArticleShape(item) {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+    const keys = Object.keys(item);
+    if (keys.some((key) => /appmsg|publish|article|content|link|url|title|mid|msg/i.test(key))) {
+      return true;
+    }
+    const infoRaw = item.publish_info || item.publishInfo || '';
+    const infoText = String(infoRaw || '');
+    return /appmsg|content_url|article|link|title|mid|msg/i.test(infoText);
   }
 
   try {

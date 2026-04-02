@@ -25,6 +25,7 @@ public class ArticleSnapshotEntity {
     private Integer commentCount;
     private Integer saveCount;
     private BigDecimal completionRate;
+    private Integer avgReadTimeSec;
     private Integer newFollowers;
     private String trafficSourcesJson;
     private LocalDateTime snapshotTime;

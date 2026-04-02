@@ -135,8 +135,8 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setWowCount(defaultInt(snapshotItem.getWowCount()));
             snapshot.setCommentCount(defaultInt(snapshotItem.getCommentCount()));
             snapshot.setSaveCount(defaultInt(snapshotItem.getSaveCount()));
-            snapshot.setCompletionRate(BigDecimal.valueOf(snapshotItem.getCompletionRate() == null ? 0 : snapshotItem.getCompletionRate())
-                .setScale(2, RoundingMode.HALF_UP));
+            snapshot.setCompletionRate(normalizeCompletionRate(snapshotItem.getCompletionRate()));
+            snapshot.setAvgReadTimeSec(defaultInt(snapshotItem.getAvgReadTimeSec()));
             snapshot.setNewFollowers(defaultInt(snapshotItem.getNewFollowers()));
             snapshot.setTrafficSourcesJson(jsonUtil.toJson(snapshotItem.getTrafficSources() == null ? Map.of() : snapshotItem.getTrafficSources()));
             snapshot.setSnapshotTime(LocalDateTime.now());
@@ -263,7 +263,8 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             vo.setCommentCount(latest.getCommentCount());
             vo.setSaveCount(latest.getSaveCount());
             vo.setNewFollowers(latest.getNewFollowers());
-            vo.setCompletionRate(latest.getCompletionRate());
+            vo.setAvgReadTimeSec(latest.getAvgReadTimeSec());
+            vo.setCompletionRate(normalizeCompletionRate(latest.getCompletionRate()));
             vo.setTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
         }
         return vo;
@@ -291,8 +292,9 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             totalLike += defaultInt(latest.getLikeCount());
             newFollowers += defaultInt(latest.getNewFollowers());
 
-            if (latest.getCompletionRate() != null) {
-                completionSum = completionSum.add(latest.getCompletionRate());
+            BigDecimal completionRate = normalizeCompletionRate(latest.getCompletionRate());
+            if (completionRate != null) {
+                completionSum = completionSum.add(completionRate);
                 completionCount++;
             }
 
@@ -324,6 +326,28 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private BigDecimal normalizeCompletionRate(Double raw) {
+        if (raw == null) {
+            return BigDecimal.ZERO;
+        }
+        return normalizeCompletionRate(BigDecimal.valueOf(raw));
+    }
+
+    private BigDecimal normalizeCompletionRate(BigDecimal raw) {
+        if (raw == null) {
+            return null;
+        }
+        double value = raw.doubleValue();
+        if (!Double.isFinite(value) || value <= 0) {
+            return BigDecimal.ZERO;
+        }
+        double normalized = value <= 1 ? value * 100 : value;
+        if (normalized > 100) {
+            normalized = 100;
+        }
+        return BigDecimal.valueOf(normalized).setScale(2, RoundingMode.HALF_UP);
     }
 
     private LocalDateTime parseDateTime(String text) {

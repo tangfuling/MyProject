@@ -41,6 +41,7 @@ public class SyncArticlesDTO {
         private Integer commentCount;
         private Integer saveCount;
         private Double completionRate;
+        private Integer avgReadTimeSec;
         private Map<String, Integer> trafficSources;
         private Integer newFollowers;
     }

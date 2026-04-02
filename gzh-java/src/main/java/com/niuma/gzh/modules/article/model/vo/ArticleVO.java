@@ -20,6 +20,7 @@ public class ArticleVO {
     private Integer wowCount;
     private Integer commentCount;
     private Integer saveCount;
+    private Integer avgReadTimeSec;
     private Integer newFollowers;
     private BigDecimal completionRate;
     private Map<String, Integer> trafficSources;

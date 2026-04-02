@@ -42,6 +42,19 @@ function formatRangeLabel(range: string) {
   }
 }
 
+function formatDuration(seconds?: number) {
+  const sec = Math.max(0, Math.round(Number(seconds || 0)));
+  if (sec <= 0) {
+    return '0秒';
+  }
+  if (sec < 60) {
+    return `${sec}秒`;
+  }
+  const min = Math.floor(sec / 60);
+  const remain = sec % 60;
+  return remain > 0 ? `${min}分${remain}秒` : `${min}分`;
+}
+
 function toTimestamp(value?: string) {
   if (!value) {
     return 0;
@@ -579,6 +592,7 @@ export default function WorkspacePage() {
                 <div className="art-stat">在看 <b>{article.wowCount ?? 0}</b></div>
                 <div className="art-stat">留言 <b>{article.commentCount ?? 0}</b></div>
                 <div className="art-stat">完读 <b>{Math.round(Number(article.completionRate ?? 0))}%</b></div>
+                <div className="art-stat">阅读时长 <b>{formatDuration(article.avgReadTimeSec)}</b></div>
               </div>
               <div className="src-labels compact">
                 {renderTraffic(article.trafficSources ?? {}).slice(0, 3).map(([source, ratio]) => (
