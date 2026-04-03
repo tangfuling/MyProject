@@ -107,7 +107,15 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         dataMetrics.setCompletionRate(metrics == null ? 0D : nullToZero(metrics.getCompletionRate()));
         dataMetrics.setTotalShare(metrics == null ? 0 : nullToZero(metrics.getTotalShare()));
         dataMetrics.setTotalLike(metrics == null ? 0 : nullToZero(metrics.getTotalLike()));
+        dataMetrics.setTotalWow(metrics == null ? 0 : nullToZero(metrics.getTotalWow()));
+        dataMetrics.setTotalComment(metrics == null ? 0 : nullToZero(metrics.getTotalComment()));
         dataMetrics.setNewFollowers(metrics == null ? 0 : nullToZero(metrics.getNewFollowers()));
+        dataMetrics.setAvgReadTimeSec(metrics == null ? 0 : nullToZero(metrics.getAvgReadTimeSec()));
+        dataMetrics.setFollowRate(metrics == null ? 0D : nullToZero(metrics.getFollowRate()));
+        dataMetrics.setShareRate(metrics == null ? 0D : nullToZero(metrics.getShareRate()));
+        dataMetrics.setLikeRate(metrics == null ? 0D : nullToZero(metrics.getLikeRate()));
+        dataMetrics.setWowRate(metrics == null ? 0D : nullToZero(metrics.getWowRate()));
+        dataMetrics.setCommentRate(metrics == null ? 0D : nullToZero(metrics.getCommentRate()));
         panel.setMetrics(dataMetrics);
 
         OverviewVO.Changes changes = overview.getChanges();

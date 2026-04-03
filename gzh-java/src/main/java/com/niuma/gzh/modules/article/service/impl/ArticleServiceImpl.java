@@ -210,7 +210,15 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         metrics.setCompletionRate(current.completionRate);
         metrics.setTotalShare(current.totalShare);
         metrics.setTotalLike(current.totalLike);
+        metrics.setTotalWow(current.totalWow);
+        metrics.setTotalComment(current.totalComment);
         metrics.setNewFollowers(current.newFollowers);
+        metrics.setAvgReadTimeSec(current.avgReadTimeSec);
+        metrics.setFollowRate(current.followRate);
+        metrics.setShareRate(current.shareRate);
+        metrics.setLikeRate(current.likeRate);
+        metrics.setWowRate(current.wowRate);
+        metrics.setCommentRate(current.commentRate);
         vo.setMetrics(metrics);
 
         OverviewVO.Changes changes = new OverviewVO.Changes();
@@ -276,7 +284,11 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         int totalSend = 0;
         int totalShare = 0;
         int totalLike = 0;
+        int totalWow = 0;
+        int totalComment = 0;
         int newFollowers = 0;
+        int avgReadTimeSecSum = 0;
+        int avgReadTimeSampleCount = 0;
         BigDecimal completionSum = BigDecimal.ZERO;
         int completionCount = 0;
         Map<String, Integer> trafficCount = new HashMap<>();
@@ -290,7 +302,14 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             totalSend += defaultInt(latest.getSendCount());
             totalShare += defaultInt(latest.getShareCount());
             totalLike += defaultInt(latest.getLikeCount());
+            totalWow += defaultInt(latest.getWowCount());
+            totalComment += defaultInt(latest.getCommentCount());
             newFollowers += defaultInt(latest.getNewFollowers());
+            int avgReadTimeSec = defaultInt(latest.getAvgReadTimeSec());
+            if (avgReadTimeSec > 0) {
+                avgReadTimeSecSum += avgReadTimeSec;
+                avgReadTimeSampleCount++;
+            }
 
             BigDecimal completionRate = normalizeCompletionRate(latest.getCompletionRate());
             if (completionRate != null) {
@@ -304,7 +323,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
         int articleCount = articles.size();
         int avgRead = articleCount == 0 ? 0 : totalRead / articleCount;
+        int avgReadTimeSec = avgReadTimeSampleCount == 0 ? 0 : Math.round((float) avgReadTimeSecSum / avgReadTimeSampleCount);
         double completionRate = completionCount == 0 ? 0 : completionSum.divide(BigDecimal.valueOf(completionCount), 2, RoundingMode.HALF_UP).doubleValue();
+        double followRate = pctValue(newFollowers, totalRead);
+        double shareRate = pctValue(totalShare, totalRead);
+        double likeRate = pctValue(totalLike, totalRead);
+        double wowRate = pctValue(totalWow, totalRead);
+        double commentRate = pctValue(totalComment, totalRead);
 
         int trafficTotal = trafficCount.values().stream().mapToInt(Integer::intValue).sum();
         Map<String, Integer> trafficPercent = new HashMap<>();
@@ -312,7 +337,25 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             trafficCount.forEach((k, v) -> trafficPercent.put(k, (int) Math.round(v * 100.0 / trafficTotal)));
         }
 
-        return new MetricsBundle(articleCount, totalRead, totalSend, avgRead, completionRate, totalShare, totalLike, newFollowers, trafficPercent);
+        return new MetricsBundle(
+            articleCount,
+            totalRead,
+            totalSend,
+            avgRead,
+            completionRate,
+            totalShare,
+            totalLike,
+            totalWow,
+            totalComment,
+            newFollowers,
+            avgReadTimeSec,
+            followRate,
+            shareRate,
+            likeRate,
+            wowRate,
+            commentRate,
+            trafficPercent
+        );
     }
 
     private double pctChange(double current, double previous) {
@@ -326,6 +369,15 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private double pctValue(double numerator, double denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        return BigDecimal.valueOf(numerator * 100 / denominator)
+            .setScale(2, RoundingMode.HALF_UP)
+            .doubleValue();
     }
 
     private BigDecimal normalizeCompletionRate(Double raw) {
@@ -416,7 +468,15 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         double completionRate,
         int totalShare,
         int totalLike,
+        int totalWow,
+        int totalComment,
         int newFollowers,
+        int avgReadTimeSec,
+        double followRate,
+        double shareRate,
+        double likeRate,
+        double wowRate,
+        double commentRate,
         Map<String, Integer> trafficPercent
     ) {}
 }

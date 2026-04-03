@@ -35,6 +35,7 @@
   let latestLastSync = null;
   let lastAutoSyncAuthToken = '';
   let zeroMetricsLogCount = 0;
+  let publishListParseHintCount = 0;
   let panelState = {
     stage: 'idle',
     message: '等待同步',
@@ -1345,10 +1346,13 @@
       const parsed = publishList.flatMap((item, itemIndex) => parseArticlesFromPublishItem(item, itemIndex));
       if (publishList.length > 0 && parsed.length === 0 && maybeHasArticleShape(publishList[0])) {
         const sample = publishList[0] || {};
-        safeLog('warn', 'publish list parse empty on non-empty page', {
-          sampleKeys: Object.keys(sample),
-          samplePublishInfoHead: String(sample.publish_info || sample.publishInfo || '').slice(0, 180),
-        });
+        if (publishListParseHintCount < 1) {
+          publishListParseHintCount += 1;
+          safeLog('info', 'publish list parse empty on non-empty page', {
+            sampleKeys: Object.keys(sample),
+            samplePublishInfoHead: String(sample.publish_info || sample.publishInfo || '').slice(0, 180),
+          });
+        }
       }
       if (publishList.length === 0) {
         break;

@@ -1,0 +1,4311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web App — 设计稿 V7.7</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --accent: #25D9E5;
+  --accent-hover: #1FC4D0;
+  --accent-light: #E8FCFD;
+  --accent-mid: #A8EFF3;
+  --accent-glow: rgba(37,217,229,.3);
+  --green: #10b981;
+  --green-light: #ecfdf5;
+  --red: #ef4444;
+  --red-light: #fef2f2;
+  --amber: #f59e0b;
+  --border: #d8eaee;
+  --border-light: #e8f3f6;
+  --text: #0A1A2F;
+  --text-muted: #4d6378;
+  --text-light: #7f9ab0;
+  --bg: #F3FAFC;
+  --card: #ffffff;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.06);
+  --shadow: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
+  --shadow-md: 0 10px 25px -3px rgba(0,0,0,.1), 0 4px 10px -4px rgba(0,0,0,.05);
+  --shadow-lg: 0 20px 50px -12px rgba(0,0,0,.18);
+  --shadow-glow: 0 8px 30px var(--accent-glow);
+  --r: 14px;
+  --r-sm: 10px;
+}
+body { font-family: "PingFang SC","Hiragino Sans GB","MiSans","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size: 14px; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+/* ── DEMO BAR ── */
+.demo-bar {
+  background: #0A1A2F;
+  color: #64748b;
+  font-size: 11px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  flex-shrink: 0;
+}
+.demo-bar-label { color: #6FA8FF; margin-right: 16px; font-weight: 600; letter-spacing: .3px; }
+.demo-tabs { display: flex; }
+.demo-tab {
+  padding: 0 14px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #6FA8FF;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.demo-tab:hover { color: #E2F3FF; }
+.demo-tab.active { color: #fff; border-bottom-color: var(--accent); }
+.demo-note { margin-left: auto; font-size: 10px; color: #25D9E5; }
+
+/* ── PAGE ── */
+.page { display: none; min-height: calc(100vh - 34px); }
+.page.active { display: block; }
+.page.flex-page { display: none; flex-direction: column; }
+.page.flex-page.active { display: flex; height: calc(100vh - 34px); overflow: hidden; }
+
+/* ── SHARED ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: var(--r-sm); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: inherit; letter-spacing: .2px; }
+.btn-primary { background: var(--accent); color: #07363d; padding: 10px 20px; box-shadow: 0 2px 10px rgba(37,217,229,.22); }
+.btn-primary:hover { transform: translateY(-1px); background: var(--accent-hover); box-shadow: 0 4px 14px rgba(37,217,229,.28); }
+.btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 9px 18px; }
+.btn-outline:hover { background: var(--bg); border-color: var(--accent); color: var(--accent); }
+.btn-ghost { background: none; color: var(--text-muted); border: 1px solid var(--border); padding: 7px 14px; }
+.btn-ghost:hover { color: var(--accent); background: var(--accent-light); border-color: var(--accent-mid); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-xs { padding: 4px 10px; font-size: 11px; }
+.input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: var(--r-sm); font-size: 13px; outline: none; background: var(--bg); transition: all .2s; font-family: inherit; color: var(--text); }
+.input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-light); }
+.tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.tag-blue { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-mid); }
+.tag-green { background: var(--green-light); color: var(--green); }
+
+
+/* ════════════════════════════════════════
+   PAGE 1 · 首页
+════════════════════════════════════════ */
+/* Header */
+.landing-header {
+  height: 60px;
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(229,231,235,.6);
+  display: flex;
+  align-items: center;
+  padding: 0 48px;
+  gap: 12px;
+  position: sticky;
+  top: 34px;
+  z-index: 100;
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand-icon { width: 34px; height: 34px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 8px rgba(37,217,229,.26); }
+.brand-icon svg { width: 17px; height: 17px; fill: none; stroke: #07363d; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.brand-name { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.3px; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+/* Hero */
+.hero {
+  padding: 80px 48px 96px;
+  text-align: center;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  background: rgba(37,217,229,.15);
+  border-radius: 50%;
+  filter: blur(80px);
+  top: -200px; left: 50%; transform: translateX(-50%);
+  pointer-events: none;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255,255,255,.8);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--accent-mid);
+  color: var(--accent);
+  border-radius: 50px;
+  padding: 6px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-sm);
+}
+.hero-title {
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.15;
+  margin-bottom: 20px;
+  letter-spacing: -1.5px;
+}
+.hero-title span { color: var(--accent); }
+.hero-subtitle {
+  font-size: 17px;
+  color: var(--text-muted);
+  margin-bottom: 40px;
+  max-width: 540px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.75;
+}
+.hero-ctas { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.hero-cta-primary {
+  background: var(--accent);
+  color: #07363d;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: none;
+  transition: all .2s;
+  box-shadow: var(--shadow-glow);
+  letter-spacing: .2px;
+}
+.hero-cta-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 35px var(--accent-glow); }
+.hero-cta-secondary {
+  background: rgba(255,255,255,.9);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.hero-cta-secondary:hover { background: #fff; border-color: var(--accent); color: var(--accent); }
+.hero-note { font-size: 12px; color: var(--text-light); margin-top: 20px; }
+.hero-note b { color: var(--accent); font-weight: 600; }
+
+/* Steps */
+.steps-section {
+  padding: 72px 48px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.steps-title {
+  font-size: 28px;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 8px;
+  letter-spacing: -.5px;
+}
+.steps-sub {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 15px;
+  margin-bottom: 52px;
+}
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.step-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition: all .25s;
+}
+.step-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-mid);
+}
+.step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-mid);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.step-icon {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f6a75;
+}
+.step-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.step-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; letter-spacing: -.2px; }
+.step-desc { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+.step-detail {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-light);
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.6;
+}
+.step-arrow {
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent-mid);
+  font-size: 20px;
+  font-weight: 300;
+  z-index: 1;
+}
+
+/* Feature section */
+.feature-section {
+  padding: 72px 48px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+.feature-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+}
+.feature-item { text-align: center; }
+.feature-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  transition: transform .2s;
+}
+.feature-item:hover .feature-icon { transform: scale(1.1); }
+.feature-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.feature-icon.blue { background: var(--accent-light); color: #0f6a75; }
+.feature-icon.green { background: #e9fbf5; color: #167f59; }
+.feature-icon.purple { background: #eaf3ff; color: #2a5f9f; }
+.feature-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; letter-spacing: -.2px; }
+.feature-desc { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+
+/* Pricing */
+.pricing-section {
+  padding: 72px 48px;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+.pricing-inner { max-width: 500px; margin: 0 auto; }
+.pricing-title { font-size: 26px; font-weight: 800; margin-bottom: 8px; letter-spacing: -.5px; }
+.pricing-sub { font-size: 15px; color: var(--text-muted); margin-bottom: 32px; }
+.pricing-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; text-align: left; }
+.pricing-item { display: flex; align-items: center; gap: 12px; font-size: 14px; padding: 4px 0; }
+.pricing-item-check { color: var(--green); font-weight: 700; font-size: 16px; }
+
+/* Landing footer */
+.landing-footer {
+  border-top: 1px solid var(--border);
+  padding: 24px 48px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+
+/* ════════════════════════════════════════
+   LOGIN MODAL
+════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  top: 34px;
+  background: rgba(15,23,42,.4);
+  z-index: 500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.modal-overlay.open { display: flex; }
+.login-modal {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 36px 36px 28px;
+  width: 400px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255,255,255,.8);
+  position: relative;
+  animation: modalIn .25s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+}
+.modal-close:hover { background: var(--bg); color: var(--text); }
+.login-modal-title { font-size: 22px; font-weight: 800; margin-bottom: 4px; letter-spacing: -.3px; }
+.login-modal-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+.form-field { margin-bottom: 18px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+.code-row { display: flex; gap: 8px; }
+.code-row .input { flex: 1; }
+.code-btn { padding: 11px 14px; border: 1.5px solid var(--border); border-radius: var(--r-sm); font-size: 12px; cursor: pointer; background: var(--card); color: var(--text-muted); white-space: nowrap; font-family: inherit; transition: all .2s; font-weight: 500; }
+.code-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+.login-tip { font-size: 12px; color: var(--text-light); text-align: center; margin-top: 14px; }
+.login-tip b { color: var(--accent); font-weight: 600; }
+
+/* Export modal */
+.export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  top: 34px;
+  background: rgba(15,23,42,.42);
+  z-index: 520;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(5px);
+}
+
+.export-modal-overlay.open {
+  display: flex;
+}
+
+.export-modal {
+  width: min(560px, 92vw);
+  max-height: calc(100vh - 80px);
+  background: #fff;
+  border: 1px solid #d5e6ef;
+  border-radius: 16px;
+  box-shadow: 0 24px 54px rgba(8,23,38,.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.export-modal-head {
+  padding: 14px 16px 11px;
+  border-bottom: 1px solid #e4edf4;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.export-modal-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+  color: #0f2f45;
+}
+
+.export-modal-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #5f7890;
+}
+
+.export-modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #d6e6ef;
+  background: #fff;
+  color: #6f879c;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.export-modal-body {
+  padding: 12px 16px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-section {
+  border: 1px solid #dbe9f1;
+  border-radius: 11px;
+  background: #fbfdff;
+  padding: 9px 10px;
+}
+
+.export-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #4c657c;
+}
+
+.export-format-row,
+.export-range-row {
+  margin-top: 7px;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.export-format-chip,
+.export-range-chip {
+  border: 1px solid #d3e4ec;
+  border-radius: 999px;
+  background: #fff;
+  color: #4d657a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+
+.export-format-chip.active,
+.export-range-chip.active {
+  border-color: #95cfda;
+  background: #eaf8fc;
+  color: #0d5f69;
+}
+
+.export-items {
+  margin-top: 7px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+
+.export-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #4a6379;
+}
+
+.export-item input {
+  accent-color: #0b7e88;
+}
+
+.export-task {
+  border: 1px solid #cbe3ec;
+  border-radius: 11px;
+  background: #f5fcff;
+  padding: 9px 10px;
+}
+
+.export-task-state {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f5f69;
+}
+
+.export-task-meta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #5f788f;
+}
+
+.export-task-progress {
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 999px;
+  background: #dbe7ef;
+  overflow: hidden;
+}
+
+.export-task-progress > span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #21b8c4 0%, #0b7e88 100%);
+  transition: width .3s ease;
+}
+
+.export-history {
+  border-top: 1px dashed #dbe8f0;
+  padding-top: 9px;
+}
+
+.export-history-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.export-history-item {
+  font-size: 10px;
+  color: #587187;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.export-modal-foot {
+  padding: 11px 16px 13px;
+  border-top: 1px solid #e4edf4;
+  background: #fff;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#exportGenerateBtn:disabled {
+  opacity: .68;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+
+/* ════════════════════════════════════════
+   PAGE 2 · 工作台
+════════════════════════════════════════ */
+/* Topbar */
+.app-topbar {
+  height: 54px;
+  background: rgba(255,255,255,.9);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(229,231,235,.6);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.app-topbar-account { font-size: 12px; color: var(--text-muted); padding-left: 12px; border-left: 1px solid var(--border); font-weight: 500; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.sync-meta { font-size: 11px; color: var(--text-light); }
+.balance-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-mid);
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 11px; font-weight: 700; color: var(--accent);
+  cursor: pointer;
+  transition: all .15s;
+}
+.balance-chip:hover { box-shadow: 0 2px 8px var(--accent-glow); }
+.avatar-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: #dff7fb;
+  color: var(--accent);
+  font-size: 12px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; border: none;
+  transition: transform .15s;
+}
+.avatar-btn:hover { transform: scale(1.1); }
+
+/* Workspace body */
+.workspace-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* Context panel */
+.ctx {
+  width: 290px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.ctx-scroll { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.ctx-sec { flex-shrink: 0; }
+.ctx-sec-analysis { display: flex; flex-direction: column; min-height: 0; }
+.ctx-sec + .ctx-sec { border-top: 1px solid var(--border); }
+.ctx-head { padding: 13px 16px 10px; display: flex; align-items: center; justify-content: space-between; }
+.ctx-head-left { display: flex; align-items: center; gap: 7px; }
+.ctx-head-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5e7489;
+}
+.ctx-head-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ctx-head-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--text-muted); }
+.ctx-body { padding: 0 16px 14px; }
+.stat-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-grid-3x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mini-trend { margin-top: 12px; }
+.mini-trend-label { font-size: 10px; color: var(--text-light); margin-bottom: 4px; font-weight: 500; }
+.sparkline { width: 100%; height: 40px; }
+.stat-cell { background: var(--card); border-radius: 12px; padding: 10px 12px; border: 1px solid var(--border-light); transition: all .15s; }
+.stat-cell:hover { border-color: var(--accent-mid); }
+.stat-cell-label { font-size: 10px; color: var(--text-light); margin-bottom: 3px; font-weight: 500; }
+.stat-cell-val { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+.stat-cell-delta { font-size: 10px; margin-top: 2px; font-weight: 600; }
+.stat-cell-delta.up { color: var(--green); }
+.stat-cell-delta.down { color: var(--red); }
+.kpi-layout { display: flex; flex-direction: column; gap: 10px; }
+.kpi-main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi-main-card { background: var(--card); border: 1px solid var(--border-light); border-radius: 12px; padding: 10px 12px; }
+.kpi-main-label { font-size: 10px; color: var(--text-light); font-weight: 600; }
+.kpi-main-value { font-size: 21px; font-weight: 850; letter-spacing: -.4px; margin-top: 2px; }
+.kpi-main-meta { margin-top: 3px; font-size: 10px; color: var(--text-light); display: flex; justify-content: space-between; align-items: center; }
+.kpi-main-meta b { color: var(--text-muted); }
+.kpi-secondary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.kpi-chip { border: 1px solid var(--border-light); border-radius: 999px; padding: 4px 9px; background: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--text-muted); }
+.kpi-chip b { color: var(--text); font-size: 11px; }
+.kpi-interact-card { border: 1px solid var(--border-light); border-radius: 12px; background: #fff; padding: 10px; }
+.kpi-interact-head { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; color: var(--text-muted); margin-bottom: 7px; }
+.kpi-interact-list { display: flex; flex-direction: column; gap: 6px; }
+.kpi-interact-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; border: 1px solid var(--border-light); border-radius: 8px; padding: 6px 8px; background: #fff; }
+.kpi-interact-item .name { font-size: 11px; color: var(--text-muted); }
+.kpi-interact-item .val { font-size: 12px; font-weight: 800; color: var(--text); }
+.kpi-interact-item .rate { font-size: 11px; font-weight: 700; color: var(--accent); }
+.recommend-card {
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  padding: 9px 10px;
+  margin-top: 4px;
+  background: #eaf8ff;
+}
+.recommend-head { display: flex; align-items: center; justify-content: space-between; }
+.recommend-tag { font-size: 10px; font-weight: 800; letter-spacing: .2px; color: #1d4ed8; }
+.recommend-delta { font-size: 10px; font-weight: 700; }
+.recommend-delta.up { color: #166534; }
+.recommend-value { margin-top: 2px; font-size: 24px; font-weight: 900; letter-spacing: -.5px; color: #1e3a8a; }
+.recommend-sub { font-size: 10px; color: #334155; margin-top: 1px; }
+.recommend-bar { height: 5px; background: rgba(148,163,184,.25); border-radius: 999px; margin-top: 7px; overflow: hidden; }
+.recommend-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.detail-link { display: block; text-align: center; font-size: 11px; color: var(--text-light); margin-top: 10px; cursor: pointer; transition: color .15s; font-weight: 500; }
+.detail-link:hover { color: var(--accent); }
+.ctx-analysis { padding: 0 16px 14px; }
+.analysis-stage { display: flex; align-items: flex-start; gap: 5px; background: #fff7ed; border: 1px solid #fed7aa; color: #d97706; border-radius: 8px; padding: 8px 10px; font-size: 11px; font-weight: 600; margin-bottom: 10px; line-height: 1.5; }
+.analysis-stage-icon {
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+.analysis-stage-icon svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ctx-sec-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 7px; }
+.finding { display: flex; gap: 7px; margin-bottom: 5px; font-size: 12px; line-height: 1.55; }
+.finding.pos { color: var(--text); }
+.finding.neg { color: var(--text); }
+.finding-dot { flex-shrink: 0; margin-top: 2px; font-size: 12px; }
+.divider { height: 1px; background: var(--border); margin: 10px 0; }
+.suggestion { display: flex; gap: 7px; margin-bottom: 7px; }
+.sug-num { width: 17px; height: 17px; border-radius: 50%; background: var(--accent); color: #07363d; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.sug-text { font-size: 12px; line-height: 1.55; }
+.ctx-footer { border-top: 1px solid var(--border-light); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.ctx-footer-meta { font-size: 10px; color: var(--text-light); }
+.ctx-footer-meta b { color: var(--text-muted); font-weight: 700; }
+
+/* Time tabs */
+.time-tabs { display: flex; gap: 3px; }
+.time-tab { padding: 3px 10px; border-radius: 7px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); transition: all .15s; font-weight: 500; }
+.time-tab.active { background: var(--accent); color: #07363d; border-color: transparent; box-shadow: 0 2px 6px rgba(37,217,229,.22); }
+
+/* Chat */
+.chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.chat-msgs { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+.msg { display: flex; gap: 10px; max-width: 700px; }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; max-width: 560px; }
+.msg-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 14px; }
+.msg-av.ai { background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .2px; }
+.msg-av.user { background: #e5e7eb; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.bubble { padding: 12px 16px; border-radius: 16px; font-size: 13px; line-height: 1.75; }
+.bubble.ai { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 4px 16px 16px 16px; box-shadow: var(--shadow-sm); }
+.bubble.user { background: var(--accent); color: #07363d; border-radius: 16px 4px 16px 16px; box-shadow: 0 2px 8px rgba(37,217,229,.2); }
+.msg-meta { font-size: 10px; color: var(--text-light); padding: 2px 4px 0; }
+
+/* Analysis message */
+.analysis-msg { background: var(--card); border: 1px solid var(--border); border-radius: 4px 16px 16px 16px; box-shadow: var(--shadow); overflow: hidden; max-width: 660px; }
+.am-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--border-light); background: #f2fcfd; }
+.am-head-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 5px; letter-spacing: -.2px; }
+.am-head-sub { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.am-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 14px; }
+.am-sec-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 7px; }
+.am-finding { display: flex; gap: 7px; font-size: 12px; line-height: 1.55; margin-bottom: 4px; }
+.suggest-list { display: flex; flex-direction: column; gap: 6px; }
+.suggest-item { display: flex; flex-direction: column; gap: 6px; background: #fff; border-radius: 10px; padding: 9px 12px; font-size: 12px; border: 1px solid var(--border-light); transition: all .15s; }
+.suggest-item:hover { border-color: var(--accent-mid); }
+.suggest-item-main { display: flex; align-items: flex-start; gap: 8px; }
+.suggest-item-num { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #07363d; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.suggest-evidence { border-top: 1px dashed var(--border-light); padding-top: 5px; padding-left: 26px; font-size: 10px; line-height: 1.45; color: var(--text-light); }
+.mood-block { background: #f5fcfd; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; padding: 12px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.7; }
+.am-footer { padding: 12px 18px; border-top: 1px solid var(--border-light); display: flex; align-items: center; justify-content: space-between; }
+.am-footer-chips { display: flex; gap: 6px; }
+.chip { padding: 4px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 11px; color: var(--text-muted); cursor: pointer; background: var(--card); transition: all .15s; font-weight: 500; }
+.chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+/* Chat bottom */
+.chat-bottom { flex-shrink: 0; background: rgba(255,255,255,.9); backdrop-filter: blur(20px); border-top: 1px solid var(--border); padding: 12px 24px 16px; }
+.shortcut-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.input-row { display: flex; gap: 8px; }
+.chat-input { flex: 1; border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 13px; outline: none; resize: none; height: 42px; font-family: inherit; transition: all .2s; background: var(--bg); color: var(--text); }
+.chat-input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-light); }
+.send-btn { background: var(--accent); color: #07363d; border: none; border-radius: 12px; height: 42px; padding: 0 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all .2s; box-shadow: 0 2px 10px rgba(37,217,229,.22); }
+.send-btn:hover { transform: translateY(-1px); background: var(--accent-hover); box-shadow: 0 4px 14px rgba(37,217,229,.28); }
+.send-btn svg { width: 13px; height: 13px; fill: none; stroke: #07363d; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+
+/* ════════════════════════════════════════
+   PAGE 3 · 个人中心
+════════════════════════════════════════ */
+.profile-shell { min-height: calc(100vh - 34px); background: var(--bg); }
+.profile-body { max-width: 660px; margin: 0 auto; padding: 36px 24px 52px; }
+.profile-head { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.profile-av { width: 52px; height: 52px; border-radius: 50%; background: #dff7fb; color: var(--accent); font-size: 22px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(37,217,229,.22); }
+.profile-name { font-size: 17px; font-weight: 800; letter-spacing: -.2px; }
+.profile-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--text-muted); margin-bottom: 12px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm); margin-bottom: 20px; transition: all .15s; }
+.card:hover { box-shadow: var(--shadow); }
+.card-body { padding: 20px 24px; }
+.balance-num { font-size: 38px; font-weight: 900; letter-spacing: -1.5px; color: var(--text); }
+.balance-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.recharge-opts { display: flex; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border-light); }
+.recharge-opt { flex: 1; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; cursor: pointer; transition: all .15s; }
+.recharge-opt:hover { border-color: var(--accent); background: var(--accent-light); }
+.recharge-opt.active { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 2px 8px var(--accent-glow); }
+.recharge-opt-amount { font-size: 18px; font-weight: 800; }
+.recharge-opt-sub { font-size: 10px; color: var(--text-light); margin-top: 3px; }
+.pay-btn-row { margin-top: 14px; }
+.log-item { display: flex; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--border-light); gap: 12px; }
+.log-item:last-child { border-bottom: none; }
+.log-date { font-size: 11px; color: var(--text-light); width: 90px; flex-shrink: 0; }
+.log-type { font-size: 12px; color: var(--text); flex: 1; font-weight: 500; }
+.log-tok { font-size: 11px; color: var(--text-light); }
+.log-cost { font-size: 12px; font-weight: 700; color: var(--text); width: 48px; text-align: right; }
+.pay-item { display: flex; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--border-light); gap: 12px; }
+.pay-item:last-child { border-bottom: none; }
+.pay-date { font-size: 11px; color: var(--text-light); width: 90px; flex-shrink: 0; }
+.pay-channel { font-size: 12px; color: var(--text); flex: 1; font-weight: 500; }
+.pay-amount { font-size: 13px; font-weight: 700; color: var(--green); }
+.more-link { text-align: center; padding: 12px; font-size: 11px; color: var(--text-light); cursor: pointer; font-weight: 500; transition: color .15s; }
+.more-link:hover { color: var(--accent); }
+.more-link.is-disabled { cursor: default; color: #9db2c5; }
+.more-link.is-disabled:hover { color: #9db2c5; }
+.more-link.is-loading { pointer-events: none; opacity: .75; }
+
+/* ── DRAWER ── */
+.overlay { position: fixed; inset: 0; top: 34px; background: rgba(15,23,42,.3); z-index: 100; display: none; backdrop-filter: blur(4px); }
+.overlay.open { display: block; }
+.drawer { position: fixed; top: 34px; right: 0; bottom: 0; width: 480px; background: var(--card); box-shadow: -8px 0 40px rgba(0,0,0,.12); z-index: 101; transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column; }
+.drawer.open { transform: translateX(0); }
+.drawer-head { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.drawer-head-title { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
+.drawer-head-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.drawer-head-sub span { color: var(--text-light); }
+.drawer-close { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; color: var(--text-muted); font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+.drawer-close:hover { background: var(--bg); color: var(--text); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px; overscroll-behavior: contain; }
+.drawer-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 22px; }
+.dstat { background: var(--card); border-radius: 12px; padding: 12px 12px; border: 1px solid var(--border-light); }
+.dstat-label { font-size: 10px; color: var(--text-light); margin-bottom: 3px; font-weight: 500; }
+.dstat-val { font-size: 20px; font-weight: 800; }
+.dstat-delta { font-size: 10px; margin-top: 2px; font-weight: 600; }
+.dstat-delta.up { color: var(--green); }
+.dstat-delta.down { color: var(--red); }
+.art-row { padding: 13px 0; border-bottom: 1px solid var(--border-light); }
+.art-row:last-child { border-bottom: none; }
+.art-row.is-hidden { display: none; }
+.art-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.art-title { font-size: 13px; font-weight: 600; }
+.art-date { font-size: 10px; color: var(--text-light); flex-shrink: 0; }
+.art-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.art-stat {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #fff;
+}
+.art-stat b { color: var(--text); font-weight: 700; font-size: 11px; }
+.src-bar { display: flex; height: 4px; border-radius: 4px; overflow: hidden; gap: 1px; margin-top: 8px; }
+.src-seg { height: 100%; }
+.src-labels { display: flex; gap: 12px; margin-top: 5px; }
+.src-label { font-size: 10px; color: var(--text-light); display: flex; align-items: center; gap: 4px; font-weight: 500; }
+.src-dot { width: 7px; height: 7px; border-radius: 50%; }
+.trend-chart-box { background: var(--card); border-radius: 12px; padding: 14px 16px 10px; border: 1px solid var(--border-light); margin-bottom: 4px; }
+.src-overview { background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border-light); }
+.metric-groups { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.metric-group { border: 1px solid var(--border-light); border-radius: 12px; background: var(--card); padding: 10px; position: relative; }
+.metric-group-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  color: #1e3a8a;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eaf8ff;
+}
+.metric-group-head::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .85; }
+.metric-group:nth-child(2) .metric-group-head { color: #9a3412; border-color: #fdba74; background: #fff7ed; }
+.metric-group:nth-child(3) .metric-group-head { color: #166534; border-color: #86efac; background: #f0fdf4; }
+.drawer-block-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eaf8ff;
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+.drawer-block-head::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .85; }
+.drawer-block-head.orange { color: #9a3412; border-color: #fdba74; background: #fff7ed; }
+.drawer-block-head.green { color: #166534; border-color: #86efac; background: #f0fdf4; }
+.article-filter {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: var(--card);
+}
+.article-filter-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.article-filter-title { font-size: 11px; font-weight: 800; color: var(--text-muted); }
+.filter-sort-tip { font-size: 10px; color: var(--text-light); }
+.filter-note { margin-top: 7px; font-size: 10px; color: var(--text-light); }
+.filter-metrics { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 4px 8px;
+  line-height: 1;
+  cursor: pointer;
+}
+.filter-chip.active {
+  border-color: var(--accent-mid);
+  color: #0f6a75;
+  background: var(--accent-light);
+  font-weight: 700;
+}
+.metric-group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.metric-mini { border: 1px solid var(--border-light); border-radius: 10px; background: #fff; padding: 8px 9px; }
+.metric-mini-label { font-size: 10px; color: var(--text-light); }
+.metric-mini-value { margin-top: 2px; font-size: 16px; font-weight: 800; }
+.metric-mini-sub { margin-top: 2px; font-size: 10px; color: var(--text-muted); }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* Model Selector */
+.model-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-mid);
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 11px; font-weight: 700; color: #0f6a75;
+  cursor: pointer; position: relative;
+  transition: all .15s;
+}
+.model-chip:hover { box-shadow: 0 2px 8px rgba(37,217,229,.22); }
+.model-chip svg { width: 12px; height: 12px; }
+.model-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); box-shadow: var(--shadow-md);
+  min-width: 180px; padding: 6px; z-index: 100;
+  display: none;
+}
+.model-chip:hover .model-dropdown { display: block; }
+.model-opt {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; color: var(--text); font-weight: 500;
+  transition: background .15s;
+}
+.model-opt:hover { background: var(--bg); }
+.model-opt.active { background: var(--accent-light); color: var(--accent); }
+.model-opt-price { font-size: 10px; color: var(--text-light); font-weight: 400; }
+.model-opt.active .model-opt-price { color: var(--accent); opacity: .7; }
+
+/* Model Grid (Profile) */
+.model-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.model-card {
+  border: 2px solid var(--border); border-radius: var(--r-sm);
+  padding: 14px; cursor: pointer; transition: all .15s;
+  position: relative;
+}
+.model-card:hover { border-color: var(--accent-mid); }
+.model-card.active { border-color: var(--accent); background: var(--accent-light); }
+.model-card-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.model-card.active .model-card-name { color: var(--accent); }
+.model-card-desc { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.model-card-price { font-size: 11px; font-weight: 600; color: var(--text-light); }
+.model-card.active .model-card-price { color: var(--accent); }
+.model-card-check {
+  position: absolute; top: 8px; right: 8px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: none; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+.model-card.active .model-card-check { display: flex; }
+
+/* ════════════════════════════════════════
+   V7 · ToC Refined Overrides
+════════════════════════════════════════ */
+:root {
+  --accent: #0b7e88;
+  --accent-hover: #086873;
+  --accent-light: #eaf7f9;
+  --accent-mid: #b7dde2;
+  --accent-glow: rgba(11,126,136,.28);
+  --text: #0f1e2e;
+  --text-muted: #3f556c;
+  --text-light: #647b93;
+  --border: #d9e3ee;
+  --border-light: #e9eef5;
+  --bg: #f5f7fb;
+  --ink: #08192d;
+  --ink-soft: #334b63;
+  --surface-0: #f6f9fd;
+  --surface-1: #ffffff;
+  --surface-2: #f3f8ff;
+}
+
+body {
+  color: var(--ink);
+  background: radial-gradient(920px 360px at 50% -220px, rgba(37,217,229,.12), transparent 70%), var(--surface-0);
+}
+
+.demo-bar {
+  background: #071a30;
+  box-shadow: 0 6px 14px rgba(8,23,38,.2);
+}
+
+.demo-note {
+  color: #8de7ee;
+}
+
+.landing-header,
+.app-topbar {
+  background: rgba(255,255,255,.92);
+  border-bottom-color: #dce8f2;
+  box-shadow: 0 6px 20px rgba(8,23,38,.06);
+}
+
+.brand-icon {
+  background: #22d3de;
+  border: 1px solid rgba(255,255,255,.72);
+  box-shadow: 0 8px 18px rgba(34,211,222,.28);
+}
+
+.btn-primary,
+.hero-cta-primary,
+.send-btn {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid rgba(0,0,0,.04);
+}
+
+.btn-primary svg,
+.hero-cta-primary svg,
+.send-btn svg {
+  stroke: #fff;
+}
+
+.hero {
+  padding: 74px 48px 70px;
+  overflow: visible;
+}
+
+.hero::before {
+  width: 620px;
+  height: 620px;
+  top: -260px;
+  background: radial-gradient(circle, rgba(37,217,229,.18) 0%, rgba(37,217,229,.05) 55%, transparent 74%);
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  right: 7%;
+  top: 22%;
+  background: radial-gradient(circle, rgba(53,132,255,.08) 0%, transparent 74%);
+  pointer-events: none;
+}
+
+.hero-title {
+  font-size: 50px;
+  line-height: 1.1;
+  letter-spacing: -1.8px;
+  margin-bottom: 14px;
+}
+
+.hero-title span {
+  color: var(--accent);
+}
+
+.hero-subtitle {
+  color: var(--ink-soft);
+  max-width: 680px;
+  font-size: 17px;
+  margin-bottom: 28px;
+}
+
+.hero-kpi-strip {
+  display: inline-flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hero-mini-kpi {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #c8e7ef;
+  background: rgba(255,255,255,.9);
+  font-size: 11px;
+  color: #587085;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-mini-kpi b {
+  color: #0a6b78;
+  font-size: 12px;
+}
+
+.hero-proof {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-proof-card {
+  min-width: 420px;
+  max-width: 640px;
+  border-radius: 14px;
+  border: 1px solid #cdeaf0;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 10px 28px rgba(8,23,38,.08);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.hero-preview {
+  margin: 12px auto 0;
+  width: min(720px, 94vw);
+  border-radius: 14px;
+  border: 1px solid #cfe4ef;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 12px 30px rgba(8,23,38,.08);
+  text-align: left;
+  overflow: hidden;
+}
+
+.hero-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2edf5;
+  background: #f8fcff;
+  font-size: 11px;
+  color: #567086;
+}
+
+.hero-preview-title {
+  font-weight: 700;
+  color: #1f3d55;
+}
+
+.hero-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.hero-preview-kpi {
+  border: 1px solid #d6e9f2;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.hero-preview-kpi .label {
+  font-size: 10px;
+  color: #5f7890;
+}
+
+.hero-preview-kpi .value {
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0d334a;
+}
+
+.hero-preview-kpi .sub {
+  margin-top: 1px;
+  font-size: 10px;
+  color: #2f8f9a;
+  font-weight: 700;
+}
+
+.proof-head {
+  font-size: 10px;
+  color: #5f778c;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 800;
+}
+
+.proof-main {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 750;
+  color: #0d3249;
+}
+
+.proof-main b {
+  color: #0b8f9d;
+}
+
+.proof-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6f879a;
+}
+
+.hero-note {
+  margin-top: 14px;
+}
+
+.hero-cta-demo {
+  border-color: #b9dbe3;
+  color: #0d5f69;
+}
+
+.hero-cta-primary {
+  min-width: 186px;
+  justify-content: center;
+}
+
+.hero-cta-secondary {
+  min-width: 152px;
+  justify-content: center;
+}
+
+.hero-persona {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.persona-chip {
+  border: 1px solid #d3e6ef;
+  border-radius: 999px;
+  background: #fff;
+  color: #4d667d;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.persona-chip.active {
+  border-color: #93d1da;
+  background: #eaf8fc;
+  color: #0d5f69;
+}
+
+.hero-case-card {
+  margin: 10px auto 0;
+  width: min(680px, 94vw);
+  border: 1px solid #cbe3ec;
+  border-radius: 12px;
+  background: rgba(255,255,255,.95);
+  padding: 10px 12px;
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(8,23,38,.06);
+}
+
+.hero-case-head {
+  font-size: 10px;
+  color: #5f7890;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 800;
+}
+
+.hero-case-main {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0c3147;
+}
+
+.hero-case-main b {
+  color: #0b8f9d;
+}
+
+.hero-case-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #4f6980;
+}
+
+.hero-cost-card {
+  margin: 10px auto 0;
+  width: min(680px, 94vw);
+  border: 1px solid #d7e6ef;
+  border-radius: 12px;
+  background: rgba(255,255,255,.96);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.hero-cost-head {
+  font-size: 11px;
+  color: #4a637a;
+  font-weight: 800;
+}
+
+.hero-cost-grid {
+  margin-top: 7px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.hero-cost-row {
+  border: 1px solid #d9e8f0;
+  border-radius: 9px;
+  background: #fff;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #4e677d;
+}
+
+.hero-cost-row select {
+  border: 1px solid #d2e2eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f3349;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.hero-cost-total {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #4d667d;
+}
+
+.hero-cost-total b {
+  color: #0b8f9d;
+  font-size: 16px;
+}
+
+.hero-trust {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-trust-item {
+  border: 1px solid #d9e8f0;
+  background: rgba(255,255,255,.94);
+  color: #5f7588;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11px;
+}
+
+.steps-section {
+  padding-top: 56px;
+  padding-bottom: 46px;
+}
+
+.steps-title {
+  font-size: 25px;
+}
+
+.steps-sub {
+  margin-bottom: 30px;
+}
+
+.step-card,
+.feature-item,
+.pricing-inner {
+  border-radius: 16px;
+  border-color: #dce8f2;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 10px 20px rgba(8,23,38,.05);
+}
+
+.step-card:hover {
+  transform: translateY(-4px);
+  border-color: #bfe7ed;
+  box-shadow: 0 14px 26px rgba(8,23,38,.08);
+}
+
+.step-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.feature-section {
+  padding-top: 46px;
+  padding-bottom: 46px;
+}
+
+.feature-inner {
+  gap: 14px;
+}
+
+.feature-item {
+  text-align: left;
+  padding: 16px;
+}
+
+.feature-icon {
+  margin-left: 0;
+  margin-bottom: 10px;
+}
+
+.feature-title {
+  margin-bottom: 6px;
+}
+
+.pricing-section {
+  padding-top: 46px;
+  padding-bottom: 62px;
+}
+
+.pricing-inner {
+  max-width: 680px;
+  text-align: left;
+  padding: 20px 22px;
+}
+
+.pricing-title {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.pricing-sub {
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.pricing-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.pricing-item {
+  font-size: 13px;
+  gap: 8px;
+}
+
+.workspace-body {
+  background:
+    radial-gradient(620px 220px at 12% 0%, rgba(37,217,229,.06), transparent 68%),
+    #f5f9ff;
+}
+
+.ctx {
+  width: 352px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 8px 0 22px rgba(8,23,38,.05);
+}
+
+.ctx-scroll {
+  padding-bottom: 12px;
+}
+
+.ctx-sec {
+  background: transparent;
+}
+
+.ctx-head-title {
+  color: #4a667f;
+}
+
+.sync-meta {
+  color: #627c95;
+}
+
+.time-tab.active {
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(11,126,136,.25);
+}
+
+.sug-num {
+  color: #fff;
+}
+
+.kpi-core-caption {
+  font-size: 10px;
+  color: #6c8499;
+  margin-bottom: 8px;
+}
+
+.kpi-main-card {
+  border-color: #d5e7f2;
+  box-shadow: 0 4px 11px rgba(8,23,38,.04);
+}
+
+.kpi-main-card.key-card {
+  border-color: #bce5ec;
+  background: #f7feff;
+}
+
+.kpi-main-value {
+  color: #0d2f46;
+}
+
+.kpi-main-meta b {
+  color: #20435d;
+}
+
+.goal-track-card {
+  margin-bottom: 8px;
+  border: 1px solid #bee2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f5fdff 0%, #ecf8fd 100%);
+  padding: 9px 10px;
+}
+
+.goal-track-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 800;
+  color: #4f687e;
+}
+
+.goal-track-main {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0d3349;
+}
+
+.goal-track-main b {
+  color: #0c7e88;
+}
+
+.goal-track-bar {
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 999px;
+  background: #dbe8ef;
+  overflow: hidden;
+}
+
+.goal-track-bar > span {
+  display: block;
+  height: 100%;
+  width: 93%;
+  background: linear-gradient(90deg, #19b8c4 0%, #0b7e88 100%);
+  border-radius: 999px;
+}
+
+.risk-alert {
+  margin-bottom: 8px;
+  border: 1px solid #fde2b4;
+  border-radius: 10px;
+  background: #fff9ee;
+  color: #9a5316;
+  padding: 8px 9px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.risk-alert b {
+  font-weight: 800;
+}
+
+.kpi-interact-card,
+.recommend-card,
+.mini-trend,
+.analysis-msg,
+.card,
+.metric-group,
+.trend-chart-box,
+.src-overview,
+.article-filter {
+  border-color: #d5e7f2;
+  box-shadow: 0 7px 18px rgba(8,23,38,.05);
+}
+
+.recommend-card {
+  background: #f1fbff;
+  border-color: #aee7ef;
+}
+
+.recommend-tag {
+  color: #165db2;
+}
+
+.recommend-value {
+  font-size: 26px;
+}
+
+.recommend-goal {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #5d768b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recommend-goal b {
+  color: #0f6a75;
+}
+
+.decision-card {
+  margin-top: 10px;
+  border: 1px solid #aee3eb;
+  border-radius: 12px;
+  background: #f8fdff;
+  box-shadow: 0 7px 20px rgba(8,23,38,.06);
+  padding: 10px 11px;
+}
+
+.decision-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.decision-tag {
+  font-size: 10px;
+  font-weight: 800;
+  color: #0f6a75;
+  letter-spacing: .4px;
+}
+
+.decision-pri {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: #0f6a75;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.decision-title {
+  margin-top: 5px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0b3145;
+}
+
+.decision-meta {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #5b7387;
+}
+
+.decision-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.decision-action {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  border: 1px solid #dcebf2;
+  border-radius: 8px;
+  background: #fff;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: #415a70;
+}
+
+.decision-action-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.decision-impact {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f6a75;
+  flex-shrink: 0;
+}
+
+.decision-evidence {
+  border-top: 1px dashed #dbe8f0;
+  padding-top: 4px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #587085;
+}
+
+.today-focus-card {
+  margin-top: 8px;
+  border: 1px solid #bfe2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f4fdff 0%, #ebf9fe 100%);
+  padding: 9px 10px;
+  box-shadow: 0 8px 18px rgba(8,23,38,.05);
+}
+
+.today-focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.today-focus-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  color: #0f6a75;
+}
+
+.today-focus-eta {
+  font-size: 10px;
+  color: #4e677f;
+  font-weight: 700;
+}
+
+.today-focus-main {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0c3349;
+  line-height: 1.45;
+}
+
+.today-focus-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #4d667d;
+}
+
+.today-focus-btn {
+  margin-top: 7px;
+  width: 100%;
+  border: 1px solid #b5dde6;
+  border-radius: 9px;
+  background: #fff;
+  color: #0d5f6a;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.today-focus-btn:hover {
+  background: #f4fdff;
+  border-color: #99ced9;
+}
+
+.today-focus-steps {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.today-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #4b647b;
+  line-height: 1.4;
+}
+
+.today-step-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #9fcfd9;
+  background: #fff;
+  color: #0f6a75;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.today-step.done .today-step-dot {
+  background: #0f7f89;
+  border-color: #0f7f89;
+  color: #fff;
+}
+
+.today-step-status {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 9px;
+  font-weight: 800;
+  border: 1px solid #d3e4ec;
+  color: #60798f;
+  background: #fff;
+}
+
+.today-step-status.done {
+  border-color: #a9d8e1;
+  color: #0d5f69;
+  background: #eaf8fc;
+}
+
+.today-step-status.pending {
+  border-color: #e6d4b1;
+  color: #986126;
+  background: #fff7ea;
+}
+
+.kpi-fold {
+  margin-top: 8px;
+  border: 1px solid #d3e5ef;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.kpi-fold > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 800;
+  color: #4a637a;
+  background: #f8fbff;
+  border-bottom: 1px solid transparent;
+}
+
+.kpi-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.kpi-fold > summary::after {
+  content: '展开';
+  font-size: 10px;
+  color: #6a8297;
+  font-weight: 700;
+}
+
+.kpi-fold[open] > summary {
+  border-bottom-color: #e2edf4;
+}
+
+.kpi-fold[open] > summary::after {
+  content: '收起';
+}
+
+.kpi-fold .kpi-interact-list {
+  padding: 8px 9px 10px;
+}
+
+.kpi-interact-head {
+  color: #617991;
+}
+
+.quick-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-action {
+  border: 1px solid #d6e4ec;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #4b647a;
+  background: #fff;
+  cursor: pointer;
+}
+
+.quick-action:first-child {
+  border-color: #b8dde6;
+  background: #eaf8fc;
+  color: #0d5f69;
+  font-weight: 700;
+}
+
+.quick-action:hover {
+  border-color: #b7dbe2;
+  color: var(--accent);
+  background: #f3fcfd;
+}
+
+.chat-quick-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 8px 24px 7px;
+  border-bottom: 1px solid #e2edf4;
+  background: rgba(255,255,255,.9);
+  backdrop-filter: blur(10px);
+}
+
+.chat-quick-btn {
+  border: 1px solid #cde2ea;
+  border-radius: 999px;
+  background: #fff;
+  color: #466076;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+
+.chat-quick-btn:hover {
+  border-color: #9fced8;
+  color: #0d5f69;
+  background: #eef8fc;
+}
+
+.ctx-sec-title {
+  color: #0f6a75;
+  letter-spacing: .55px;
+}
+
+.analysis-stage {
+  background: #f9fbff;
+  border-color: #dbe9f5;
+  color: #4d6580;
+}
+
+.finding b {
+  color: #0f3e57;
+}
+
+.suggestion {
+  padding: 3px 0;
+}
+
+.ctx-footer-meta {
+  color: #70889d;
+}
+
+.bubble.user {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(11,126,136,.24);
+}
+
+.suggest-item-num {
+  color: #fff;
+}
+
+.drawer {
+  background: rgba(255,255,255,.98);
+  box-shadow: -18px 0 38px rgba(7,23,38,.14);
+}
+
+.drawer-head {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.drawer-head-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.drawer-head-title {
+  font-size: 16px;
+}
+
+.drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.drawer-export-btn {
+  font-size: 11px;
+  border-color: #c7dbe6;
+  color: #476077;
+  white-space: nowrap;
+  line-height: 1.1;
+  flex-shrink: 0;
+  padding-inline: 12px;
+}
+
+.drawer-head-sub {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 6px;
+}
+
+.drawer-head-sub span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d6e7ef;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #f7fbff;
+  white-space: nowrap;
+  color: #5b7489;
+  line-height: 1.35;
+}
+
+.drawer-head-sub span:first-child {
+  border-color: #b9d8ea;
+  background: #edf7ff;
+  color: #2d5a7a;
+}
+
+.drawer-head-sync {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #69839a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drawer-decision-hero {
+  border: 1px solid #bfe2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7fdff 0%, #eef8fd 100%);
+  box-shadow: 0 8px 18px rgba(8,23,38,.06);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.drawer-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.drawer-decision-kpi {
+  border: 1px solid #cfe5ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 7px 8px;
+}
+
+.drawer-decision-kpi .label {
+  font-size: 10px;
+  color: #5f7890;
+}
+
+.drawer-decision-kpi .value {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f3349;
+}
+
+.drawer-decision-kpi .sub {
+  margin-top: 1px;
+  font-size: 10px;
+  color: #4a647b;
+}
+
+.drawer-decision-action {
+  margin-top: 8px;
+  border: 1px solid #cfe5ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.drawer-decision-action .title {
+  font-size: 10px;
+  color: #5e7790;
+  font-weight: 700;
+}
+
+.drawer-decision-action .main {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0d3248;
+}
+
+.drawer-decision-action .sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #4c657b;
+}
+
+.drawer-evidence-title {
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4f6a7f;
+}
+
+.drawer-evidence-list {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drawer-evidence-item {
+  border: 1px dashed #d4e7f0;
+  border-radius: 7px;
+  background: #f8fcff;
+  padding: 5px 7px;
+  font-size: 10px;
+  color: #4f6980;
+  line-height: 1.45;
+}
+
+.drawer-evidence-item b {
+  color: #0d5f69;
+  font-weight: 800;
+}
+
+.drawer-action-btn {
+  margin-top: 6px;
+  width: 100%;
+  border: 1px solid #b8dce6;
+  border-radius: 9px;
+  background: #fff;
+  color: #0d5f6a;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.drawer-action-btn:hover {
+  background: #f4fdff;
+  border-color: #9bcfda;
+}
+
+.art-row {
+  padding: 14px 0;
+  border-radius: 10px;
+  transition: background .16s;
+}
+
+.art-top {
+  align-items: flex-start;
+}
+
+.art-row:hover {
+  background: #fbfdff;
+}
+
+.art-top-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.art-rank {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid #d5e3ee;
+  background: #fff;
+  color: #5d7388;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.art-rank.top1,
+.art-rank.top2,
+.art-rank.top3 {
+  border-color: #b7dbe5;
+  background: #ebf9fc;
+  color: #0d5f69;
+}
+
+.art-title {
+  flex: 1;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.art-stats.primary .art-stat {
+  background: #ebf9fc;
+  border-color: #bee8ee;
+  color: #2f5e73;
+}
+
+.art-stats.primary .art-stat b {
+  color: #0f6a75;
+}
+
+.art-stats.secondary {
+  margin-top: 5px;
+}
+
+.art-stats.secondary .art-stat {
+  background: #fff;
+}
+
+.art-insight {
+  margin-top: 6px;
+  border: 1px solid #dbe8f0;
+  border-radius: 8px;
+  background: #f8fcff;
+  color: #4e677e;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 6px 8px;
+}
+
+.article-filter {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(255,255,255,.95);
+  backdrop-filter: blur(8px);
+  padding: 11px;
+}
+
+.filter-metrics {
+  gap: 8px;
+}
+
+.filter-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 12px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.filter-chip.active {
+  color: #0a5d66;
+  background: #ddf3f7;
+  border-color: #8fd0da;
+  box-shadow: 0 2px 8px rgba(11,126,136,.12);
+}
+
+.filter-sort-tip b {
+  color: #0f6a75;
+  font-weight: 700;
+}
+
+.filter-sort-insight {
+  margin-top: 7px;
+  border: 1px solid #d8e8f0;
+  border-radius: 9px;
+  background: #f8fcff;
+  color: #4a647a;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 7px 9px;
+}
+
+.filter-views {
+  margin-top: 7px;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.view-chip {
+  border: 1px solid #d3e4ec;
+  border-radius: 999px;
+  background: #fff;
+  color: #5a7388;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.view-chip.active {
+  border-color: #98ced8;
+  background: #eaf8fc;
+  color: #0d5f69;
+}
+
+.trend-legend {
+  margin-top: 5px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #6a8196;
+}
+
+.trend-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.filter-note strong {
+  color: #0f6a75;
+}
+
+.detail-link {
+  margin-top: 12px;
+  border: 1px solid #cde2ea;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #3f5b73;
+  font-weight: 700;
+  transition: all .15s;
+}
+
+.detail-link:hover {
+  color: #0d5f69;
+  background: #eef8fc;
+  border-color: #a8d2dc;
+}
+
+.ctx-sec:first-child .ctx-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e8eff5;
+}
+
+.ctx-sec:first-child .ctx-body {
+  padding-top: 10px;
+}
+
+/* Workspace density tune */
+.ctx {
+  width: 338px;
+}
+
+.ctx-head {
+  padding: 11px 14px 9px;
+}
+
+.ctx-body,
+.ctx-analysis {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.ctx-body {
+  padding-bottom: 12px;
+}
+
+.ctx-analysis {
+  padding-bottom: 12px;
+}
+
+.ctx-scroll {
+  padding-bottom: 8px;
+}
+
+.kpi-layout {
+  gap: 8px;
+}
+
+.kpi-main-grid {
+  gap: 7px;
+}
+
+.kpi-main-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.kpi-main-value {
+  font-size: 20px;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.kpi-main-meta {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.kpi-main-meta .stat-cell-delta {
+  font-size: 9px;
+}
+
+.goal-track-card,
+.risk-alert,
+.recommend-card,
+.decision-card,
+.today-focus-card,
+.kpi-fold {
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.goal-track-card {
+  padding: 8px 9px;
+}
+
+.risk-alert {
+  padding: 7px 8px;
+  line-height: 1.45;
+}
+
+.recommend-value {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.recommend-sub {
+  margin-top: 2px;
+}
+
+.decision-title {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.decision-meta {
+  line-height: 1.45;
+}
+
+.decision-actions {
+  margin-top: 6px;
+  gap: 4px;
+}
+
+.decision-action {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+.decision-impact {
+  font-size: 9px;
+}
+
+.today-focus-main {
+  font-size: 12px;
+}
+
+.today-focus-sub {
+  font-size: 10px;
+}
+
+.today-focus-btn {
+  margin-top: 6px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.today-step {
+  font-size: 10px;
+}
+
+.quick-actions {
+  margin-top: 8px;
+  gap: 5px;
+}
+
+.quick-action {
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+.chat-quick-strip {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.chat-msgs {
+  padding: 20px 22px;
+  gap: 16px;
+}
+
+.analysis-msg {
+  max-width: 620px;
+  border-radius: 8px 14px 14px 14px;
+}
+
+.am-head {
+  padding: 12px 14px 10px;
+}
+
+.am-head-title {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.am-head-sub {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.am-body {
+  padding: 12px 14px;
+  gap: 11px;
+}
+
+.am-finding {
+  font-size: 11px;
+  margin-bottom: 3px;
+  line-height: 1.45;
+}
+
+.suggest-item {
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.mood-block {
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.am-footer {
+  padding: 10px 14px;
+}
+
+.chat-bottom {
+  padding: 10px 20px 12px;
+  box-shadow: 0 -8px 22px rgba(8,23,38,.04);
+}
+
+.load-status {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #6b859b;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .workspace-body {
+    flex-direction: column;
+  }
+
+  .ctx {
+    width: 100%;
+    max-height: 56vh;
+    overflow: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-wrap {
+    min-height: 44vh;
+  }
+
+  .steps-grid,
+  .feature-inner,
+  .pricing-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .landing-header,
+  .app-topbar {
+    padding: 0 12px;
+  }
+
+  .hero {
+    padding: 52px 18px 56px;
+  }
+
+  .hero-title {
+    font-size: 35px;
+    letter-spacing: -1px;
+  }
+
+  .hero-subtitle {
+    font-size: 15px;
+    line-height: 1.68;
+    margin-bottom: 20px;
+  }
+
+  .hero-ctas {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hero-cta-primary,
+  .hero-cta-secondary {
+    min-width: 0;
+    width: min(320px, 100%);
+  }
+
+  .hero-proof-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hero-preview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero-cost-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .steps-section,
+  .feature-section,
+  .pricing-section {
+    padding: 38px 16px;
+  }
+
+  .sync-meta,
+  .app-topbar-account {
+    display: none;
+  }
+
+  .chat-quick-strip {
+    padding: 8px 12px 7px;
+  }
+
+  .chat-msgs {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .chat-bottom {
+    padding: 9px 12px 11px;
+  }
+
+  .export-modal {
+    width: 94vw;
+    max-height: calc(100vh - 62px);
+  }
+
+  .export-modal-head,
+  .export-modal-body,
+  .export-modal-foot {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .export-items {
+    grid-template-columns: 1fr;
+  }
+
+  .ctx-head {
+    padding: 10px 12px 8px;
+  }
+
+  .ctx-body,
+  .ctx-analysis {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+
+  .drawer-head {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .drawer-head-sub {
+    margin-top: 4px;
+  }
+
+  .drawer-head-sub span {
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+
+  .drawer-head-sync {
+    margin-top: 3px;
+    font-size: 10px;
+  }
+
+  .drawer-head-actions {
+    gap: 6px;
+  }
+
+  .drawer-export-btn {
+    font-size: 10px;
+    padding-inline: 10px;
+  }
+
+  .drawer-body {
+    padding: 14px 14px 24px;
+  }
+
+  .drawer-decision-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .art-top {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Demo bar -->
+<div class="demo-bar">
+  <span class="demo-bar-label">设计稿 V7.7</span>
+  <div class="demo-tabs">
+    <div class="demo-tab active" onclick="showPage('home')" id="dt-home">首页</div>
+    <div class="demo-tab" onclick="showPage('workspace')" id="dt-workspace">工作台</div>
+    <div class="demo-tab" onclick="showPage('profile')" id="dt-profile">个人中心</div>
+  </div>
+  <div class="demo-note">V7.7 · 高价值落地版（导出复盘 + 证据链）</div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 1 · 首页
+════════════════════════════════════════ -->
+<div id="page-home" class="page active">
+
+  <!-- Header -->
+  <header class="landing-header">
+    <a class="brand" href="#">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="brand-name">公众号数据运营助手</div>
+    </a>
+    <div class="header-right">
+      <button class="btn btn-outline btn-sm" onclick="openLogin()">登录</button>
+      <button class="btn btn-primary btn-sm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        安装插件
+      </button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-eyebrow">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      给公众号创作者的数据复盘助手
+    </div>
+    <h1 class="hero-title">
+      30 天看清账号与平台信号，<br><span>用数据持续迭代内容策略</span>
+    </h1>
+    <p class="hero-subtitle">
+      同步数据后给出阶段判断、优先级和本周动作建议。<br>
+      帮你更了解自己与平台规则，减少拍脑袋选题。
+    </p>
+    <div class="hero-ctas">
+      <button class="hero-cta-primary" onclick="openLogin()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        免费开始（赠 ¥1）
+      </button>
+      <button class="hero-cta-secondary hero-cta-demo" onclick="showPage('workspace')">
+        1分钟体验版
+      </button>
+      <button class="hero-cta-secondary" onclick="showPage('workspace')">
+        看工作台样例 →
+      </button>
+    </div>
+    <div class="hero-kpi-strip">
+      <div class="hero-mini-kpi"><span>首轮洞察</span><b>≈90秒</b></div>
+      <div class="hero-mini-kpi"><span>主抓指标</span><b>推荐率</b></div>
+      <div class="hero-mini-kpi"><span>平均动作</span><b>每周3条</b></div>
+      <div class="hero-mini-kpi"><span>接入耗时</span><b>2分钟</b></div>
+    </div>
+    <div class="hero-proof">
+      <div class="hero-proof-card">
+        <div class="proof-head">真实样例 · 过程展示（非效果承诺）</div>
+        <div class="proof-main">推荐率 <b>8.2% → 18.6%</b>，阅读环比 <b>+12%</b></div>
+        <div class="proof-sub">同类账号执行路径示例，结果会受选题与执行节奏影响</div>
+      </div>
+    </div>
+    <div class="hero-preview">
+      <div class="hero-preview-head">
+        <span class="hero-preview-title">工作台预览 · 先看关键决策，再看全文细节</span>
+        <span>默认按发布时间倒序</span>
+      </div>
+      <div class="hero-preview-grid">
+        <div class="hero-preview-kpi"><div class="label">推荐率</div><div class="value">18.6%</div><div class="sub">近7天观察值</div></div>
+        <div class="hero-preview-kpi"><div class="label">完读率</div><div class="value">62%</div><div class="sub">篇均 1分48秒</div></div>
+        <div class="hero-preview-kpi"><div class="label">总阅读</div><div class="value">640</div><div class="sub">环比 +12%</div></div>
+        <div class="hero-preview-kpi"><div class="label">新增关注</div><div class="value">12</div><div class="sub">关注率 1.9%</div></div>
+      </div>
+    </div>
+    <div class="hero-persona" id="heroPersona">
+      <button class="persona-chip active" data-persona="new">我是新号</button>
+      <button class="persona-chip" data-persona="steady">稳定更新号</button>
+      <button class="persona-chip" data-persona="bottleneck">增长瓶颈号</button>
+    </div>
+    <div class="hero-case-card" id="heroCaseCard">
+      <div class="hero-case-head">同阶段样例（仅供参考）· 新号（更新 5 周）</div>
+      <div class="hero-case-main">某账号样例：推荐率 <b>4.3% → 12.8%</b>，篇均阅读 <b>+37%</b></div>
+      <div class="hero-case-sub">动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘（不构成效果承诺）</div>
+    </div>
+    <div class="hero-cost-card">
+      <div class="hero-cost-head">本周预计花费（先算清，再开始）</div>
+      <div class="hero-cost-grid">
+        <div class="hero-cost-row">
+          <span>分析次数</span>
+          <select id="heroCostAnalysis">
+            <option value="1">1 次</option>
+            <option value="2" selected>2 次</option>
+            <option value="3">3 次</option>
+            <option value="4">4 次</option>
+          </select>
+        </div>
+        <div class="hero-cost-row">
+          <span>对话轮数</span>
+          <select id="heroCostChat">
+            <option value="10">10 轮</option>
+            <option value="20" selected>20 轮</option>
+            <option value="30">30 轮</option>
+            <option value="40">40 轮</option>
+          </select>
+        </div>
+      </div>
+      <div class="hero-cost-total"><span>预计周成本</span><span>约 ¥<b id="heroCostTotal">0.76</b></span></div>
+    </div>
+    <div class="hero-note">新用户赠 <b>¥1.00</b> 免费额度 · 按 token 计费 · 无月订阅 · AI建议仅供参考</div>
+    <div class="hero-trust">
+      <div class="hero-trust-item">无需改公众号设置</div>
+      <div class="hero-trust-item">默认按发布时间管理文章</div>
+      <div class="hero-trust-item">结果受账号阶段与执行影响</div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="steps-section">
+    <h2 class="steps-title">如何开始（2 分钟）</h2>
+    <p class="steps-sub">路径尽量短，先跑通流程再优化细节</p>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M10 13a4 4 0 0 1 0-6l2-2a4 4 0 0 1 6 6l-1 1"/>
+            <path d="M14 11a4 4 0 0 1 0 6l-2 2a4 4 0 1 1-6-6l1-1"/>
+          </svg>
+        </div>
+        <div class="step-title">接入账号</div>
+        <div class="step-desc">安装插件并登录，完成一次绑定。</div>
+        <div class="step-detail">支持 Chrome / Edge</div>
+        <div class="step-arrow">›</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-icon">
+          <svg viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.5 9a9 9 0 0 1 14.1-3.4L23 10"/>
+            <path d="M20.5 15a9 9 0 0 1-14.1 3.4L1 14"/>
+          </svg>
+        </div>
+        <div class="step-title">同步数据</div>
+        <div class="step-desc">自动拉取文章表现和来源结构。</div>
+        <div class="step-detail">发布时间、阅读、完读、互动、关注</div>
+        <div class="step-arrow">›</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-icon">
+          <svg viewBox="0 0 24 24">
+            <rect x="4" y="7" width="16" height="12" rx="3"/>
+            <path d="M12 3v4"/>
+            <circle cx="9" cy="12" r="1"/>
+            <circle cx="15" cy="12" r="1"/>
+            <path d="M9 16h6"/>
+          </svg>
+        </div>
+        <div class="step-title">执行动作</div>
+        <div class="step-desc">直接拿到“本周先做什么”。</div>
+        <div class="step-detail">每周 3 条动作 + 对应观察指标</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="feature-section">
+    <div style="max-width:1000px;margin:0 auto 18px;">
+      <h2 class="steps-title" style="margin-bottom:6px;">它如何帮你看懂数据并持续迭代</h2>
+      <p class="steps-sub" style="margin-bottom:0;">不是“保证增长”，而是“给判断 + 给动作 + 给复盘点”</p>
+    </div>
+    <div class="feature-inner">
+      <div class="feature-item">
+        <div class="feature-icon blue">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 19.5h16"/>
+            <path d="M7 15V9"/>
+            <path d="M12 15V5"/>
+            <path d="M17 15v-3"/>
+          </svg>
+        </div>
+        <div class="feature-title">决策驾驶舱</div>
+        <div class="feature-desc">阅读、完读、点赞、关注 + 推荐率第一屏看清，帮助判断今天优先关注什么。</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon green">
+          <svg viewBox="0 0 24 24">
+            <rect x="6" y="4" width="12" height="16" rx="2"/>
+            <path d="M9 9h6"/>
+            <path d="m9 14 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="feature-title">动作可执行</div>
+        <div class="feature-desc">每条建议都对应观察指标，做完即可复盘是否适合你的账号，不停留在抽象建议。</div>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon purple">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8"/>
+            <path d="M12 8v5l3 2"/>
+            <path d="M4 4l2 2"/>
+          </svg>
+        </div>
+        <div class="feature-title">按发布时间追踪</div>
+        <div class="feature-desc">文章默认按发布时间倒序，可按单一维度排序，快速定位样本与异常波动。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing-section">
+    <div class="pricing-inner">
+      <h2 class="pricing-title">先低成本验证，再放大投入</h2>
+      <p class="pricing-sub">对 ToC 创作者友好：先把策略跑通，再决定是否加大使用频率。</p>
+      <div class="pricing-list">
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 新用户赠 ¥1.00 免费额度</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 单次报告约 ¥0.15–0.20</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 对话每轮约 ¥0.01–0.05</div>
+        <div class="pricing-item"><span class="pricing-item-check">✓</span> 调用前展示 token 与预估费用</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:13px;font-size:14px;margin-top:14px;" onclick="openLogin()">免费注册开始使用</button>
+    </div>
+  </section>
+
+  <footer class="landing-footer">© 2026 公众号数据运营助手</footer>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  LOGIN MODAL
+════════════════════════════════════════ -->
+<div class="modal-overlay" id="login-overlay" onclick="closeLogin(event)">
+  <div class="login-modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeLoginModal()">×</button>
+    <div class="login-modal-title">登录 / 注册</div>
+    <div class="login-modal-sub">用手机号登录，新用户自动注册</div>
+
+    <div class="form-field">
+      <div class="form-label">手机号</div>
+      <input class="input" type="text" placeholder="请输入手机号">
+    </div>
+    <div class="form-field">
+      <div class="form-label">验证码</div>
+      <div class="code-row">
+        <input class="input" type="text" placeholder="请输入验证码">
+        <button class="code-btn">获取验证码</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:13px;font-size:14px;" onclick="closeLoginModal();showPage('workspace')">登录</button>
+    <div class="login-tip">新用户注册赠送 <b>¥1.00</b> 免费额度</div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 2 · 工作台
+════════════════════════════════════════ -->
+<div id="page-workspace" class="page flex-page">
+
+  <!-- Topbar -->
+  <div class="app-topbar">
+    <a class="brand" href="#" onclick="showPage('home')" style="text-decoration:none;">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="brand-name">运营助手</div>
+    </a>
+    <span class="app-topbar-account">机器猫创业记</span>
+    <div class="topbar-right">
+      <div class="model-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        千问
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;opacity:.6;"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="model-dropdown">
+          <div class="model-opt active"><span>千问</span><span class="model-opt-price">¥2/百万tok</span></div>
+          <div class="model-opt"><span>豆包</span><span class="model-opt-price">¥3/百万tok</span></div>
+          <div class="model-opt"><span>Claude</span><span class="model-opt-price">¥15/百万tok</span></div>
+          <div class="model-opt"><span>GPT</span><span class="model-opt-price">¥10/百万tok</span></div>
+        </div>
+      </div>
+      <span class="sync-meta">统计近30天 · 最新发布 03-14 · 同步 03-24 14:30</span>
+      <button class="btn btn-outline btn-xs" style="display:flex;align-items:center;gap:4px;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.53"/></svg>
+        一键同步
+      </button>
+      <div class="balance-chip" onclick="showPage('profile')">¥ 9.86</div>
+      <button class="avatar-btn" onclick="showPage('profile')">T</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="workspace-body">
+
+    <!-- Context panel -->
+    <div class="ctx">
+      <div class="ctx-scroll">
+        <!-- Data -->
+        <div class="ctx-sec">
+          <div class="ctx-head">
+            <div class="ctx-head-left">
+              <span class="ctx-head-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 19.5h16"/>
+                  <path d="M7 15V9"/>
+                  <path d="M12 15V5"/>
+                  <path d="M17 15v-3"/>
+                </svg>
+              </span>
+              <span class="ctx-head-title">数据</span>
+            </div>
+            <div class="time-tabs">
+              <div class="time-tab">7天</div>
+              <div class="time-tab active">30天</div>
+              <div class="time-tab">90天</div>
+              <div class="time-tab">全部</div>
+            </div>
+          </div>
+          <div class="ctx-body">
+            <div class="goal-track-card">
+              <div class="goal-track-head"><span>本周信号概览</span><span>近7天</span></div>
+              <div class="goal-track-main">推荐率观察区间 <b>15%~21%</b> · 当前 18.6%</div>
+              <div class="goal-track-bar"><span></span></div>
+            </div>
+            <div class="risk-alert"><b>风险提示：</b>推荐率近 2 天低于 15%，本周先不要加大发文频次，先稳分发信号。</div>
+            <div class="kpi-core-caption">核心指标（决策优先级：推荐率 > 完读 > 阅读）</div>
+            <div class="kpi-layout">
+              <div class="kpi-main-grid">
+                <div class="kpi-main-card key-card">
+                  <div class="kpi-main-label">阅读</div>
+                  <div class="kpi-main-value">640</div>
+                  <div class="kpi-main-meta"><span class="stat-cell-delta up">↑ 12%</span><span>篇均 <b>80</b></span></div>
+                </div>
+                <div class="kpi-main-card key-card">
+                  <div class="kpi-main-label">完读</div>
+                  <div class="kpi-main-value">62%</div>
+                  <div class="kpi-main-meta"><span class="stat-cell-delta down">↓ 3%</span><span>时长 <b>1分48秒</b></span></div>
+                </div>
+                <div class="kpi-main-card">
+                  <div class="kpi-main-label">点赞</div>
+                  <div class="kpi-main-value">36</div>
+                  <div class="kpi-main-meta"><span class="stat-cell-delta up">↑ 8%</span><span><b>5.6%</b></span></div>
+                </div>
+                <div class="kpi-main-card">
+                  <div class="kpi-main-label">关注</div>
+                  <div class="kpi-main-value">12</div>
+                  <div class="kpi-main-meta"><span class="stat-cell-delta up">↑ 50%</span><span><b>1.9%</b></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="recommend-card">
+              <div class="recommend-head">
+                <span class="recommend-tag">推荐率</span>
+                <span class="recommend-delta up">↑ 4.2%</span>
+              </div>
+              <div class="recommend-value">18.6%</div>
+              <div class="recommend-sub">平台推荐阅读占比（近30天）</div>
+              <div class="recommend-bar"><span style="width:18.6%;"></span></div>
+              <div class="recommend-goal"><span>近7天区间 15%~21%</span><b>当前 18.6%</b></div>
+            </div>
+            <div class="decision-card">
+              <div class="decision-head">
+                <span class="decision-tag">本周判断</span>
+                <span class="decision-pri">辅助级</span>
+              </div>
+              <div class="decision-title">先观察推荐率，再评估是否放大发文量</div>
+              <div class="decision-meta">建议保持外向型 7:3，先做分发和标题可见性，再按周评估是否有效。</div>
+              <div class="decision-actions">
+                <div class="decision-action">
+                  <div class="decision-action-top"><span>下一篇继续外向型选题</span><span class="decision-impact">看 推荐率</span></div>
+                  <div class="decision-evidence">证据：03-14 外向型样本 阅读 120 / 推荐率 22%</div>
+                </div>
+                <div class="decision-action">
+                  <div class="decision-action-top"><span>标题加入搜索关键词</span><span class="decision-impact">看 搜一搜占比</span></div>
+                  <div class="decision-evidence">证据：03-05、03-12 含关键词标题，搜一搜来源占比更高</div>
+                </div>
+                <div class="decision-action">
+                  <div class="decision-action-top"><span>文末增加转发引导句</span><span class="decision-impact">看 分享率</span></div>
+                  <div class="decision-evidence">证据：03-12 分享 9 次，高于区间均值 6 次</div>
+                </div>
+              </div>
+            </div>
+            <div class="today-focus-card">
+              <div class="today-focus-head">
+                <span class="today-focus-tag">今日先做</span>
+                <span class="today-focus-eta">预计 15 分钟</span>
+              </div>
+              <div class="today-focus-main">生成下一篇“外向型 + 搜索关键词”选题</div>
+              <div class="today-focus-sub">完成后重点看：推荐率、搜一搜占比</div>
+              <div class="today-focus-steps">
+                <div class="today-step done"><span class="today-step-dot">✓</span><span>完成近 30 天数据同步</span><span class="today-step-status done">已完成</span></div>
+                <div class="today-step"><span class="today-step-dot">2</span><span>生成下一篇选题草案</span><span class="today-step-status pending">进行中</span></div>
+                <div class="today-step"><span class="today-step-dot">3</span><span>发布后 24 小时看推荐率</span><span class="today-step-status">待复盘</span></div>
+              </div>
+              <button class="today-focus-btn">生成下周选题</button>
+            </div>
+            <details class="kpi-fold">
+              <summary>互动补充（分享 / 在看 / 留言）</summary>
+              <div class="kpi-interact-list">
+                <div class="kpi-interact-item"><span class="name">分享</span><span class="val">48</span><span class="rate">7.5%</span></div>
+                <div class="kpi-interact-item"><span class="name">在看</span><span class="val">29</span><span class="rate">4.5%</span></div>
+                <div class="kpi-interact-item"><span class="name">留言</span><span class="val">14</span><span class="rate">2.2%</span></div>
+              </div>
+            </details>
+            <!-- Mini trend sparkline -->
+            <div class="mini-trend">
+              <div class="mini-trend-label">阅读趋势（近 30 天）</div>
+              <svg class="sparkline" viewBox="0 0 240 40" preserveAspectRatio="none">
+                <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="0,35 30,32 60,28 90,30 120,22 150,18 180,20 210,12 240,8"/>
+                <polyline fill="var(--accent)" fill-opacity=".12" stroke="none" points="0,35 30,32 60,28 90,30 120,22 150,18 180,20 210,12 240,8 240,40 0,40"/>
+              </svg>
+            </div>
+            <div class="quick-actions">
+              <button class="quick-action">查看高推荐文章</button>
+              <button class="quick-action">生成下周选题</button>
+              <button class="quick-action">对比上周数据</button>
+            </div>
+            <a class="detail-link" onclick="openDrawer()">查看 8 篇详情与完整指标 →</a>
+          </div>
+        </div>
+
+        <!-- Analysis -->
+        <div class="ctx-sec ctx-sec-analysis">
+          <div class="ctx-head">
+            <div class="ctx-head-left">
+              <span class="ctx-head-icon">
+                <svg viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="12" height="16" rx="2"/>
+                  <path d="M9 9h6"/>
+                  <path d="M9 13h6"/>
+                </svg>
+              </span>
+              <span class="ctx-head-title">分析</span>
+            </div>
+            <span style="font-size:10px;color:var(--text-light);">03-17 生成 · 周复盘版</span>
+          </div>
+          <div class="ctx-analysis">
+            <div class="analysis-stage">
+              <span class="analysis-stage-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 21s-5-4.5-5-9a5 5 0 1 1 10 0c0 4.5-5 9-5 9z"/>
+                  <circle cx="12" cy="12" r="1.5"/>
+                </svg>
+              </span>
+              阶段判断：更新稳定，但平台分发尚未形成正循环，当前建议优先观察推荐率信号。
+            </div>
+            <div class="ctx-sec-title">发现与判断</div>
+            <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 现象：外向型阅读是记录型 <b>3 倍</b>；原因：主题更易被二次传播。</div>
+            <div class="finding pos"><span class="finding-dot" style="color:var(--green);">✓</span> 现象：朋友圈贡献 <b>68%</b>；判断：私域仍是主分发引擎。</div>
+            <div class="finding neg"><span class="finding-dot" style="color:var(--red);">✗</span> 现象：搜一搜/推荐几乎为零；判断：平台识别信号不足。</div>
+            <div class="finding neg"><span class="finding-dot" style="color:var(--red);">✗</span> 现象：分享率偏低；判断：传播钩子不够明确。</div>
+            <div class="divider"></div>
+            <div class="ctx-sec-title">本周动作</div>
+            <div class="suggestion"><div class="sug-num">1</div><div class="sug-text">执行外向型选题 1 篇，观察推荐率是否接近 20%（非保证）</div></div>
+            <div class="suggestion"><div class="sug-num">2</div><div class="sug-text">标题加入关键词，观察搜一搜占比变化</div></div>
+            <div class="suggestion"><div class="sug-num">3</div><div class="sug-text">文末加“转发给谁”的句式，拉升分享率</div></div>
+          </div>
+          <div class="ctx-footer">
+            <div class="ctx-footer-meta">统计周期 30 天 · 最新发布 03-14 · <b>≈¥0.18</b> · 建议仅供参考</div>
+            <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;">重新生成</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="chat-wrap">
+      <div class="chat-quick-strip">
+        <button class="chat-quick-btn">生成本周选题计划</button>
+        <button class="chat-quick-btn">复盘上周策略效果</button>
+        <button class="chat-quick-btn">找出高推荐样本</button>
+      </div>
+      <div class="chat-msgs">
+
+        <!-- AI: analysis report -->
+        <div class="msg">
+          <div class="msg-av ai">AI</div>
+          <div>
+            <div class="analysis-msg">
+              <div class="am-head">
+                <div class="am-head-title">
+                  已分析你近 30 天的 8 篇文章
+                  <span style="background:var(--accent-light);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;">千问 · 03-17 · 20,150 tok</span>
+                </div>
+                <div class="am-head-sub">你已稳定输出 78 天，发布 23 篇，平均阅读 80。你现在还在靠自己分发（朋友圈为主），平台推荐还没起来，这在同阶段创作者里属于正常偏上。</div>
+              </div>
+              <div class="am-body">
+                <div>
+                  <div class="am-sec-title">核心发现</div>
+                  <div class="am-finding"><span style="color:var(--green);">✓</span>&nbsp;外向型文章平均阅读 130，是记录型的 <b>3 倍</b></div>
+                  <div class="am-finding"><span style="color:var(--green);">✓</span>&nbsp;朋友圈是主力渠道，贡献了 68% 的阅读量</div>
+                  <div class="am-finding"><span style="color:var(--red);">✗</span>&nbsp;搜一搜 / 推荐流量几乎为零，内容尚未被平台分发</div>
+                  <div class="am-finding"><span style="color:var(--red);">✗</span>&nbsp;分享率偏低（0.8%），传播主要靠你个人分发</div>
+                </div>
+                <div>
+                  <div class="am-sec-title">本周可执行的 3 件事</div>
+                  <div class="suggest-list">
+                    <div class="suggest-item">
+                      <div class="suggest-item-main"><div class="suggest-item-num">1</div><span>下一篇用外向型选题，先验证阅读承接是否持续</span></div>
+                      <div class="suggest-evidence">证据：03-14 外向型样本阅读 120，高于记录型均值 32</div>
+                    </div>
+                    <div class="suggest-item">
+                      <div class="suggest-item-main"><div class="suggest-item-num">2</div><span>标题加入「创业 + 具体场景」关键词，观察搜一搜流量变化</span></div>
+                      <div class="suggest-evidence">证据：03-05、03-12 标题含关键词后，搜一搜来源占比抬升</div>
+                    </div>
+                    <div class="suggest-item">
+                      <div class="suggest-item-main"><div class="suggest-item-num">3</div><span>文末加一句引导分享的钩子，降低读者分享决策成本</span></div>
+                      <div class="suggest-evidence">证据：03-12 分享 9 次，显著高于近 30 天中位数</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mood-block">
+                  78 天 23 篇，写作习惯已建立。数据波动是正常现象，同类账号通常在更长周期里才会出现更稳定的推荐表现。建议按周持续复盘，不做短期结果预期。
+                </div>
+              </div>
+              <div class="am-footer">
+                <span style="font-size:11px;color:var(--text-light);">有问题直接问我 ↓</span>
+                <div class="am-footer-chips">
+                  <div class="chip">外向型 vs 记录型</div>
+                  <div class="chip">怎么提高分享率</div>
+                </div>
+              </div>
+            </div>
+            <div class="msg-meta">今天 14:30</div>
+          </div>
+        </div>
+
+        <!-- User -->
+        <div class="msg user">
+          <div class="msg-av user">我</div>
+          <div>
+            <div class="bubble user">我的外向型和记录型文章，数据差异的根本原因是什么？</div>
+          </div>
+        </div>
+
+        <!-- AI reply -->
+        <div class="msg" style="max-width:580px;">
+          <div class="msg-av ai">AI</div>
+          <div>
+            <div class="bubble ai">
+              从数据看，差异主要来自<b>分发渠道</b>，不是内容质量。<br><br>
+              你的外向型文章发朋友圈比例是 100%，记录型只有 40%。朋友圈贡献了外向型 68% 的阅读量。<br><br>
+              值得注意：记录型完读率（<b>72%</b>）反而高于外向型（<b>61%</b>）——读到的人更认可这类内容，只是触达面小。
+            </div>
+            <div class="msg-meta">千问 · 14:32 · 1,240 tok · ¥0.01</div>
+          </div>
+        </div>
+
+        <!-- User -->
+        <div class="msg user">
+          <div class="msg-av user">我</div>
+          <div>
+            <div class="bubble user">那我是不是应该全部转外向型？</div>
+          </div>
+        </div>
+
+        <!-- AI -->
+        <div class="msg" style="max-width:580px;">
+          <div class="msg-av ai">AI</div>
+          <div>
+            <div class="bubble ai">
+              不建议。两个原因：<br><br>
+              1. 记录型完读率更高，说明有一批忠实读者在追踪你的创业进展——这是外向型很难积累的<b>核心用户</b>。<br><br>
+              2. 记录型是外向型的<b>素材库</b>，你能写出「9 天试了 3 条路」正是因为有真实记录。<br><br>
+              建议保持 <b>7:3 比例</b>（外向型:记录型），两类文章都认真发朋友圈。
+            </div>
+            <div class="msg-meta">千问 · 14:33 · 2,340 tok · ¥0.02</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Chat bottom -->
+      <div class="chat-bottom">
+        <div class="shortcut-row">
+          <div class="chip">下一篇写什么</div>
+          <div class="chip">怎么提高分享率</div>
+          <div class="chip">对比上周</div>
+          <div class="chip">哪篇完读率最高</div>
+          <div class="chip">搜一搜怎么优化</div>
+        </div>
+        <div class="input-row">
+          <textarea class="chat-input" placeholder="问我关于你账号的任何问题..."></textarea>
+          <button class="send-btn">
+            发送
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════
+  PAGE 3 · 个人中心
+════════════════════════════════════════ -->
+<div id="page-profile" class="page">
+  <div class="profile-shell">
+    <div class="app-topbar">
+      <a class="brand" href="#" onclick="showPage('home')" style="text-decoration:none;">
+        <div class="brand-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="brand-name">运营助手</div>
+      </a>
+      <span class="app-topbar-account">机器猫创业记</span>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-xs" onclick="showPage('workspace')" style="display:flex;align-items:center;gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          返回工作台
+        </button>
+      </div>
+    </div>
+
+    <div class="profile-body">
+      <div class="profile-head">
+        <div class="profile-av">T</div>
+        <div>
+          <div class="profile-name">138 **** 1234</div>
+          <div class="profile-sub">已同步 156 篇文章 · 机器猫创业记</div>
+        </div>
+      </div>
+
+      <div class="section-title">AI 模型</div>
+      <div class="card">
+        <div class="card-body">
+          <div class="model-grid">
+            <div class="model-card active">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">千问</div>
+              <div class="model-card-desc">通义千问 · 国产性价比之选</div>
+              <div class="model-card-price">¥2/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">豆包</div>
+              <div class="model-card-desc">字节豆包 · 中文理解力强</div>
+              <div class="model-card-price">¥3/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">Claude</div>
+              <div class="model-card-desc">Anthropic Claude · 分析能力出众</div>
+              <div class="model-card-price">¥15/百万tokens</div>
+            </div>
+            <div class="model-card">
+              <div class="model-card-check">✓</div>
+              <div class="model-card-name">GPT</div>
+              <div class="model-card-desc">OpenAI GPT-4o · 综合能力强</div>
+              <div class="model-card-price">¥10/百万tokens</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">余额</div>
+      <div class="card">
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div>
+              <div class="balance-num">¥9.86</div>
+              <div class="balance-sub">含免费额度 ¥0.00（初始 ¥1.00 已用完）</div>
+            </div>
+          </div>
+          <div class="recharge-opts">
+            <div class="recharge-opt active">
+              <div class="recharge-opt-amount" style="color:var(--accent);">¥10</div>
+              <div class="recharge-opt-sub">≈ 110 万 tokens</div>
+            </div>
+            <div class="recharge-opt">
+              <div class="recharge-opt-amount">¥30</div>
+              <div class="recharge-opt-sub">≈ 330 万 tokens</div>
+            </div>
+            <div class="recharge-opt">
+              <div class="recharge-opt-amount">¥50</div>
+              <div class="recharge-opt-sub">≈ 550 万 tokens</div>
+            </div>
+          </div>
+          <div class="pay-btn-row">
+            <button class="btn btn-primary" style="width:100%;padding:12px;font-size:13px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              支付宝支付 ¥10
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">消费记录</div>
+      <div class="card">
+        <div class="card-body" style="padding:14px 18px;">
+          <div class="log-item">
+            <div class="log-date">03-24 14:32</div>
+            <div class="log-type">对话</div>
+            <div class="log-tok">1,847 tok</div>
+            <div class="log-cost">¥0.02</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-24 14:30</div>
+            <div class="log-type">生成分析（近 30 天）</div>
+            <div class="log-tok">20,150 tok</div>
+            <div class="log-cost">¥0.18</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-17 10:20</div>
+            <div class="log-type">对话</div>
+            <div class="log-tok">4,502 tok</div>
+            <div class="log-cost">¥0.05</div>
+          </div>
+          <div class="log-item">
+            <div class="log-date">03-17 10:15</div>
+            <div class="log-type">生成分析（近 30 天）</div>
+            <div class="log-tok">19,800 tok</div>
+            <div class="log-cost">¥0.17</div>
+          </div>
+          <div class="more-link">加载更多 ↓</div>
+        </div>
+      </div>
+
+      <div class="section-title">充值记录</div>
+      <div class="card">
+        <div class="card-body" style="padding:14px 18px;">
+          <div class="pay-item">
+            <div class="pay-date">03-20 15:00</div>
+            <div class="pay-channel">支付宝</div>
+            <div class="pay-amount">+¥10.00</div>
+          </div>
+          <div class="pay-item">
+            <div class="pay-date">03-01</div>
+            <div class="pay-channel">免费额度（注册赠送）</div>
+            <div class="pay-amount">+¥1.00</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost" style="color:var(--red);border-color:#fecdd3;" onclick="showPage('home')">退出登录</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Drawer: article detail -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="drawer-head-main">
+      <div class="drawer-head-title">文章数据 · 近 30 天</div>
+      <div class="drawer-head-sub">
+        <span>统计周期 近30天</span>
+        <span>共 8 篇</span>
+        <span>发布时间 02-20 ~ 03-14</span>
+        <span>默认按发布时间倒序</span>
+      </div>
+      <div class="drawer-head-sync">同步时间 2026-03-24 14:30（仅入库）</div>
+    </div>
+    <div class="drawer-head-actions">
+      <button class="btn btn-ghost btn-xs drawer-export-btn">导出周复盘</button>
+      <button class="drawer-close" onclick="closeDrawer()">×</button>
+    </div>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-decision-hero">
+      <div class="drawer-decision-grid">
+        <div class="drawer-decision-kpi"><div class="label">推荐率</div><div class="value">18.6%</div><div class="sub">主决策指标</div></div>
+        <div class="drawer-decision-kpi"><div class="label">完读率</div><div class="value">62%</div><div class="sub">内容质量</div></div>
+        <div class="drawer-decision-kpi"><div class="label">关注率</div><div class="value">1.9%</div><div class="sub">增长观察</div></div>
+      </div>
+      <div class="drawer-decision-action">
+        <div class="title">本周建议（供参考）</div>
+        <div class="main">先观察推荐率是否稳定在 20% 附近，再决定是否加大发文量</div>
+        <div class="sub">优先执行：外向型选题 + 标题关键词 + 文末转发引导（结果受执行影响）</div>
+        <div class="drawer-evidence-title">证据链（近 30 天）</div>
+        <div class="drawer-evidence-list">
+          <div class="drawer-evidence-item"><b>证据1</b>03-14 外向型文章：推荐率 22%，阅读 120，来源以朋友圈 68% 为主。</div>
+          <div class="drawer-evidence-item"><b>证据2</b>03-05、03-12 关键词标题文章：推荐率 16%-20%，搜一搜来源占比提升。</div>
+          <div class="drawer-evidence-item"><b>证据3</b>文末有明确转发引导的样本，分享次数高于区间中位数。</div>
+        </div>
+        <button class="drawer-action-btn">生成本周选题计划</button>
+      </div>
+    </div>
+    <!-- Full metrics: grouped by decision dimension -->
+      <div class="metric-groups">
+        <div class="metric-group">
+          <div class="metric-group-head">阅读与质量</div>
+          <div class="metric-group-grid">
+            <div class="metric-mini"><div class="metric-mini-label">总阅读</div><div class="metric-mini-value">640</div><div class="metric-mini-sub">环比 ↑12%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">篇均阅读</div><div class="metric-mini-value">80</div><div class="metric-mini-sub">环比 ↑5%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">完读率</div><div class="metric-mini-value">62%</div><div class="metric-mini-sub">环比 ↓3%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">篇均时长</div><div class="metric-mini-value">1分48秒</div><div class="metric-mini-sub">环比 ↑9%</div></div>
+          </div>
+        </div>
+        <div class="metric-group">
+          <div class="metric-group-head">互动</div>
+          <div class="metric-group-grid">
+            <div class="metric-mini"><div class="metric-mini-label">总点赞</div><div class="metric-mini-value">36</div><div class="metric-mini-sub">点赞率 5.6%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">总分享</div><div class="metric-mini-value">48</div><div class="metric-mini-sub">分享率 7.5%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">总在看</div><div class="metric-mini-value">29</div><div class="metric-mini-sub">在看率 4.5%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">总留言</div><div class="metric-mini-value">14</div><div class="metric-mini-sub">留言率 2.2%</div></div>
+          </div>
+        </div>
+        <div class="metric-group">
+          <div class="metric-group-head">增长</div>
+          <div class="metric-group-grid">
+            <div class="metric-mini"><div class="metric-mini-label">新增关注</div><div class="metric-mini-value">12</div><div class="metric-mini-sub">关注率 1.9%</div></div>
+            <div class="metric-mini"><div class="metric-mini-label">推荐率</div><div class="metric-mini-value">18.6%</div><div class="metric-mini-sub">平台推荐占比</div></div>
+          </div>
+        </div>
+      </div>
+
+    <!-- Trend chart -->
+    <div class="drawer-block-head">阅读趋势</div>
+    <div class="trend-chart-box">
+      <svg viewBox="0 0 420 100" preserveAspectRatio="none" style="width:100%;height:100px;">
+        <!-- Grid lines -->
+        <line x1="0" y1="25" x2="420" y2="25" stroke="var(--border-light)" stroke-width="0.5"/>
+        <line x1="0" y1="50" x2="420" y2="50" stroke="var(--border-light)" stroke-width="0.5"/>
+        <line x1="0" y1="75" x2="420" y2="75" stroke="var(--border-light)" stroke-width="0.5"/>
+        <line x1="0" y1="40" x2="420" y2="40" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 3"/>
+        <!-- Area fill -->
+        <polygon fill="var(--accent)" fill-opacity=".12" points="0,85 60,78 120,65 180,70 240,52 300,42 360,45 420,25 420,100 0,100"/>
+        <polyline fill="none" stroke="#94a3b8" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3" points="0,88 60,80 120,75 180,76 240,66 300,58 360,59 420,50"/>
+        <!-- Line -->
+        <polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="0,85 60,78 120,65 180,70 240,52 300,42 360,45 420,25"/>
+        <!-- Data dots -->
+        <circle cx="0" cy="85" r="3" fill="var(--accent)"/>
+        <circle cx="60" cy="78" r="3" fill="var(--accent)"/>
+        <circle cx="120" cy="65" r="3" fill="var(--accent)"/>
+        <circle cx="180" cy="70" r="3" fill="var(--accent)"/>
+        <circle cx="240" cy="52" r="3" fill="var(--accent)"/>
+        <circle cx="300" cy="42" r="3" fill="var(--accent)"/>
+        <circle cx="360" cy="45" r="3" fill="var(--accent)"/>
+        <circle cx="420" cy="25" r="4" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-light);margin-top:4px;">
+        <span>02-24</span><span>03-01</span><span>03-08</span><span>03-14</span><span>03-24</span>
+      </div>
+      <div class="trend-legend">
+        <div class="trend-legend-item"><span class="trend-dot" style="background:var(--accent);"></span><span>本周期</span></div>
+        <div class="trend-legend-item"><span class="trend-dot" style="background:#94a3b8;"></span><span>上周期</span></div>
+        <div class="trend-legend-item"><span class="trend-dot" style="background:#f59e0b;"></span><span>参考线</span></div>
+      </div>
+    </div>
+
+    <!-- Traffic source overview -->
+    <div class="drawer-block-head orange">流量来源</div>
+    <div class="src-overview">
+      <div class="src-bar" style="height:8px;border-radius:8px;">
+        <div class="src-seg" style="width:52%;background:var(--accent);border-radius:8px 0 0 8px;"></div>
+        <div class="src-seg" style="width:30%;background:#6FA8FF;"></div>
+        <div class="src-seg" style="width:8%;background:var(--green);"></div>
+        <div class="src-seg" style="flex:1;background:#e5e7eb;border-radius:0 8px 8px 0;"></div>
+      </div>
+      <div class="src-labels" style="flex-wrap:wrap;gap:8px 16px;margin-top:8px;">
+        <div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 52%</div>
+        <div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号消息 30%</div>
+        <div class="src-label"><div class="src-dot" style="background:var(--green);"></div>搜一搜 8%</div>
+        <div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 10%</div>
+      </div>
+    </div>
+
+    <!-- Article list -->
+    <div class="drawer-block-head green" style="margin-bottom:12px;">文章列表</div>
+    <div class="article-filter">
+      <div class="article-filter-head">
+        <div class="article-filter-title">排序维度（单选）</div>
+        <span class="filter-sort-tip">单选 · 倒序 · 当前：<b>发布时间</b></span>
+      </div>
+      <div class="filter-metrics">
+        <button class="filter-chip active" data-sort="publish">发布时间</button>
+        <button class="filter-chip" data-sort="read">阅读</button>
+        <button class="filter-chip" data-sort="finish">完读</button>
+        <button class="filter-chip" data-sort="duration">时长</button>
+        <button class="filter-chip" data-sort="like">点赞</button>
+        <button class="filter-chip" data-sort="share">分享</button>
+        <button class="filter-chip" data-sort="wow">在看</button>
+        <button class="filter-chip" data-sort="comment">留言</button>
+        <button class="filter-chip" data-sort="follow">关注</button>
+        <button class="filter-chip" data-sort="recommend">推荐率</button>
+      </div>
+      <div class="filter-sort-insight" id="filterSortInsight">按发布时间倒序，优先查看最近发布内容。</div>
+      <div class="filter-views">
+        <button class="view-chip active" data-view="all">全部</button>
+        <button class="view-chip" data-view="top5">只看 Top5</button>
+        <button class="view-chip" data-view="low3">低表现 3 篇</button>
+      </div>
+      <div class="filter-note">选择一个维度后按该维度倒序排列；<strong>发布时间 = 最新到最旧</strong>。</div>
+    </div>
+
+    <div class="art-row" data-publish="2026-03-14" data-read="120" data-finish="67" data-duration="131" data-like="6" data-share="8" data-wow="5" data-comment="3" data-follow="4" data-recommend="22">
+      <div class="art-top"><div class="art-title">AI 不会让你变强，它只会放大你本来的样子</div><div class="art-date">发布 03-14</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>120</b></div><div class="art-stat">完读 <b>67%</b></div><div class="art-stat">推荐率 <b>22%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>2分11秒</b></div><div class="art-stat">点赞 <b>6</b></div><div class="art-stat">分享 <b>8</b></div><div class="art-stat">在看 <b>5</b></div><div class="art-stat">留言 <b>3</b></div><div class="art-stat">关注 <b>4</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:68%;background:var(--accent);"></div><div class="src-seg" style="width:20%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 68%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 20%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
+    </div>
+    <div class="art-row" data-publish="2026-03-12" data-read="104" data-finish="64" data-duration="118" data-like="5" data-share="9" data-wow="4" data-comment="2" data-follow="2" data-recommend="20">
+      <div class="art-top"><div class="art-title">我把选题改成“可转发”，7 天后发生了什么</div><div class="art-date">发布 03-12</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>104</b></div><div class="art-stat">完读 <b>64%</b></div><div class="art-stat">推荐率 <b>20%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分58秒</b></div><div class="art-stat">点赞 <b>5</b></div><div class="art-stat">分享 <b>9</b></div><div class="art-stat">在看 <b>4</b></div><div class="art-stat">留言 <b>2</b></div><div class="art-stat">关注 <b>2</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:62%;background:var(--accent);"></div><div class="src-seg" style="width:26%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 62%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 26%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
+    </div>
+    <div class="art-row" data-publish="2026-03-08" data-read="32" data-finish="58" data-duration="72" data-like="2" data-share="1" data-wow="1" data-comment="0" data-follow="0" data-recommend="6">
+      <div class="art-top"><div class="art-title">3D 创业笔记：第 9 周进展</div><div class="art-date">发布 03-08</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>32</b></div><div class="art-stat">完读 <b>58%</b></div><div class="art-stat">推荐率 <b>6%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分12秒</b></div><div class="art-stat">点赞 <b>2</b></div><div class="art-stat">分享 <b>1</b></div><div class="art-stat">在看 <b>1</b></div><div class="art-stat">留言 <b>0</b></div><div class="art-stat">关注 <b>0</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:82%;background:#6FA8FF;"></div><div class="src-seg" style="width:12%;background:var(--accent);"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 82%</div><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 12%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 6%</div></div>
+    </div>
+    <div class="art-row" data-publish="2026-03-05" data-read="88" data-finish="66" data-duration="102" data-like="4" data-share="6" data-wow="3" data-comment="1" data-follow="2" data-recommend="16">
+      <div class="art-top"><div class="art-title">一次标题 AB 测试：多了 4 个关键词，推荐率翻了 1 倍</div><div class="art-date">发布 03-05</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>88</b></div><div class="art-stat">完读 <b>66%</b></div><div class="art-stat">推荐率 <b>16%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分42秒</b></div><div class="art-stat">点赞 <b>4</b></div><div class="art-stat">分享 <b>6</b></div><div class="art-stat">在看 <b>3</b></div><div class="art-stat">留言 <b>1</b></div><div class="art-stat">关注 <b>2</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:48%;background:var(--accent);"></div><div class="src-seg" style="width:38%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 48%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 38%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 14%</div></div>
+    </div>
+    <div class="art-row is-hidden" data-publish="2026-02-28" data-read="85" data-finish="72" data-duration="118" data-like="4" data-share="6" data-wow="3" data-comment="2" data-follow="3" data-recommend="18">
+      <div class="art-top"><div class="art-title">9 天试了 3 条路全没走通，我发现了一个更重要的问题</div><div class="art-date">发布 02-28</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>85</b></div><div class="art-stat">完读 <b>72%</b></div><div class="art-stat">推荐率 <b>18%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分58秒</b></div><div class="art-stat">点赞 <b>4</b></div><div class="art-stat">分享 <b>6</b></div><div class="art-stat">在看 <b>3</b></div><div class="art-stat">留言 <b>2</b></div><div class="art-stat">关注 <b>3</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:54%;background:var(--accent);"></div><div class="src-seg" style="width:30%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 54%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 30%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 16%</div></div>
+    </div>
+    <div class="art-row is-hidden" data-publish="2026-02-26" data-read="76" data-finish="71" data-duration="109" data-like="3" data-share="4" data-wow="2" data-comment="2" data-follow="1" data-recommend="13">
+      <div class="art-top"><div class="art-title">连续 5 天记录用户提问，我找到一个高频痛点</div><div class="art-date">发布 02-26</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>76</b></div><div class="art-stat">完读 <b>71%</b></div><div class="art-stat">推荐率 <b>13%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分49秒</b></div><div class="art-stat">点赞 <b>3</b></div><div class="art-stat">分享 <b>4</b></div><div class="art-stat">在看 <b>2</b></div><div class="art-stat">留言 <b>2</b></div><div class="art-stat">关注 <b>1</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:41%;background:var(--accent);"></div><div class="src-seg" style="width:46%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 41%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 46%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 13%</div></div>
+    </div>
+    <div class="art-row is-hidden" data-publish="2026-02-23" data-read="54" data-finish="63" data-duration="95" data-like="2" data-share="3" data-wow="2" data-comment="1" data-follow="1" data-recommend="9">
+      <div class="art-top"><div class="art-title">第 7 周复盘：写作频率上来后，为什么阅读还是波动</div><div class="art-date">发布 02-23</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>54</b></div><div class="art-stat">完读 <b>63%</b></div><div class="art-stat">推荐率 <b>9%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分35秒</b></div><div class="art-stat">点赞 <b>2</b></div><div class="art-stat">分享 <b>3</b></div><div class="art-stat">在看 <b>2</b></div><div class="art-stat">留言 <b>1</b></div><div class="art-stat">关注 <b>1</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:36%;background:var(--accent);"></div><div class="src-seg" style="width:50%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 36%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 50%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 14%</div></div>
+    </div>
+    <div class="art-row is-hidden" data-publish="2026-02-20" data-read="97" data-finish="69" data-duration="106" data-like="8" data-share="5" data-wow="7" data-comment="4" data-follow="5" data-recommend="14">
+      <div class="art-top"><div class="art-title">创业第 8 周：焦虑的本质是信息不足</div><div class="art-date">发布 02-20</div></div>
+      <div class="art-stats primary">
+        <div class="art-stat">阅读 <b>97</b></div><div class="art-stat">完读 <b>69%</b></div><div class="art-stat">推荐率 <b>14%</b></div>
+      </div>
+      <div class="art-stats secondary">
+        <div class="art-stat">时长 <b>1分46秒</b></div><div class="art-stat">点赞 <b>8</b></div><div class="art-stat">分享 <b>5</b></div><div class="art-stat">在看 <b>7</b></div><div class="art-stat">留言 <b>4</b></div><div class="art-stat">关注 <b>5</b></div>
+      </div>
+      <div class="src-bar"><div class="src-seg" style="width:60%;background:var(--accent);"></div><div class="src-seg" style="width:28%;background:#6FA8FF;"></div><div class="src-seg" style="flex:1;background:#e5e7eb;"></div></div>
+      <div class="src-labels"><div class="src-label"><div class="src-dot" style="background:var(--accent);"></div>朋友圈 60%</div><div class="src-label"><div class="src-dot" style="background:#6FA8FF;"></div>公众号 28%</div><div class="src-label"><div class="src-dot" style="background:#e5e7eb;"></div>其他 12%</div></div>
+    </div>
+    <div class="load-status" id="drawerLoadStatus">已加载 4 / 8 篇 · 下滑自动加载</div>
+    <div class="more-link drawer-load-more" id="drawerLoadMore">手动加载更多</div>
+  </div>
+</div>
+
+<!-- Export weekly review modal -->
+<div class="export-modal-overlay" id="export-overlay" onclick="closeExportModal(event)">
+  <div class="export-modal" onclick="event.stopPropagation()">
+    <div class="export-modal-head">
+      <div>
+        <div class="export-modal-title">导出周复盘</div>
+        <div class="export-modal-sub">任务队列生成，完成后可下载文件</div>
+      </div>
+      <button class="export-modal-close" onclick="closeExportModal()">×</button>
+    </div>
+    <div class="export-modal-body">
+      <div class="export-section">
+        <div class="export-section-title">导出格式</div>
+        <div class="export-format-row">
+          <button class="export-format-chip active" data-format="pdf">PDF（推荐）</button>
+          <button class="export-format-chip" data-format="image">长图</button>
+          <button class="export-format-chip" data-format="md">Markdown</button>
+        </div>
+      </div>
+      <div class="export-section">
+        <div class="export-section-title">复盘范围</div>
+        <div class="export-range-row">
+          <button class="export-range-chip active" data-range="7">近7天</button>
+          <button class="export-range-chip" data-range="30">近30天</button>
+        </div>
+      </div>
+      <div class="export-section">
+        <div class="export-section-title">包含内容</div>
+        <div class="export-items">
+          <label class="export-item"><input type="checkbox" checked disabled> 核心指标与趋势</label>
+          <label class="export-item"><input type="checkbox" checked disabled> 本周动作与证据链</label>
+          <label class="export-item"><input type="checkbox" checked> 文章 Top / Low 样本</label>
+          <label class="export-item"><input type="checkbox" checked> AI 建议摘要（仅供参考）</label>
+        </div>
+      </div>
+      <div class="export-task">
+        <div class="export-task-state" id="exportTaskState">未开始</div>
+        <div class="export-task-meta" id="exportTaskMeta">点击「开始生成」后进入任务队列，预计 20 秒内完成。</div>
+        <div class="export-task-progress"><span id="exportTaskBar"></span></div>
+      </div>
+      <div class="export-history">
+        <div class="export-section-title">最近导出</div>
+        <div class="export-history-list">
+          <div class="export-history-item"><span>03-24 周复盘（PDF）</span><span>已完成</span></div>
+          <div class="export-history-item"><span>03-17 周复盘（长图）</span><span>已完成</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="export-modal-foot">
+      <button class="btn btn-ghost btn-sm" onclick="closeExportModal()">关闭</button>
+      <button class="btn btn-primary btn-sm" id="exportGenerateBtn">开始生成</button>
+      <button class="btn btn-outline btn-sm" id="exportDownloadBtn" style="display:none;">下载文件</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const pages = ['home','workspace','profile'];
+function showPage(name) {
+  pages.forEach(p => {
+    const el = document.getElementById('page-' + p);
+    const tab = document.getElementById('dt-' + p);
+    el?.classList.remove('active');
+    tab?.classList.remove('active');
+  });
+  document.getElementById('page-' + name)?.classList.add('active');
+  document.getElementById('dt-' + name)?.classList.add('active');
+  closeDrawer();
+  closeExportModal();
+  closeLoginModal();
+}
+
+function openLogin() {
+  document.getElementById('login-overlay').classList.add('open');
+}
+function closeLogin(e) {
+  if (e.target === e.currentTarget) {
+    closeLoginModal();
+  }
+}
+function closeLoginModal() {
+  document.getElementById('login-overlay').classList.remove('open');
+}
+
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  const drawerBody = document.querySelector('.drawer-body');
+  if (drawerBody) drawerBody.scrollTop = 0;
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+  closeExportModal();
+}
+
+function openExportModal() {
+  document.getElementById('export-overlay')?.classList.add('open');
+}
+
+function closeExportModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('export-overlay')?.classList.remove('open');
+}
+
+function bindUIInteractions() {
+  document.querySelectorAll('.time-tabs').forEach(group => {
+    group.querySelectorAll('.time-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        group.querySelectorAll('.time-tab').forEach(item => item.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+
+  const personaCases = {
+    new: {
+      head: '同阶段样例（仅供参考）· 新号（更新 5 周）',
+      main: '某账号样例：推荐率 <b>4.3% → 12.8%</b>，篇均阅读 <b>+37%</b>',
+      sub: '动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘（不构成效果承诺）'
+    },
+    steady: {
+      head: '同阶段样例（仅供参考）· 稳定更新号（更新 6 个月）',
+      main: '某账号样例：推荐率 <b>9.8% → 18.4%</b>，关注率 <b>+1.1pp</b>',
+      sub: '动作：外向型:记录型 7:3 + 每周复盘 1 次 + 高分享模板复用（不构成效果承诺）'
+    },
+    bottleneck: {
+      head: '同阶段样例（仅供参考）· 增长瓶颈号（阅读停滞）',
+      main: '某账号样例：推荐率 <b>11.2% → 21.3%</b>，阅读环比 <b>+26%</b>',
+      sub: '动作：先观察推荐率变化，再决定是否扩大发文频次与分发渠道（不构成效果承诺）'
+    }
+  };
+  const heroCaseCard = document.getElementById('heroCaseCard');
+  document.querySelectorAll('.hero-persona').forEach(group => {
+    group.querySelectorAll('.persona-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        group.querySelectorAll('.persona-chip').forEach(item => item.classList.remove('active'));
+        chip.classList.add('active');
+        if (!heroCaseCard) return;
+        const data = personaCases[chip.dataset.persona || 'new'];
+        if (!data) return;
+        const head = heroCaseCard.querySelector('.hero-case-head');
+        const main = heroCaseCard.querySelector('.hero-case-main');
+        const sub = heroCaseCard.querySelector('.hero-case-sub');
+        if (head) head.textContent = data.head;
+        if (main) main.innerHTML = data.main;
+        if (sub) sub.textContent = data.sub;
+      });
+    });
+  });
+
+  const heroCostAnalysis = document.getElementById('heroCostAnalysis');
+  const heroCostChat = document.getElementById('heroCostChat');
+  const heroCostTotal = document.getElementById('heroCostTotal');
+  const updateHeroCost = () => {
+    if (!heroCostAnalysis || !heroCostChat || !heroCostTotal) return;
+    const analysisCount = Number(heroCostAnalysis.value || 0);
+    const chatCount = Number(heroCostChat.value || 0);
+    const total = analysisCount * 0.18 + chatCount * 0.02;
+    heroCostTotal.textContent = total.toFixed(2);
+  };
+  [heroCostAnalysis, heroCostChat].forEach(el => {
+    el?.addEventListener('change', updateHeroCost);
+  });
+  updateHeroCost();
+
+  const exportTaskState = document.getElementById('exportTaskState');
+  const exportTaskMeta = document.getElementById('exportTaskMeta');
+  const exportTaskBar = document.getElementById('exportTaskBar');
+  const exportGenerateBtn = document.getElementById('exportGenerateBtn');
+  const exportDownloadBtn = document.getElementById('exportDownloadBtn');
+  const exportFormatChips = document.querySelectorAll('.export-format-chip');
+  const exportRangeChips = document.querySelectorAll('.export-range-chip');
+  let exportStage = 'idle';
+  let exportTimers = [];
+
+  const clearExportTimers = () => {
+    exportTimers.forEach(timer => clearTimeout(timer));
+    exportTimers = [];
+  };
+
+  const setExportStage = stage => {
+    exportStage = stage;
+    if (!exportTaskState || !exportTaskMeta || !exportTaskBar || !exportGenerateBtn || !exportDownloadBtn) return;
+    if (stage === 'idle') {
+      exportTaskState.textContent = '未开始';
+      exportTaskMeta.textContent = '点击「开始生成」后进入任务队列，预计 20 秒内完成。';
+      exportTaskBar.style.width = '0%';
+      exportGenerateBtn.disabled = false;
+      exportGenerateBtn.textContent = '开始生成';
+      exportDownloadBtn.style.display = 'none';
+      return;
+    }
+    if (stage === 'queue') {
+      exportTaskState.textContent = '队列中';
+      exportTaskMeta.textContent = '任务ID R20260324-001 · 已进入导出队列，等待资源分配。';
+      exportTaskBar.style.width = '24%';
+      exportGenerateBtn.disabled = true;
+      exportGenerateBtn.textContent = '排队中...';
+      exportDownloadBtn.style.display = 'none';
+      return;
+    }
+    if (stage === 'running') {
+      exportTaskState.textContent = '生成中 62%';
+      exportTaskMeta.textContent = '正在聚合指标、证据链与周复盘建议，请稍候。';
+      exportTaskBar.style.width = '62%';
+      exportGenerateBtn.disabled = true;
+      exportGenerateBtn.textContent = '生成中...';
+      exportDownloadBtn.style.display = 'none';
+      return;
+    }
+    if (stage === 'done') {
+      exportTaskState.textContent = '已完成，可下载';
+      exportTaskMeta.textContent = '导出完成：周复盘_2026W12.pdf（含指标、趋势与证据链）。';
+      exportTaskBar.style.width = '100%';
+      exportGenerateBtn.disabled = false;
+      exportGenerateBtn.textContent = '重新生成';
+      exportDownloadBtn.style.display = 'inline-flex';
+      return;
+    }
+    if (stage === 'downloaded') {
+      exportTaskState.textContent = '已完成（已下载）';
+      exportTaskMeta.textContent = '文件已下载，可继续生成其他时间范围的复盘。';
+      exportTaskBar.style.width = '100%';
+      exportGenerateBtn.disabled = false;
+      exportGenerateBtn.textContent = '重新生成';
+      exportDownloadBtn.style.display = 'inline-flex';
+    }
+  };
+
+  exportFormatChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      exportFormatChips.forEach(item => item.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
+  exportRangeChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      exportRangeChips.forEach(item => item.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
+  document.querySelector('.drawer-export-btn')?.addEventListener('click', () => {
+    openExportModal();
+    clearExportTimers();
+    setExportStage('idle');
+  });
+
+  exportGenerateBtn?.addEventListener('click', () => {
+    if (exportStage === 'queue' || exportStage === 'running') return;
+    clearExportTimers();
+    setExportStage('queue');
+    exportTimers.push(setTimeout(() => setExportStage('running'), 700));
+    exportTimers.push(setTimeout(() => setExportStage('done'), 2600));
+  });
+
+  exportDownloadBtn?.addEventListener('click', () => {
+    setExportStage('downloaded');
+  });
+
+  const drawerBody = document.querySelector('.drawer-body');
+  const sortTip = document.querySelector('.filter-sort-tip');
+  const sortInsight = document.getElementById('filterSortInsight');
+  const drawerLoadStatus = document.getElementById('drawerLoadStatus');
+  const drawerLoadMore = document.getElementById('drawerLoadMore');
+  const pageSize = 2;
+  const baseVisibleCount = 4;
+  let loadedCount = 4;
+  let loadingMore = false;
+  let currentView = 'all';
+  let currentSortKey = 'publish';
+  const sortInsightMap = {
+    publish: '按发布时间倒序，优先查看最近发布内容。',
+    read: '按阅读倒序，优先复盘高流量选题。',
+    finish: '按完读倒序，优先提炼高留存结构。',
+    duration: '按时长倒序，优先观察长文承接能力。',
+    like: '按点赞倒序，优先复用被认可表达。',
+    share: '按分享倒序，优先总结可传播钩子。',
+    wow: '按在看倒序，优先沉淀强认同内容。',
+    comment: '按留言倒序，优先分析争议与互动点。',
+    follow: '按关注倒序，优先放大拉新型内容。',
+    recommend: '按推荐率倒序，优先观察平台分发样本特征。'
+  };
+  const sortLabelMap = {
+    publish: '发布时间',
+    read: '阅读',
+    finish: '完读',
+    duration: '时长',
+    like: '点赞',
+    share: '分享',
+    wow: '在看',
+    comment: '留言',
+    follow: '关注',
+    recommend: '推荐率'
+  };
+  const viewLabelMap = {
+    all: '全部',
+    top5: 'Top5',
+    low3: '低表现 3 篇'
+  };
+
+  const getRows = () => Array.from(document.querySelectorAll('.art-row'));
+  const getMetricValue = (row, sortKey) => {
+    if (sortKey === 'publish') {
+      return new Date(row.dataset.publish || '').getTime();
+    }
+    return Number(row.dataset[sortKey] || 0);
+  };
+
+  const renderLoadState = () => {
+    const totalCount = getRows().length;
+    const safeLoaded = Math.min(loadedCount, totalCount);
+    if (!drawerLoadStatus || !drawerLoadMore) return;
+
+    if (currentView !== 'all') {
+      const viewRows = getViewRows(getRows());
+      drawerLoadStatus.textContent = '当前视图：' + (viewLabelMap[currentView] || '全部') + ' · 共 ' + viewRows.length + ' 篇';
+      drawerLoadMore.classList.add('is-disabled');
+      drawerLoadMore.classList.remove('is-loading');
+      drawerLoadMore.textContent = '视图模式无需加载';
+      return;
+    }
+
+    if (safeLoaded >= totalCount) {
+      drawerLoadStatus.textContent = '已加载 ' + totalCount + ' / ' + totalCount + ' 篇 · 已全部展示';
+      drawerLoadMore.classList.add('is-disabled');
+      drawerLoadMore.classList.remove('is-loading');
+      drawerLoadMore.textContent = '已全部加载';
+      return;
+    }
+
+    drawerLoadStatus.textContent = '已加载 ' + safeLoaded + ' / ' + totalCount + ' 篇 · 下滑自动加载';
+    drawerLoadMore.classList.remove('is-disabled');
+    drawerLoadMore.classList.remove('is-loading');
+    drawerLoadMore.textContent = '手动加载更多';
+  };
+
+  const getViewRows = rows => {
+    if (currentView === 'top5') return rows.slice(0, 5);
+    if (currentView === 'low3') return rows.slice(Math.max(0, rows.length - 3));
+    return rows;
+  };
+
+  const applyRowVisibility = () => {
+    const rows = getRows();
+    rows.forEach(row => row.classList.add('is-hidden'));
+    const viewRows = getViewRows(rows);
+    const finalRows = currentView === 'all' ? viewRows.slice(0, loadedCount) : viewRows;
+    finalRows.forEach(row => row.classList.remove('is-hidden'));
+  };
+
+  const ensureRowHeaderLayout = row => {
+    const artTop = row.querySelector('.art-top');
+    const artTitle = row.querySelector('.art-title');
+    if (!artTop || !artTitle) return null;
+
+    let main = artTop.querySelector('.art-top-main');
+    if (!main) {
+      main = document.createElement('div');
+      main.className = 'art-top-main';
+      artTop.insertBefore(main, artTitle);
+      main.appendChild(artTitle);
+    }
+
+    let rank = main.querySelector('.art-rank');
+    if (!rank) {
+      rank = document.createElement('span');
+      rank.className = 'art-rank';
+      main.insertBefore(rank, main.firstChild);
+    }
+    return rank;
+  };
+
+  const renderRowRanks = () => {
+    getRows().forEach((row, index) => {
+      const rank = ensureRowHeaderLayout(row);
+      if (!rank) return;
+      rank.textContent = String(index + 1);
+      rank.classList.remove('top1', 'top2', 'top3');
+      if (index === 0) rank.classList.add('top1');
+      if (index === 1) rank.classList.add('top2');
+      if (index === 2) rank.classList.add('top3');
+    });
+  };
+
+  const ensureRowInsight = row => {
+    let insight = row.querySelector('.art-insight');
+    if (!insight) {
+      insight = document.createElement('div');
+      insight.className = 'art-insight';
+      row.appendChild(insight);
+    }
+    return insight;
+  };
+
+  const formatDuration = sec => {
+    const safe = Number(sec || 0);
+    const min = Math.floor(safe / 60);
+    const rem = safe % 60;
+    return min + '分' + String(rem).padStart(2, '0') + '秒';
+  };
+
+  const metricValueText = (row, sortKey) => {
+    if (sortKey === 'publish') return '发布时间 ' + (row.dataset.publish || '').slice(5);
+    if (sortKey === 'finish') return '完读率 ' + row.dataset.finish + '%';
+    if (sortKey === 'recommend') return '推荐率 ' + row.dataset.recommend + '%';
+    if (sortKey === 'duration') return '篇均时长 ' + formatDuration(row.dataset.duration);
+    if (sortKey === 'read') return '阅读 ' + row.dataset.read;
+    if (sortKey === 'like') return '点赞 ' + row.dataset.like;
+    if (sortKey === 'share') return '分享 ' + row.dataset.share;
+    if (sortKey === 'wow') return '在看 ' + row.dataset.wow;
+    if (sortKey === 'comment') return '留言 ' + row.dataset.comment;
+    if (sortKey === 'follow') return '关注 ' + row.dataset.follow;
+    return '';
+  };
+
+  const renderRowInsights = (sortKey, label) => {
+    const rows = getRows();
+    rows.forEach((row, index) => {
+      const insight = ensureRowInsight(row);
+      const tier = index < 3 ? '头部样本' : (index >= rows.length - 3 ? '低位样本' : '中位样本');
+      insight.textContent = '洞察：按' + label + '排序，当前为' + tier + '，' + metricValueText(row, sortKey) + '。';
+    });
+  };
+
+  const updateSortInsight = sortKey => {
+    if (!sortInsight) return;
+    sortInsight.textContent = sortInsightMap[sortKey] || sortInsightMap.publish;
+  };
+
+  const sortRowsBy = (sortKey, label) => {
+    const rows = getRows();
+    const parent = drawerLoadStatus?.parentElement;
+    if (!parent || rows.length === 0) return;
+    currentSortKey = sortKey;
+
+    rows.sort((a, b) => getMetricValue(b, sortKey) - getMetricValue(a, sortKey));
+    rows.forEach(row => parent.insertBefore(row, drawerLoadStatus));
+
+    renderRowRanks();
+    renderRowInsights(sortKey, label);
+    applyRowVisibility();
+    if (sortTip) {
+      sortTip.innerHTML = '单选 · 倒序 · 当前：<b>' + label + '</b>';
+    }
+    updateSortInsight(sortKey);
+    renderLoadState();
+  };
+
+  const loadMoreRows = (source) => {
+    if (currentView !== 'all') {
+      renderLoadState();
+      return;
+    }
+    const totalCount = getRows().length;
+    if (loadingMore || loadedCount >= totalCount) {
+      renderLoadState();
+      return;
+    }
+
+    loadingMore = true;
+    if (drawerLoadMore) {
+      drawerLoadMore.classList.add('is-loading');
+      drawerLoadMore.textContent = source === 'scroll' ? '下滑加载中...' : '加载中...';
+    }
+
+    setTimeout(() => {
+      loadedCount = Math.min(totalCount, loadedCount + pageSize);
+      applyRowVisibility();
+      loadingMore = false;
+      renderLoadState();
+    }, 380);
+  };
+
+  document.querySelectorAll('.filter-metrics').forEach(group => {
+    group.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        group.querySelectorAll('.filter-chip').forEach(item => item.classList.remove('active'));
+        chip.classList.add('active');
+        loadedCount = Math.min(baseVisibleCount, getRows().length);
+        if (drawerBody) drawerBody.scrollTop = 0;
+        sortRowsBy(chip.dataset.sort || 'publish', chip.textContent.trim());
+      });
+    });
+  });
+
+  document.querySelectorAll('.filter-views').forEach(group => {
+    group.querySelectorAll('.view-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        group.querySelectorAll('.view-chip').forEach(item => item.classList.remove('active'));
+        chip.classList.add('active');
+        currentView = chip.dataset.view || 'all';
+        if (currentView === 'all') {
+          loadedCount = Math.min(baseVisibleCount, getRows().length);
+        }
+        if (drawerBody) drawerBody.scrollTop = 0;
+        applyRowVisibility();
+        renderLoadState();
+      });
+    });
+  });
+
+  if (drawerLoadMore) {
+    drawerLoadMore.addEventListener('click', () => loadMoreRows('manual'));
+  }
+
+  if (drawerBody) {
+    drawerBody.addEventListener('scroll', () => {
+      if (loadingMore) return;
+      const nearBottom = drawerBody.scrollTop + drawerBody.clientHeight >= drawerBody.scrollHeight - 120;
+      if (nearBottom) {
+        loadMoreRows('scroll');
+      }
+    }, { passive: true });
+  }
+
+  sortRowsBy('publish', '发布时间');
+
+  const chatInput = document.querySelector('.chat-input');
+  document.querySelectorAll('.quick-action, .today-focus-btn, .drawer-action-btn, .chat-quick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!chatInput) return;
+      chatInput.value = btn.textContent.trim();
+      chatInput.focus();
+    });
+  });
+}
+
+bindUIInteractions();
+showPage('home');
+</script>
+</body>
+</html>

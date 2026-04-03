@@ -719,6 +719,30 @@ body {
   color: var(--red);
 }
 
+.key-metric-strip {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.key-metric-pill {
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fff;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.key-metric-pill b {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .mini-trend {
   margin-top: 10px;
   border: 1px solid var(--border-light);

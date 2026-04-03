@@ -55,6 +55,17 @@ function formatDuration(seconds?: number) {
   return remain > 0 ? `${min}分${remain}秒` : `${min}分`;
 }
 
+function formatRate(value?: number) {
+  const rate = Number(value ?? 0);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return '0%';
+  }
+  if (rate >= 100) {
+    return `${Math.round(rate)}%`;
+  }
+  return `${(Math.round(rate * 10) / 10).toFixed(1)}%`;
+}
+
 function toTimestamp(value?: string) {
   if (!value) {
     return 0;
@@ -182,6 +193,8 @@ export default function WorkspacePage() {
   const analysisPanel = overview?.analysisPanel;
   const reportId = analysisPanel?.reportId;
   const rangeLabel = formatRangeLabel(range);
+  const metrics = overview?.dataPanel.metrics;
+  const changes = overview?.dataPanel.changes;
   const pagedArticles = useMemo(
     () => articleListQuery.data?.pages.flatMap((page) => page.records) ?? [],
     [articleListQuery.data]
@@ -199,39 +212,6 @@ export default function WorkspacePage() {
   }, [pagedArticles]);
   const drawerTotal = articleListQuery.data?.pages[0]?.total ?? 0;
   const drawerLoaded = orderedArticles.length;
-
-  const drawerStats = useMemo(() => {
-    return orderedArticles.reduce(
-      (acc, item) => {
-        acc.totalRead += item.readCount ?? 0;
-        acc.totalSend += item.sendCount ?? 0;
-        acc.totalShare += item.shareCount ?? 0;
-        acc.totalLike += item.likeCount ?? 0;
-        acc.totalWow += item.wowCount ?? 0;
-        acc.totalComment += item.commentCount ?? 0;
-        acc.totalSave += item.saveCount ?? 0;
-        acc.totalFollow += item.newFollowers ?? 0;
-        acc.completion += Number(item.completionRate ?? 0);
-        return acc;
-      },
-      {
-        totalRead: 0,
-        totalSend: 0,
-        totalShare: 0,
-        totalLike: 0,
-        totalWow: 0,
-        totalComment: 0,
-        totalSave: 0,
-        totalFollow: 0,
-        completion: 0,
-      }
-    );
-  }, [orderedArticles]);
-
-  const avgCompletion = useMemo(() => {
-    const size = orderedArticles.length || 1;
-    return (drawerStats.completion / size).toFixed(0);
-  }, [drawerStats.completion, orderedArticles.length]);
 
   const onDrawerBodyScroll = (event: UIEvent<HTMLDivElement>) => {
     if (!articleListQuery.hasNextPage || articleListQuery.isFetchingNextPage) {
@@ -404,36 +384,48 @@ export default function WorkspacePage() {
             </div>
 
             <div className="ctx-body">
-              <div className="stat-grid-3x2">
-                <div className="stat-cell">
-                  <div className="stat-cell-label">总阅读</div>
-                  <div className="stat-cell-val">{overview?.dataPanel.metrics.totalRead ?? 0}</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.totalRead ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.totalRead ?? 0)}</div>
+              <div className="kpi-layout">
+                <div className="kpi-main-grid">
+                  <div className="kpi-main-card">
+                    <div className="kpi-main-label">阅读</div>
+                    <div className="kpi-main-value">{metrics?.totalRead ?? 0}</div>
+                    <div className="kpi-main-meta">
+                      <span className={`stat-cell-delta ${(changes?.totalRead ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.totalRead ?? 0)}</span>
+                      <span>篇均 <b>{metrics?.avgRead ?? 0}</b></span>
+                    </div>
+                  </div>
+                  <div className="kpi-main-card">
+                    <div className="kpi-main-label">完读</div>
+                    <div className="kpi-main-value">{Math.round(metrics?.completionRate ?? 0)}%</div>
+                    <div className="kpi-main-meta">
+                      <span className={`stat-cell-delta ${(changes?.completionRate ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.completionRate ?? 0)}</span>
+                      <span>时长 <b>{formatDuration(metrics?.avgReadTimeSec)}</b></span>
+                    </div>
+                  </div>
+                  <div className="kpi-main-card">
+                    <div className="kpi-main-label">点赞</div>
+                    <div className="kpi-main-value">{metrics?.totalLike ?? 0}</div>
+                    <div className="kpi-main-meta">
+                      <span className={`stat-cell-delta ${(changes?.totalLike ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.totalLike ?? 0)}</span>
+                      <span><b>{formatRate(metrics?.likeRate)}</b></span>
+                    </div>
+                  </div>
+                  <div className="kpi-main-card">
+                    <div className="kpi-main-label">关注</div>
+                    <div className="kpi-main-value">{metrics?.newFollowers ?? 0}</div>
+                    <div className="kpi-main-meta">
+                      <span className={`stat-cell-delta ${(changes?.newFollowers ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.newFollowers ?? 0)}</span>
+                      <span><b>{formatRate(metrics?.followRate)}</b></span>
+                    </div>
+                  </div>
                 </div>
-                <div className="stat-cell">
-                  <div className="stat-cell-label">篇均阅读</div>
-                  <div className="stat-cell-val">{overview?.dataPanel.metrics.avgRead ?? 0}</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.avgRead ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.avgRead ?? 0)}</div>
-                </div>
-                <div className="stat-cell">
-                  <div className="stat-cell-label">完读率</div>
-                  <div className="stat-cell-val">{Math.round(overview?.dataPanel.metrics.completionRate ?? 0)}%</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.completionRate ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.completionRate ?? 0)}</div>
-                </div>
-                <div className="stat-cell">
-                  <div className="stat-cell-label">总分享</div>
-                  <div className="stat-cell-val">{overview?.dataPanel.metrics.totalShare ?? 0}</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.totalShare ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.totalShare ?? 0)}</div>
-                </div>
-                <div className="stat-cell">
-                  <div className="stat-cell-label">总点赞</div>
-                  <div className="stat-cell-val">{overview?.dataPanel.metrics.totalLike ?? 0}</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.totalLike ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.totalLike ?? 0)}</div>
-                </div>
-                <div className="stat-cell">
-                  <div className="stat-cell-label">新增关注</div>
-                  <div className="stat-cell-val">{overview?.dataPanel.metrics.newFollowers ?? 0}</div>
-                  <div className={`stat-cell-delta ${(overview?.dataPanel.changes.newFollowers ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(overview?.dataPanel.changes.newFollowers ?? 0)}</div>
+                <div className="kpi-interact-card">
+                  <div className="kpi-interact-head">其他指标</div>
+                  <div className="kpi-interact-list">
+                    <div className="kpi-interact-item"><span className="name">分享</span><span className="val">{metrics?.totalShare ?? 0}</span><span className="rate">{formatRate(metrics?.shareRate)}</span></div>
+                    <div className="kpi-interact-item"><span className="name">在看</span><span className="val">{metrics?.totalWow ?? 0}</span><span className="rate">{formatRate(metrics?.wowRate)}</span></div>
+                    <div className="kpi-interact-item"><span className="name">留言</span><span className="val">{metrics?.totalComment ?? 0}</span><span className="rate">{formatRate(metrics?.commentRate)}</span></div>
+                  </div>
                 </div>
               </div>
 
@@ -557,15 +549,25 @@ export default function WorkspacePage() {
         </div>
 
         <div ref={drawerBodyRef} className="drawer-body" onScroll={onDrawerBodyScroll}>
+          <div className="drawer-section-title">阅读与质量</div>
           <div className="drawer-stat-grid">
-            <div className="dstat"><div className="dstat-label">总阅读</div><div className="dstat-val">{drawerStats.totalRead}</div></div>
-            <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{orderedArticles.length ? Math.round(drawerStats.totalRead / orderedArticles.length) : 0}</div></div>
-            <div className="dstat"><div className="dstat-label">完读率</div><div className="dstat-val">{avgCompletion}%</div></div>
-            <div className="dstat"><div className="dstat-label">新增关注</div><div className="dstat-val">{drawerStats.totalFollow}</div></div>
-            <div className="dstat"><div className="dstat-label">总分享</div><div className="dstat-val">{drawerStats.totalShare}</div></div>
-            <div className="dstat"><div className="dstat-label">总点赞</div><div className="dstat-val">{drawerStats.totalLike}</div></div>
-            <div className="dstat"><div className="dstat-label">总在看</div><div className="dstat-val">{drawerStats.totalWow}</div></div>
-            <div className="dstat"><div className="dstat-label">总留言</div><div className="dstat-val">{drawerStats.totalComment}</div></div>
+            <div className="dstat"><div className="dstat-label">总阅读</div><div className="dstat-val">{metrics?.totalRead ?? 0}</div></div>
+            <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{metrics?.avgRead ?? 0}</div></div>
+            <div className="dstat"><div className="dstat-label">完读率</div><div className="dstat-val">{Math.round(metrics?.completionRate ?? 0)}%</div></div>
+            <div className="dstat"><div className="dstat-label">篇均时长</div><div className="dstat-val">{formatDuration(metrics?.avgReadTimeSec)}</div></div>
+          </div>
+
+          <div className="drawer-section-title">互动</div>
+          <div className="drawer-stat-grid">
+            <div className="dstat"><div className="dstat-label">总分享</div><div className="dstat-val">{metrics?.totalShare ?? 0}</div><div className="dstat-sub">分享率 {formatRate(metrics?.shareRate)}</div></div>
+            <div className="dstat"><div className="dstat-label">总点赞</div><div className="dstat-val">{metrics?.totalLike ?? 0}</div><div className="dstat-sub">点赞率 {formatRate(metrics?.likeRate)}</div></div>
+            <div className="dstat"><div className="dstat-label">总在看</div><div className="dstat-val">{metrics?.totalWow ?? 0}</div><div className="dstat-sub">在看率 {formatRate(metrics?.wowRate)}</div></div>
+            <div className="dstat"><div className="dstat-label">总留言</div><div className="dstat-val">{metrics?.totalComment ?? 0}</div><div className="dstat-sub">留言率 {formatRate(metrics?.commentRate)}</div></div>
+          </div>
+
+          <div className="drawer-section-title">增长</div>
+          <div className="drawer-stat-grid">
+            <div className="dstat"><div className="dstat-label">新增关注</div><div className="dstat-val">{metrics?.newFollowers ?? 0}</div><div className="dstat-sub">关注率 {formatRate(metrics?.followRate)}</div></div>
           </div>
 
           <div className="drawer-section-title">流量来源</div>

@@ -41,7 +41,15 @@ public class WorkspaceOverviewVO {
         private Double completionRate;
         private Integer totalShare;
         private Integer totalLike;
+        private Integer totalWow;
+        private Integer totalComment;
         private Integer newFollowers;
+        private Integer avgReadTimeSec;
+        private Double followRate;
+        private Double shareRate;
+        private Double likeRate;
+        private Double wowRate;
+        private Double commentRate;
     }
 
     @Data

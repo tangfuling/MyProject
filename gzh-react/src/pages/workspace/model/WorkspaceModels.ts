@@ -26,7 +26,15 @@ export type WorkspaceDataPanel = {
     completionRate: number;
     totalShare: number;
     totalLike: number;
+    totalWow: number;
+    totalComment: number;
     newFollowers: number;
+    avgReadTimeSec: number;
+    followRate: number;
+    shareRate: number;
+    likeRate: number;
+    wowRate: number;
+    commentRate: number;
   };
   changes: {
     totalRead: number;
