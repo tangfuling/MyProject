@@ -953,8 +953,6 @@ body { font-family: "PingFang SC","Hiragino Sans GB","MiSans","Microsoft YaHei",
   background: var(--card);
 }
 .article-filter-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
-.article-filter-title { font-size: 11px; font-weight: 800; color: var(--text-muted); }
-.filter-sort-tip { font-size: 10px; color: var(--text-light); }
 .filter-note { margin-top: 7px; font-size: 10px; color: var(--text-light); }
 .filter-metrics { display: flex; flex-wrap: wrap; gap: 6px; }
 .filter-chip {
@@ -2296,10 +2294,28 @@ body {
   z-index: 5;
   background: rgba(255,255,255,.95);
   backdrop-filter: blur(8px);
+  border: 1px solid #d8e8f0;
+  border-radius: 11px;
   padding: 11px;
 }
 
+.article-filter-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.article-list-head-tag {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .filter-metrics {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2318,27 +2334,32 @@ body {
   box-shadow: 0 2px 8px rgba(11,126,136,.12);
 }
 
-.filter-sort-tip b {
-  color: #0f6a75;
+.filter-open-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b8dce6;
+  border-radius: 999px;
+  background: #fff;
+  color: #0d5f69;
+  font-size: 11px;
   font-weight: 700;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.filter-sort-insight {
-  margin-top: 7px;
-  border: 1px solid #d8e8f0;
-  border-radius: 9px;
-  background: #f8fcff;
-  color: #4a647a;
-  font-size: 11px;
-  line-height: 1.5;
-  padding: 7px 9px;
+.filter-open-btn:hover {
+  background: #eef8fc;
+  border-color: #98ced8;
 }
 
 .filter-views {
-  margin-top: 7px;
+  margin-top: 2px;
   display: flex;
   gap: 7px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 1px;
 }
 
 .view-chip {
@@ -2356,6 +2377,60 @@ body {
   border-color: #98ced8;
   background: #eaf8fc;
   color: #0d5f69;
+}
+
+.sort-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 56px));
+  border: 1px solid #c7dbe6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(7,23,38,.18);
+  padding: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transform-origin: top right;
+  transition: all .2s ease;
+  z-index: 20;
+}
+
+.sort-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.sort-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sort-panel-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #39556c;
+}
+
+.sort-panel-close {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d3e4ec;
+  border-radius: 50%;
+  background: #fff;
+  color: #5a7388;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sort-panel-close:hover {
+  border-color: #98ced8;
+  color: #0d5f69;
+  background: #eef8fc;
 }
 
 .trend-legend {
@@ -2377,10 +2452,6 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-}
-
-.filter-note strong {
-  color: #0f6a75;
 }
 
 .detail-link {
@@ -2766,6 +2837,13 @@ body {
     padding-inline: 10px;
   }
 
+  .sort-panel {
+    width: min(320px, calc(100vw - 44px));
+    right: 0;
+    left: auto;
+    top: calc(100% + 6px);
+  }
+
   .drawer-body {
     padding: 14px 14px 24px;
   }
@@ -2852,7 +2930,7 @@ body {
     </div>
     <div class="hero-proof">
       <div class="hero-proof-card">
-        <div class="proof-head">真实样例 · 过程展示（非效果承诺）</div>
+        <div class="proof-head">真实样例 · 过程展示</div>
         <div class="proof-main">推荐率 <b>8.2% → 18.6%</b>，阅读环比 <b>+12%</b></div>
         <div class="proof-sub">同类账号执行路径示例，结果会受选题与执行节奏影响</div>
       </div>
@@ -2860,7 +2938,7 @@ body {
     <div class="hero-preview">
       <div class="hero-preview-head">
         <span class="hero-preview-title">工作台预览 · 先看关键决策，再看全文细节</span>
-        <span>默认按发布时间倒序</span>
+        <span>支持按指标切换排序</span>
       </div>
       <div class="hero-preview-grid">
         <div class="hero-preview-kpi"><div class="label">推荐率</div><div class="value">18.6%</div><div class="sub">近7天观察值</div></div>
@@ -2875,9 +2953,9 @@ body {
       <button class="persona-chip" data-persona="bottleneck">增长瓶颈号</button>
     </div>
     <div class="hero-case-card" id="heroCaseCard">
-      <div class="hero-case-head">同阶段样例（仅供参考）· 新号（更新 5 周）</div>
+      <div class="hero-case-head">同阶段样例 · 新号（更新 5 周）</div>
       <div class="hero-case-main">某账号样例：推荐率 <b>4.3% → 12.8%</b>，篇均阅读 <b>+37%</b></div>
-      <div class="hero-case-sub">动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘（不构成效果承诺）</div>
+      <div class="hero-case-sub">动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘，持续验证增长假设</div>
     </div>
     <div class="hero-cost-card">
       <div class="hero-cost-head">本周预计花费（先算清，再开始）</div>
@@ -2903,10 +2981,10 @@ body {
       </div>
       <div class="hero-cost-total"><span>预计周成本</span><span>约 ¥<b id="heroCostTotal">0.76</b></span></div>
     </div>
-    <div class="hero-note">新用户赠 <b>¥1.00</b> 免费额度 · 按 token 计费 · 无月订阅 · AI建议仅供参考</div>
+    <div class="hero-note">新用户赠 <b>¥1.00</b> 免费额度 · 按 token 计费 · 无月订阅 · AI建议随数据动态更新</div>
     <div class="hero-trust">
       <div class="hero-trust-item">无需改公众号设置</div>
-      <div class="hero-trust-item">默认按发布时间管理文章</div>
+      <div class="hero-trust-item">支持按关键指标灵活排序</div>
       <div class="hero-trust-item">结果受账号阶段与执行影响</div>
     </div>
   </section>
@@ -2966,7 +3044,7 @@ body {
   <section class="feature-section">
     <div style="max-width:1000px;margin:0 auto 18px;">
       <h2 class="steps-title" style="margin-bottom:6px;">它如何帮你看懂数据并持续迭代</h2>
-      <p class="steps-sub" style="margin-bottom:0;">不是“保证增长”，而是“给判断 + 给动作 + 给复盘点”</p>
+      <p class="steps-sub" style="margin-bottom:0;">围绕关键指标持续迭代：给判断 + 给动作 + 给复盘点</p>
     </div>
     <div class="feature-inner">
       <div class="feature-item">
@@ -3000,8 +3078,8 @@ body {
             <path d="M4 4l2 2"/>
           </svg>
         </div>
-        <div class="feature-title">按发布时间追踪</div>
-        <div class="feature-desc">文章默认按发布时间倒序，可按单一维度排序，快速定位样本与异常波动。</div>
+        <div class="feature-title">多维排序追踪</div>
+        <div class="feature-desc">按发布时间、阅读、完读、互动等维度切换排序，快速定位样本与异常波动。</div>
       </div>
     </div>
   </section>
@@ -3188,9 +3266,9 @@ body {
                 <div class="today-step"><span class="today-step-dot">2</span><span>生成下一篇选题草案</span><span class="today-step-status pending">进行中</span></div>
                 <div class="today-step"><span class="today-step-dot">3</span><span>发布后 24 小时看推荐率</span><span class="today-step-status">待复盘</span></div>
               </div>
-              <button class="today-focus-btn">生成下周选题</button>
+              <button class="today-focus-btn" data-prompt="请基于近30天数据生成下周选题计划，按优先级给出3个方向、标题要点和观察指标">生成下周选题</button>
             </div>
-            <details class="kpi-fold">
+            <details class="kpi-fold" open>
               <summary>互动补充（分享 / 在看 / 留言）</summary>
               <div class="kpi-interact-list">
                 <div class="kpi-interact-item"><span class="name">分享</span><span class="val">48</span><span class="rate">7.5%</span></div>
@@ -3207,9 +3285,9 @@ body {
               </svg>
             </div>
             <div class="quick-actions">
-              <button class="quick-action">查看高推荐文章</button>
-              <button class="quick-action">生成下周选题</button>
-              <button class="quick-action">对比上周数据</button>
+              <button class="quick-action" data-prompt="找出近30天高推荐样本，并总结可复用的选题与结构特征">查看高推荐样本</button>
+              <button class="quick-action" data-prompt="找出近30天低完读样本，并给出3条可执行的优化动作">定位低完读样本</button>
+              <button class="quick-action" data-prompt="复盘上周策略效果，并给出下周优先级调整建议">对比上周策略效果</button>
             </div>
             <a class="detail-link" onclick="openDrawer()">查看 8 篇详情与完整指标 →</a>
           </div>
@@ -3247,12 +3325,12 @@ body {
             <div class="finding neg"><span class="finding-dot" style="color:var(--red);">✗</span> 现象：分享率偏低；判断：传播钩子不够明确。</div>
             <div class="divider"></div>
             <div class="ctx-sec-title">本周动作</div>
-            <div class="suggestion"><div class="sug-num">1</div><div class="sug-text">执行外向型选题 1 篇，观察推荐率是否接近 20%（非保证）</div></div>
+            <div class="suggestion"><div class="sug-num">1</div><div class="sug-text">执行外向型选题 1 篇，重点观察推荐率与分享率变化</div></div>
             <div class="suggestion"><div class="sug-num">2</div><div class="sug-text">标题加入关键词，观察搜一搜占比变化</div></div>
             <div class="suggestion"><div class="sug-num">3</div><div class="sug-text">文末加“转发给谁”的句式，拉升分享率</div></div>
           </div>
           <div class="ctx-footer">
-            <div class="ctx-footer-meta">统计周期 30 天 · 最新发布 03-14 · <b>≈¥0.18</b> · 建议仅供参考</div>
+            <div class="ctx-footer-meta">统计周期 30 天 · 最新发布 03-14 · <b>≈¥0.18</b> · 建议可执行并复盘</div>
             <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;">重新生成</button>
           </div>
         </div>
@@ -3261,11 +3339,6 @@ body {
 
     <!-- Chat -->
     <div class="chat-wrap">
-      <div class="chat-quick-strip">
-        <button class="chat-quick-btn">生成本周选题计划</button>
-        <button class="chat-quick-btn">复盘上周策略效果</button>
-        <button class="chat-quick-btn">找出高推荐样本</button>
-      </div>
       <div class="chat-msgs">
 
         <!-- AI: analysis report -->
@@ -3312,8 +3385,7 @@ body {
               <div class="am-footer">
                 <span style="font-size:11px;color:var(--text-light);">有问题直接问我 ↓</span>
                 <div class="am-footer-chips">
-                  <div class="chip">外向型 vs 记录型</div>
-                  <div class="chip">怎么提高分享率</div>
+                  <div class="chip" data-prompt="外向型和记录型的差异核心是什么？给我一份可执行的7:3选题策略">外向型 vs 记录型</div>
                 </div>
               </div>
             </div>
@@ -3369,11 +3441,11 @@ body {
       <!-- Chat bottom -->
       <div class="chat-bottom">
         <div class="shortcut-row">
-          <div class="chip">下一篇写什么</div>
-          <div class="chip">怎么提高分享率</div>
-          <div class="chip">对比上周</div>
-          <div class="chip">哪篇完读率最高</div>
-          <div class="chip">搜一搜怎么优化</div>
+          <div class="chip" data-prompt="基于近30天数据，我下一篇优先写什么？给3个题目方向和判断标准">下一篇写什么</div>
+          <div class="chip" data-prompt="怎么提高分享率？请给我选题、结构、文末引导各1条动作">怎么提高分享率</div>
+          <div class="chip" data-prompt="对比上周策略效果，哪些动作该继续，哪些动作该停掉？">对比上周</div>
+          <div class="chip" data-prompt="哪篇完读率最高？拆解它的结构并给我复用模板">哪篇完读率最高</div>
+          <div class="chip" data-prompt="搜一搜流量怎么优化？请给标题关键词与发布后复盘清单">搜一搜怎么优化</div>
         </div>
         <div class="input-row">
           <textarea class="chat-input" placeholder="问我关于你账号的任何问题..."></textarea>
@@ -3543,9 +3615,8 @@ body {
         <span>统计周期 近30天</span>
         <span>共 8 篇</span>
         <span>发布时间 02-20 ~ 03-14</span>
-        <span>默认按发布时间倒序</span>
       </div>
-      <div class="drawer-head-sync">同步时间 2026-03-24 14:30（仅入库）</div>
+      <div class="drawer-head-sync">同步时间 2026-03-24 14:30</div>
     </div>
     <div class="drawer-head-actions">
       <button class="btn btn-ghost btn-xs drawer-export-btn">导出周复盘</button>
@@ -3560,7 +3631,7 @@ body {
         <div class="drawer-decision-kpi"><div class="label">关注率</div><div class="value">1.9%</div><div class="sub">增长观察</div></div>
       </div>
       <div class="drawer-decision-action">
-        <div class="title">本周建议（供参考）</div>
+        <div class="title">本周建议</div>
         <div class="main">先观察推荐率是否稳定在 20% 附近，再决定是否加大发文量</div>
         <div class="sub">优先执行：外向型选题 + 标题关键词 + 文末转发引导（结果受执行影响）</div>
         <div class="drawer-evidence-title">证据链（近 30 天）</div>
@@ -3569,7 +3640,7 @@ body {
           <div class="drawer-evidence-item"><b>证据2</b>03-05、03-12 关键词标题文章：推荐率 16%-20%，搜一搜来源占比提升。</div>
           <div class="drawer-evidence-item"><b>证据3</b>文末有明确转发引导的样本，分享次数高于区间中位数。</div>
         </div>
-        <button class="drawer-action-btn">生成本周选题计划</button>
+        <button class="drawer-action-btn" data-prompt="请基于当前文章样本生成本周选题计划，并附带每条动作的观察指标与复盘点">生成本周选题计划</button>
       </div>
     </div>
     <!-- Full metrics: grouped by decision dimension -->
@@ -3653,31 +3724,34 @@ body {
     </div>
 
     <!-- Article list -->
-    <div class="drawer-block-head green" style="margin-bottom:12px;">文章列表</div>
     <div class="article-filter">
       <div class="article-filter-head">
-        <div class="article-filter-title">排序维度（单选）</div>
-        <span class="filter-sort-tip">单选 · 倒序 · 当前：<b>发布时间</b></span>
+        <div class="drawer-block-head green article-list-head-tag">文章列表</div>
+        <button class="filter-open-btn" id="sortPanelTrigger" type="button" aria-expanded="false">筛选维度：发布时间</button>
+        <div class="sort-panel" id="sortPanel" aria-hidden="true">
+          <div class="sort-panel-head">
+            <div class="sort-panel-title">筛选维度</div>
+            <button class="sort-panel-close" id="sortPanelClose" type="button">×</button>
+          </div>
+          <div class="filter-metrics">
+            <button class="filter-chip active" data-sort="publish">发布时间</button>
+            <button class="filter-chip" data-sort="read">阅读</button>
+            <button class="filter-chip" data-sort="finish">完读</button>
+            <button class="filter-chip" data-sort="duration">时长</button>
+            <button class="filter-chip" data-sort="like">点赞</button>
+            <button class="filter-chip" data-sort="share">分享</button>
+            <button class="filter-chip" data-sort="wow">在看</button>
+            <button class="filter-chip" data-sort="comment">留言</button>
+            <button class="filter-chip" data-sort="follow">关注</button>
+            <button class="filter-chip" data-sort="recommend">推荐率</button>
+          </div>
+        </div>
       </div>
-      <div class="filter-metrics">
-        <button class="filter-chip active" data-sort="publish">发布时间</button>
-        <button class="filter-chip" data-sort="read">阅读</button>
-        <button class="filter-chip" data-sort="finish">完读</button>
-        <button class="filter-chip" data-sort="duration">时长</button>
-        <button class="filter-chip" data-sort="like">点赞</button>
-        <button class="filter-chip" data-sort="share">分享</button>
-        <button class="filter-chip" data-sort="wow">在看</button>
-        <button class="filter-chip" data-sort="comment">留言</button>
-        <button class="filter-chip" data-sort="follow">关注</button>
-        <button class="filter-chip" data-sort="recommend">推荐率</button>
-      </div>
-      <div class="filter-sort-insight" id="filterSortInsight">按发布时间倒序，优先查看最近发布内容。</div>
       <div class="filter-views">
         <button class="view-chip active" data-view="all">全部</button>
         <button class="view-chip" data-view="top5">只看 Top5</button>
         <button class="view-chip" data-view="low3">低表现 3 篇</button>
       </div>
-      <div class="filter-note">选择一个维度后按该维度倒序排列；<strong>发布时间 = 最新到最旧</strong>。</div>
     </div>
 
     <div class="art-row" data-publish="2026-03-14" data-read="120" data-finish="67" data-duration="131" data-like="6" data-share="8" data-wow="5" data-comment="3" data-follow="4" data-recommend="22">
@@ -3805,7 +3879,7 @@ body {
           <label class="export-item"><input type="checkbox" checked disabled> 核心指标与趋势</label>
           <label class="export-item"><input type="checkbox" checked disabled> 本周动作与证据链</label>
           <label class="export-item"><input type="checkbox" checked> 文章 Top / Low 样本</label>
-          <label class="export-item"><input type="checkbox" checked> AI 建议摘要（仅供参考）</label>
+          <label class="export-item"><input type="checkbox" checked> AI 建议摘要</label>
         </div>
       </div>
       <div class="export-task">
@@ -3858,15 +3932,31 @@ function closeLoginModal() {
   document.getElementById('login-overlay').classList.remove('open');
 }
 
+function openSortPanel() {
+  const panel = document.getElementById('sortPanel');
+  panel?.classList.add('open');
+  panel?.setAttribute('aria-hidden', 'false');
+  document.getElementById('sortPanelTrigger')?.setAttribute('aria-expanded', 'true');
+}
+
+function closeSortPanel() {
+  const panel = document.getElementById('sortPanel');
+  panel?.classList.remove('open');
+  panel?.setAttribute('aria-hidden', 'true');
+  document.getElementById('sortPanelTrigger')?.setAttribute('aria-expanded', 'false');
+}
+
 function openDrawer() {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('overlay').classList.add('open');
   const drawerBody = document.querySelector('.drawer-body');
   if (drawerBody) drawerBody.scrollTop = 0;
+  closeSortPanel();
 }
 function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
+  closeSortPanel();
   closeExportModal();
 }
 
@@ -3891,19 +3981,19 @@ function bindUIInteractions() {
 
   const personaCases = {
     new: {
-      head: '同阶段样例（仅供参考）· 新号（更新 5 周）',
+      head: '同阶段样例 · 新号（更新 5 周）',
       main: '某账号样例：推荐率 <b>4.3% → 12.8%</b>，篇均阅读 <b>+37%</b>',
-      sub: '动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘（不构成效果承诺）'
+      sub: '动作：固定周更 3 篇 + 标题关键词模板 + 发布后 24 小时复盘，持续验证选题方向'
     },
     steady: {
-      head: '同阶段样例（仅供参考）· 稳定更新号（更新 6 个月）',
+      head: '同阶段样例 · 稳定更新号（更新 6 个月）',
       main: '某账号样例：推荐率 <b>9.8% → 18.4%</b>，关注率 <b>+1.1pp</b>',
-      sub: '动作：外向型:记录型 7:3 + 每周复盘 1 次 + 高分享模板复用（不构成效果承诺）'
+      sub: '动作：外向型:记录型 7:3 + 每周复盘 1 次 + 高分享模板复用，持续放大有效动作'
     },
     bottleneck: {
-      head: '同阶段样例（仅供参考）· 增长瓶颈号（阅读停滞）',
+      head: '同阶段样例 · 增长瓶颈号（阅读停滞）',
       main: '某账号样例：推荐率 <b>11.2% → 21.3%</b>，阅读环比 <b>+26%</b>',
-      sub: '动作：先观察推荐率变化，再决定是否扩大发文频次与分发渠道（不构成效果承诺）'
+      sub: '动作：先观察推荐率变化，再决定发文频次与分发渠道节奏，逐步打破停滞'
     }
   };
   const heroCaseCard = document.getElementById('heroCaseCard');
@@ -4037,8 +4127,9 @@ function bindUIInteractions() {
   });
 
   const drawerBody = document.querySelector('.drawer-body');
-  const sortTip = document.querySelector('.filter-sort-tip');
-  const sortInsight = document.getElementById('filterSortInsight');
+  const sortPanel = document.getElementById('sortPanel');
+  const sortPanelTrigger = document.getElementById('sortPanelTrigger');
+  const sortPanelClose = document.getElementById('sortPanelClose');
   const drawerLoadStatus = document.getElementById('drawerLoadStatus');
   const drawerLoadMore = document.getElementById('drawerLoadMore');
   const pageSize = 2;
@@ -4047,30 +4138,6 @@ function bindUIInteractions() {
   let loadingMore = false;
   let currentView = 'all';
   let currentSortKey = 'publish';
-  const sortInsightMap = {
-    publish: '按发布时间倒序，优先查看最近发布内容。',
-    read: '按阅读倒序，优先复盘高流量选题。',
-    finish: '按完读倒序，优先提炼高留存结构。',
-    duration: '按时长倒序，优先观察长文承接能力。',
-    like: '按点赞倒序，优先复用被认可表达。',
-    share: '按分享倒序，优先总结可传播钩子。',
-    wow: '按在看倒序，优先沉淀强认同内容。',
-    comment: '按留言倒序，优先分析争议与互动点。',
-    follow: '按关注倒序，优先放大拉新型内容。',
-    recommend: '按推荐率倒序，优先观察平台分发样本特征。'
-  };
-  const sortLabelMap = {
-    publish: '发布时间',
-    read: '阅读',
-    finish: '完读',
-    duration: '时长',
-    like: '点赞',
-    share: '分享',
-    wow: '在看',
-    comment: '留言',
-    follow: '关注',
-    recommend: '推荐率'
-  };
   const viewLabelMap = {
     all: '全部',
     top5: 'Top5',
@@ -4201,11 +4268,6 @@ function bindUIInteractions() {
     });
   };
 
-  const updateSortInsight = sortKey => {
-    if (!sortInsight) return;
-    sortInsight.textContent = sortInsightMap[sortKey] || sortInsightMap.publish;
-  };
-
   const sortRowsBy = (sortKey, label) => {
     const rows = getRows();
     const parent = drawerLoadStatus?.parentElement;
@@ -4218,10 +4280,9 @@ function bindUIInteractions() {
     renderRowRanks();
     renderRowInsights(sortKey, label);
     applyRowVisibility();
-    if (sortTip) {
-      sortTip.innerHTML = '单选 · 倒序 · 当前：<b>' + label + '</b>';
+    if (sortPanelTrigger) {
+      sortPanelTrigger.textContent = '筛选维度：' + label;
     }
-    updateSortInsight(sortKey);
     renderLoadState();
   };
 
@@ -4250,6 +4311,27 @@ function bindUIInteractions() {
     }, 380);
   };
 
+  sortPanelTrigger?.addEventListener('click', () => {
+    if (sortPanel?.classList.contains('open')) {
+      closeSortPanel();
+      return;
+    }
+    openSortPanel();
+  });
+  sortPanelClose?.addEventListener('click', () => {
+    closeSortPanel();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSortPanel();
+  });
+  document.addEventListener('click', e => {
+    if (!sortPanel?.classList.contains('open')) return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    if (sortPanel.contains(target) || sortPanelTrigger?.contains(target)) return;
+    closeSortPanel();
+  });
+
   document.querySelectorAll('.filter-metrics').forEach(group => {
     group.querySelectorAll('.filter-chip').forEach(chip => {
       chip.addEventListener('click', () => {
@@ -4258,6 +4340,7 @@ function bindUIInteractions() {
         loadedCount = Math.min(baseVisibleCount, getRows().length);
         if (drawerBody) drawerBody.scrollTop = 0;
         sortRowsBy(chip.dataset.sort || 'publish', chip.textContent.trim());
+        closeSortPanel();
       });
     });
   });
@@ -4294,12 +4377,84 @@ function bindUIInteractions() {
 
   sortRowsBy('publish', '发布时间');
 
+  const workspacePage = document.getElementById('page-workspace');
+  const chatWrap = document.querySelector('.chat-wrap');
+  const chatMsgs = document.querySelector('.chat-msgs');
   const chatInput = document.querySelector('.chat-input');
-  document.querySelectorAll('.quick-action, .today-focus-btn, .drawer-action-btn, .chat-quick-btn').forEach(btn => {
+  const sendBtn = document.querySelector('.send-btn');
+
+  const scrollChatToBottom = (smooth = true) => {
+    if (!chatMsgs) return;
+    chatMsgs.scrollTo({
+      top: chatMsgs.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+  };
+
+  const appendUserMessage = text => {
+    if (!chatMsgs) return;
+    const msg = document.createElement('div');
+    msg.className = 'msg user';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'msg-av user';
+    avatar.textContent = '我';
+
+    const contentWrap = document.createElement('div');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble user';
+    bubble.textContent = text;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.textContent = '刚刚';
+
+    contentWrap.appendChild(bubble);
+    contentWrap.appendChild(meta);
+    msg.appendChild(avatar);
+    msg.appendChild(contentWrap);
+    chatMsgs.appendChild(msg);
+  };
+
+  const jumpToChat = () => {
+    if (!workspacePage?.classList.contains('active')) {
+      showPage('workspace');
+    }
+    closeDrawer();
+    chatWrap?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    requestAnimationFrame(() => scrollChatToBottom(true));
+  };
+
+  const submitPrompt = rawText => {
+    const text = String(rawText || '').trim();
+    if (!text) return;
+    appendUserMessage(text);
+    if (chatInput) chatInput.value = '';
+    jumpToChat();
+  };
+
+  const resolvePromptText = el => {
+    const custom = el.getAttribute('data-prompt');
+    if (custom && custom.trim()) return custom.trim();
+    return (el.textContent || '').trim();
+  };
+
+  const handleInputSubmit = () => {
+    submitPrompt(chatInput?.value || '');
+    chatInput?.focus();
+  };
+
+  sendBtn?.addEventListener('click', handleInputSubmit);
+  chatInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleInputSubmit();
+    }
+  });
+
+  document.querySelectorAll('.quick-action, .today-focus-btn, .drawer-action-btn, .chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!chatInput) return;
-      chatInput.value = btn.textContent.trim();
-      chatInput.focus();
+      submitPrompt(resolvePromptText(btn));
     });
   });
 }
