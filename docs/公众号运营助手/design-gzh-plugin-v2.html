@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公众号运营助手 · Chrome 插件设计稿 v2</title>
+  <style>
+    :root {
+      --blue: #5B8FD6;
+      --blue-dark: #2E6FA1;
+      --blue-light: #eef3fb;
+      --teal: #17B89A;
+      --teal-dark: #139D84;
+      --teal-light: #eaf8f4;
+      --green: #10b981;
+      --green-light: #ecfdf5;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --bg: #f5f8fc;
+      --card: #ffffff;
+      --ink: #0f1d33;
+      --ink-soft: #4a607f;
+      --ink-muted: #64748b;
+      --ink-light: #94afc8;
+      --line: #d8e5f3;
+      --line-soft: #e9f0f9;
+      --shadow-sm: 0 2px 8px rgba(16,34,59,.06);
+      --shadow-md: 0 8px 24px rgba(16,34,59,.1);
+      --shadow-lg: 0 20px 50px rgba(16,34,59,.16);
+      --r: 16px;
+      --r-sm: 10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #eef3fb 0%, #f3f8fd 50%, #eaf8f4 100%);
+      min-height: 100vh;
+      color: var(--ink);
+    }
+
+    /* ── decorative blobs ── */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: .12;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-blue  { width: 600px; height: 600px; background: var(--blue);  top: -120px; left: -100px; }
+    .blob-teal  { width: 500px; height: 500px; background: var(--teal);  bottom: -80px; right: -80px; }
+    .blob-blue2 { width: 300px; height: 300px; background: var(--blue);  top: 55%; right: 10%; }
+
+    /* ── demo bar ── */
+    .demo-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: linear-gradient(90deg, #081b33, #0b2542);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.4);
+    }
+    .demo-bar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .5; transform: scale(1.4); }
+    }
+    .demo-bar .title {
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .5px;
+    }
+    .demo-bar .sep { color: rgba(255,255,255,.25); margin: 0 4px; }
+    .demo-bar .sub {
+      color: rgba(255,255,255,.45);
+      font-size: 11.5px;
+      letter-spacing: .3px;
+    }
+
+    /* ── page wrap ── */
+    .page-wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 56px 24px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 72px;
+    }
+
+    /* ── section label ── */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+    .section-label .line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line));
+    }
+    .section-label .line.right {
+      background: linear-gradient(90deg, var(--line), transparent);
+    }
+    .section-label span {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--blue-dark);
+      white-space: nowrap;
+    }
+
+    /* ══════════════════════════════════
+       SECTION 1 — Browser mockup
+    ══════════════════════════════════ */
+    .browser-wrap {
+      display: flex;
+      justify-content: center;
+    }
+    .browser {
+      width: 920px;
+      max-width: 100%;
+      border-radius: var(--r);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid rgba(255,255,255,.8);
+      background: #fff;
+    }
+
+    /* chrome top bar */
+    .browser-topbar {
+      background: #f1f3f4;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #dde1e5;
+    }
+    .browser-dots {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .browser-dots span {
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      display: block;
+    }
+    .browser-dots .d-red   { background: #ff5f57; }
+    .browser-dots .d-amber { background: #febc2e; }
+    .browser-dots .d-green { background: #28c840; }
+
+    .browser-address {
+      flex: 1;
+      background: #fff;
+      border: 1px solid #d0d5dc;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .browser-address .lock { color: #5a9f5a; font-size: 11px; }
+    .browser-address .url  { color: #333; }
+
+    /* browser body */
+    .browser-body {
+      display: flex;
+      height: 440px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* sidebar */
+    .wechat-sidebar {
+      width: 190px;
+      flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #eee;
+      padding: 16px 0;
+    }
+    .sidebar-header {
+      padding: 0 18px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      margin-bottom: 8px;
+    }
+    .sidebar-header .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-header .logo-icon {
+      width: 28px; height: 28px;
+      background: #07c160;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .sidebar-header .logo-icon svg { width: 16px; height: 16px; fill: #fff; }
+    .sidebar-header .logo-name { font-size: 13px; font-weight: 600; color: #333; }
+
+    .sidebar-item {
+      padding: 10px 18px;
+      font-size: 13px;
+      color: #666;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background .15s;
+    }
+    .sidebar-item:hover { background: #f9f9f9; }
+    .sidebar-item.active {
+      background: #e8f4e9;
+      color: #07c160;
+      font-weight: 600;
+      border-right: 3px solid #07c160;
+    }
+    .sidebar-item .si-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* main content */
+    .wechat-main {
+      flex: 1;
+      background: #f7f8f9;
+      padding: 24px;
+      overflow-y: auto;
+      position: relative;
+    }
+    .wechat-main-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111;
+      margin-bottom: 20px;
+    }
+    .article-list { display: flex; flex-direction: column; gap: 0; }
+    .article-item {
+      background: #fff;
+      border: 1px solid #eee;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      border-bottom: none;
+      transition: background .15s;
+    }
+    .article-item:first-child { border-radius: 8px 8px 0 0; }
+    .article-item:last-child  { border-bottom: 1px solid #eee; border-radius: 0 0 8px 8px; }
+    .article-item:hover { background: #fafafa; }
+    .article-title { color: #333; font-weight: 500; }
+    .article-meta  { color: #999; font-size: 12px; display: flex; gap: 14px; }
+    .article-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #e8f4e9;
+      color: #07c160;
+    }
+
+    /* injected float button */
+    .float-btn-wrap {
+      position: absolute;
+      bottom: 30px;
+      right: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .float-btn-label {
+      background: rgba(11,37,66,.82);
+      color: rgba(255,255,255,.9);
+      font-size: 10.5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      letter-spacing: .4px;
+      backdrop-filter: blur(4px);
+    }
+    .float-btn {
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      color: #fff;
+      border: none;
+      border-radius: 24px;
+      padding: 11px 20px;
+      font-size: 13.5px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(23,184,154,.35), 0 2px 8px rgba(91,143,214,.25);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .float-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(23,184,154,.45), 0 4px 12px rgba(91,143,214,.3);
+    }
+    .float-btn svg { width: 15px; height: 15px; fill: #fff; }
+
+    /* ══════════════════════════════════
+       SECTION 2 — Popup states
+    ══════════════════════════════════ */
+    .popup-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      justify-content: center;
+    }
+
+    .popup-card {
+      width: 300px;
+      border-radius: var(--r);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.8);
+      box-shadow: var(--shadow-lg);
+      background: var(--card);
+      transition: transform .25s, box-shadow .25s;
+      cursor: default;
+    }
+    .popup-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 60px rgba(16,34,59,.18);
+    }
+
+    /* popup header */
+    .popup-header {
+      background: linear-gradient(135deg, #0d2a47, #1a4a72, var(--blue-dark));
+      padding: 16px 18px 15px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+    .popup-header-icon {
+      width: 34px; height: 34px;
+      border-radius: 9px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.18);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .popup-header-icon svg { width: 18px; height: 18px; fill: rgba(255,255,255,.9); }
+    .popup-header-text .htitle {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: .3px;
+    }
+    .popup-header-text .hsub {
+      font-size: 10.5px;
+      color: rgba(255,255,255,.5);
+      margin-top: 1px;
+    }
+    .popup-header .badge {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+    .badge-connected { background: rgba(23,184,154,.2); color: #4ee8c8; border: 1px solid rgba(23,184,154,.3); }
+    .badge-warning   { background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.25); }
+    .badge-error     { background: rgba(239,68,68,.15);  color: #f87171; border: 1px solid rgba(239,68,68,.25); }
+
+    /* popup body */
+    .popup-body { padding: 20px 18px 22px; }
+
+    /* ── state 1: 未登录 ── */
+    .unlogin-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(239,68,68,.1), rgba(245,158,11,.08));
+      border: 2px solid rgba(239,68,68,.2);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+    }
+    .unlogin-icon svg { width: 26px; height: 26px; }
+
+    .state-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .state-desc {
+      font-size: 12.5px;
+      color: var(--ink-muted);
+      text-align: center;
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+
+    /* ── state 2: 待同步 ── */
+    .detect-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--teal-light);
+      border: 1px solid rgba(23,184,154,.2);
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+    .detect-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    .detect-text { font-size: 12.5px; color: var(--teal-dark); font-weight: 600; }
+
+    .last-sync {
+      font-size: 11.5px;
+      color: var(--ink-light);
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .last-sync span { color: var(--ink-muted); font-weight: 500; }
+
+    /* ── state 3: 同步中 ── */
+    .progress-wrap { margin-bottom: 16px; }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .progress-label { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+    .progress-pct   { font-size: 12px; color: var(--blue-dark); font-weight: 700; }
+    .progress-track {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--line-soft);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--teal));
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.45) 50%, transparent 100%);
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(200%); }
+    }
+
+    .checklist { display: flex; flex-direction: column; gap: 8px; }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 12.5px;
+      color: var(--ink-soft);
+    }
+    .check-icon {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .check-done { background: var(--green-light); }
+    .check-done svg { width: 11px; height: 11px; stroke: var(--green); fill: none; stroke-width: 2.5; }
+    .check-loading {
+      background: var(--blue-light);
+      border: 1.5px solid var(--blue);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+    .check-loading-inner {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      border: 1.5px solid var(--blue);
+      border-top-color: transparent;
+      animation: spin 0.8s linear infinite;
+    }
+    .check-pending {
+      background: var(--line-soft);
+      border: 1.5px solid var(--line);
+    }
+    .check-label { flex: 1; }
+    .check-sub   { font-size: 11px; color: var(--ink-light); margin-left: auto; }
+
+    /* ── state 4: 完成 ── */
+    .success-icon {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--green-light), rgba(23,184,154,.08));
+      border: 2px solid rgba(16,185,129,.25);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+    }
+    .success-icon svg { width: 28px; height: 28px; stroke: var(--green); fill: none; stroke-width: 2.5; }
+
+    .stat-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-chip {
+      flex: 1;
+      text-align: center;
+      padding: 8px 6px;
+      border-radius: var(--r-sm);
+      background: var(--bg);
+      border: 1px solid var(--line-soft);
+    }
+    .stat-chip .sv { font-size: 17px; font-weight: 800; color: var(--blue-dark); }
+    .stat-chip .sl { font-size: 10.5px; color: var(--ink-light); margin-top: 1px; }
+
+    /* ── state 5: 过期 ── */
+    .error-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(239,68,68,.08);
+      border: 2px solid rgba(239,68,68,.2);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+    }
+    .error-icon svg { width: 26px; height: 26px; }
+
+    .hint-box {
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .hint-red    { background: rgba(239,68,68,.06);  border: 1px solid rgba(239,68,68,.15);  color: #b91c1c; }
+    .hint-amber  { background: rgba(245,158,11,.06); border: 1px solid rgba(245,158,11,.15); color: #92400e; }
+
+    /* ── state 6: 部分失败 ── */
+    .partial-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: rgba(245,158,11,.1);
+      border: 2px solid rgba(245,158,11,.25);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+    }
+    .partial-icon svg { width: 26px; height: 26px; }
+
+    .partial-stats {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .partial-stat {
+      flex: 1;
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: var(--r-sm);
+      border: 1px solid;
+    }
+    .partial-stat.ok  { background: var(--green-light);           border-color: rgba(16,185,129,.2);  }
+    .partial-stat.err { background: rgba(239,68,68,.05);          border-color: rgba(239,68,68,.15);  }
+    .partial-stat .psv { font-size: 18px; font-weight: 800; }
+    .partial-stat.ok  .psv { color: var(--green); }
+    .partial-stat.err .psv { color: var(--red);   }
+    .partial-stat .psl { font-size: 10.5px; color: var(--ink-light); margin-top: 1px; }
+
+    /* ── buttons ── */
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: transform .2s, box-shadow .2s, filter .2s;
+      letter-spacing: .3px;
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(23,184,154,.3), 0 2px 6px rgba(91,143,214,.2);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 7px 20px rgba(23,184,154,.4), 0 3px 10px rgba(91,143,214,.25);
+    }
+    .btn-green {
+      background: linear-gradient(135deg, var(--green), var(--teal));
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(16,185,129,.3);
+    }
+    .btn-amber {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(245,158,11,.3);
+    }
+    .btn-outline {
+      background: transparent;
+      color: var(--blue-dark);
+      border: 1.5px solid var(--line);
+      box-shadow: none;
+    }
+    .btn-outline:hover { background: var(--blue-light); }
+
+    .btn + .btn { margin-top: 8px; }
+
+    /* ── popup state-number badge ── */
+    .state-num {
+      position: relative;
+    }
+    .state-num-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--ink-light);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- decorative blobs -->
+  <div class="blob blob-blue"></div>
+  <div class="blob blob-teal"></div>
+  <div class="blob blob-blue2"></div>
+
+  <!-- demo bar -->
+  <header class="demo-bar">
+    <span class="dot"></span>
+    <span class="title">设计稿 · Chrome 插件</span>
+    <span class="sep">|</span>
+    <span class="sub">仅在 mp.weixin.qq.com 域名下生效 · Content Script 注入</span>
+  </header>
+
+  <div class="page-wrap">
+
+    <!-- ════════════════════════════
+         Section 1 — Browser mockup
+    ════════════════════════════ -->
+    <section>
+      <div class="section-label">
+        <span class="line"></span>
+        <span>悬浮按钮 — 注入微信公众号后台页面</span>
+        <span class="line right"></span>
+      </div>
+
+      <div class="browser-wrap">
+        <div class="browser">
+
+          <!-- chrome topbar -->
+          <div class="browser-topbar">
+            <div class="browser-dots">
+              <span class="d-red"></span>
+              <span class="d-amber"></span>
+              <span class="d-green"></span>
+            </div>
+            <div class="browser-address">
+              <span class="lock">🔒</span>
+              <span class="url">mp.weixin.qq.com/cgi-bin/appmsgpublish</span>
+            </div>
+          </div>
+
+          <!-- browser body -->
+          <div class="browser-body">
+
+            <!-- wechat sidebar -->
+            <nav class="wechat-sidebar">
+              <div class="sidebar-header">
+                <div class="logo">
+                  <div class="logo-icon">
+                    <!-- wechat-like icon -->
+                    <svg viewBox="0 0 20 20"><path d="M10 2C5.58 2 2 5.13 2 9c0 2.1 1.05 3.97 2.7 5.28l-.45 2.22 2.6-1.3A9.1 9.1 0 0010 16c4.42 0 8-3.13 8-7s-3.58-7-8-7z"/></svg>
+                  </div>
+                  <span class="logo-name">公众号</span>
+                </div>
+              </div>
+              <div class="sidebar-item">
+                <span class="si-dot"></span>首页
+              </div>
+              <div class="sidebar-item active">
+                <span class="si-dot"></span>发表文章
+              </div>
+              <div class="sidebar-item">
+                <span class="si-dot"></span>图文消息
+              </div>
+              <div class="sidebar-item">
+                <span class="si-dot"></span>数据分析
+              </div>
+              <div class="sidebar-item">
+                <span class="si-dot"></span>用户管理
+              </div>
+            </nav>
+
+            <!-- main content -->
+            <main class="wechat-main">
+              <div class="wechat-main-title">已发表</div>
+              <div class="article-list">
+                <div class="article-item">
+                  <div>
+                    <div class="article-title">深度解析：2026年内容营销的五大趋势</div>
+                    <div class="article-meta" style="margin-top:4px">
+                      <span>03-20 09:30</span>
+                      <span>阅读 12,480</span>
+                      <span>在看 324</span>
+                    </div>
+                  </div>
+                  <span class="article-tag">已发布</span>
+                </div>
+                <div class="article-item">
+                  <div>
+                    <div class="article-title">如何用数据驱动公众号选题决策</div>
+                    <div class="article-meta" style="margin-top:4px">
+                      <span>03-17 10:15</span>
+                      <span>阅读 9,856</span>
+                      <span>在看 201</span>
+                    </div>
+                  </div>
+                  <span class="article-tag">已发布</span>
+                </div>
+                <div class="article-item">
+                  <div>
+                    <div class="article-title">公众号运营实战：粉丝增长的三个关键节点</div>
+                    <div class="article-meta" style="margin-top:4px">
+                      <span>03-14 08:00</span>
+                      <span>阅读 7,230</span>
+                      <span>在看 158</span>
+                    </div>
+                  </div>
+                  <span class="article-tag">已发布</span>
+                </div>
+              </div>
+
+              <!-- injected float button -->
+              <div class="float-btn-wrap">
+                <div class="float-btn-label">Content Script 注入</div>
+                <button class="float-btn">
+                  <!-- sync icon -->
+                  <svg viewBox="0 0 24 24" stroke="white" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15"/>
+                  </svg>
+                  同步到运营助手
+                </button>
+              </div>
+            </main>
+
+          </div><!-- /browser-body -->
+        </div><!-- /browser -->
+      </div>
+    </section>
+
+    <!-- ════════════════════════════
+         Section 2 — Popup states
+    ════════════════════════════ -->
+    <section>
+      <div class="section-label">
+        <span class="line"></span>
+        <span>同步弹窗 — 六个状态</span>
+        <span class="line right"></span>
+      </div>
+
+      <div class="popup-grid">
+
+        <!-- ── State 1: 未登录 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">① 未登录</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">v2.0 · Chrome Extension</div>
+            </div>
+            <span class="badge badge-warning">未登录</span>
+          </div>
+          <div class="popup-body">
+            <div class="unlogin-icon">
+              <!-- person-off icon -->
+              <svg viewBox="0 0 24 24" stroke="#ef4444" fill="none" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0113 0"/>
+                <line x1="3" y1="3" x2="21" y2="21" stroke="#ef4444"/>
+              </svg>
+            </div>
+            <div class="state-title">请先登录</div>
+            <div class="state-desc">请先前往运营助手登录，<br/>才能同步数据。</div>
+            <button class="btn btn-primary">前往登录 →</button>
+          </div>
+        </div>
+
+        <!-- ── State 2: 已登录·待同步 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">② 已登录 · 待同步</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">已登录 · 张三</div>
+            </div>
+            <span class="badge badge-connected">已连接</span>
+          </div>
+          <div class="popup-body">
+            <div class="detect-banner">
+              <span class="detect-dot"></span>
+              <span class="detect-text">检测到公众号后台</span>
+            </div>
+            <div class="last-sync">上次同步：<span>03-17 10:15</span></div>
+            <div class="checklist" style="margin-bottom:18px">
+              <div class="check-item">
+                <div class="check-icon check-pending"></div>
+                <span class="check-label">文章列表</span>
+                <span class="check-sub">35 篇</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon check-pending"></div>
+                <span class="check-label">数据指标</span>
+                <span class="check-sub">阅读 / 在看</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon check-pending"></div>
+                <span class="check-label">文章全文</span>
+                <span class="check-sub">含图文</span>
+              </div>
+            </div>
+            <button class="btn btn-primary">开始同步</button>
+          </div>
+        </div>
+
+        <!-- ── State 3: 同步中 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">③ 同步中</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24" stroke="rgba(255,255,255,.9)" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">正在同步数据…</div>
+            </div>
+            <span class="badge badge-connected">同步中</span>
+          </div>
+          <div class="popup-body">
+            <div class="progress-wrap">
+              <div class="progress-header">
+                <span class="progress-label">同步进度</span>
+                <span class="progress-pct">65%</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width:65%"></div>
+              </div>
+            </div>
+            <div class="checklist">
+              <div class="check-item">
+                <div class="check-icon check-done">
+                  <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                </div>
+                <span class="check-label">文章列表</span>
+                <span class="check-sub" style="color:var(--green)">✓ 完成</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon check-done">
+                  <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                </div>
+                <span class="check-label">数据指标</span>
+                <span class="check-sub" style="color:var(--green)">✓ 完成</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon" style="background:var(--blue-light);border:1.5px solid var(--blue);display:flex;align-items:center;justify-content:center;">
+                  <div class="check-loading-inner"></div>
+                </div>
+                <span class="check-label">文章全文</span>
+                <span class="check-sub">23 / 35</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── State 4: 同步完成 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">④ 同步完成</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24" stroke="rgba(255,255,255,.9)" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">03-20 · 10:42 同步完成</div>
+            </div>
+            <span class="badge badge-connected">完成</span>
+          </div>
+          <div class="popup-body">
+            <div class="success-icon">
+              <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div class="state-title">同步完成</div>
+            <div class="stat-row">
+              <div class="stat-chip">
+                <div class="sv">+5</div>
+                <div class="sl">新增文章</div>
+              </div>
+              <div class="stat-chip">
+                <div class="sv">30</div>
+                <div class="sl">更新数据</div>
+              </div>
+              <div class="stat-chip">
+                <div class="sv">35</div>
+                <div class="sl">共计文章</div>
+              </div>
+            </div>
+            <div class="checklist" style="margin-bottom:16px">
+              <div class="check-item">
+                <div class="check-icon check-done">
+                  <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                </div>
+                <span class="check-label">文章列表</span>
+                <span class="check-sub" style="color:var(--green)">✓</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon check-done">
+                  <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                </div>
+                <span class="check-label">数据指标</span>
+                <span class="check-sub" style="color:var(--green)">✓</span>
+              </div>
+              <div class="check-item">
+                <div class="check-icon check-done">
+                  <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                </div>
+                <span class="check-label">文章全文</span>
+                <span class="check-sub" style="color:var(--green)">✓</span>
+              </div>
+            </div>
+            <button class="btn btn-green">前往运营助手查看 →</button>
+          </div>
+        </div>
+
+        <!-- ── State 5: 登录过期 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">⑤ 登录过期</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24" stroke="rgba(255,255,255,.9)" fill="none" stroke-width="2.2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">登录状态异常</div>
+            </div>
+            <span class="badge badge-error">已过期</span>
+          </div>
+          <div class="popup-body">
+            <div class="error-icon">
+              <svg viewBox="0 0 24 24" stroke="#ef4444" fill="none" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div class="state-title">登录已过期</div>
+            <div class="hint-box hint-red">
+              微信后台登录已过期，请刷新页面重新登录后再试。
+            </div>
+            <button class="btn btn-primary">刷新页面</button>
+          </div>
+        </div>
+
+        <!-- ── State 6: 部分失败 ── -->
+        <div class="popup-card">
+          <div class="state-num-label" style="padding:10px 18px 0">⑥ 部分失败</div>
+          <div class="popup-header">
+            <div class="popup-header-icon">
+              <svg viewBox="0 0 24 24" stroke="rgba(255,255,255,.9)" fill="none" stroke-width="2.2" stroke-linecap="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div class="popup-header-text">
+              <div class="htitle">公众号数据运营助手</div>
+              <div class="hsub">部分数据同步失败</div>
+            </div>
+            <span class="badge badge-warning">部分完成</span>
+          </div>
+          <div class="popup-body">
+            <div class="partial-icon">
+              <svg viewBox="0 0 24 24" stroke="#f59e0b" fill="none" stroke-width="2.2" stroke-linecap="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div class="state-title">同步部分完成</div>
+            <div class="partial-stats">
+              <div class="partial-stat ok">
+                <div class="psv">30</div>
+                <div class="psl">成功</div>
+              </div>
+              <div class="partial-stat err">
+                <div class="psv">5</div>
+                <div class="psl">失败</div>
+              </div>
+            </div>
+            <div class="hint-box hint-amber">
+              5 篇文章同步失败，可能是网络超时或权限问题，请重试。
+            </div>
+            <button class="btn btn-amber">重试失败的 5 篇</button>
+            <button class="btn btn-outline">先查看已同步的数据 →</button>
+          </div>
+        </div>
+
+      </div><!-- /popup-grid -->
+    </section>
+
+  </div><!-- /page-wrap -->
+
+</body>
+</html>

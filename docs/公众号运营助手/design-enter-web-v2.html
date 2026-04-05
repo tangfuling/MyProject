@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>产品导航 · 北京青天牛马科技有限公司</title>
+  <style>
+    :root {
+      --blue: #5B8FD6;
+      --blue-dark: #2E6FA1;
+      --blue-light: #eef3fb;
+      --teal: #17B89A;
+      --teal-dark: #139D84;
+      --teal-light: #eaf8f4;
+      --bg-0: #f5f8fc;
+      --bg-1: #edf3fb;
+      --bg-2: #f9fcff;
+      --ink: #0f1d33;
+      --ink-soft: #4a607f;
+      --ink-muted: #64748b;
+      --ink-light: #94afc8;
+      --line: #d8e5f3;
+      --line-light: #e9f0f9;
+      --card: rgba(255,255,255,.92);
+      --shadow: 0 8px 24px rgba(16,34,59,.08);
+      --shadow-hover: 0 16px 40px rgba(16,34,59,.13);
+      --r-xl: 24px;
+      --r-lg: 18px;
+      --r-md: 14px;
+      --r-sm: 10px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(91,143,214,.18), transparent 42%),
+        radial-gradient(circle at 86% 14%, rgba(23,184,154,.15), transparent 40%),
+        linear-gradient(155deg, #eef3fb, #f5f9fd);
+      background-attachment: fixed;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(91,143,214,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91,143,214,.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(18px) saturate(1.4);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4);
+      background: rgba(245,248,252,.82);
+      border-bottom: 1px solid var(--line-light);
+      padding: 0 32px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(91,143,214,.25);
+      border: 1px solid var(--line-light);
+    }
+
+    .brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: .02em;
+    }
+
+    /* ── Main content ────────────────────────── */
+    .main {
+      position: relative;
+      z-index: 1;
+      padding: 80px 24px 60px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    /* ── Hero ────────────────────────────────── */
+    .hero {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(91,143,214,.12), rgba(23,184,154,.10));
+      border: 1px solid rgba(91,143,214,.22);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      color: var(--blue-dark);
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+
+    .hero-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      flex-shrink: 0;
+    }
+
+    .hero h1 {
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -.01em;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+
+    .hero-subtitle {
+      font-size: 16px;
+      color: var(--ink-soft);
+      line-height: 1.7;
+    }
+
+    /* ── Product grid ────────────────────────── */
+    .product-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── Product card ────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow);
+      padding: 32px 28px;
+      transition: transform .3s ease, box-shadow .3s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    /* Inner 2-column layout */
+    .card-inner {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* Card accent bar */
+    .card-accent {
+      width: 32px;
+      height: 4px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+    }
+
+    .card--blue .card-accent {
+      background: linear-gradient(90deg, var(--blue), var(--teal));
+    }
+
+    .card--teal .card-accent {
+      background: linear-gradient(90deg, var(--teal), var(--blue));
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 10px;
+      letter-spacing: -.01em;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--ink-soft);
+      line-height: 1.75;
+      margin-bottom: 24px;
+    }
+
+    /* Button */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 42px;
+      padding: 0 22px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: opacity .2s, transform .2s, box-shadow .2s;
+      box-shadow: 0 4px 14px rgba(91,143,214,.30);
+      align-self: flex-start;
+      letter-spacing: .01em;
+    }
+
+    .btn-primary:hover {
+      opacity: .92;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(91,143,214,.38);
+    }
+
+    .btn-primary svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .card-qr-hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--ink-muted);
+      letter-spacing: .01em;
+    }
+
+    /* QR image right side */
+    .card-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .qr-wrap {
+      width: 190px;
+      border-radius: var(--r-md);
+      overflow: hidden;
+      border: 1px solid var(--line-light);
+      background: #fff;
+      padding: 8px;
+      box-shadow: 0 4px 12px rgba(16,34,59,.08);
+    }
+
+    .qr-wrap img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1080 / 1752;
+      object-fit: contain;
+      border-radius: var(--r-sm);
+    }
+
+    /* ── Footer ──────────────────────────────── */
+    .footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 28px 24px 36px;
+      font-size: 13px;
+      color: var(--ink-light);
+      line-height: 1.8;
+    }
+
+    .footer a {
+      color: var(--ink-light);
+      text-decoration: none;
+      border-bottom: 1px solid var(--line);
+      transition: color .2s;
+    }
+
+    .footer a:hover {
+      color: var(--blue);
+    }
+
+    /* ── Reveal animations ───────────────────── */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: reveal .55s ease forwards;
+      animation-delay: var(--d, 0s);
+    }
+
+    @keyframes reveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width: 768px) {
+      .header {
+        padding: 0 20px;
+      }
+
+      .main {
+        padding: 52px 16px 48px;
+      }
+
+      .product-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        padding: 24px 20px;
+      }
+
+      .card-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .card-right {
+        align-items: flex-start;
+      }
+
+      .qr-wrap {
+        width: 90px;
+      }
+
+      .hero h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <a class="brand" href="#">
+      <div class="brand-mark"><img src="./icons/icon-64.png" alt="品牌图标"></div>
+      <span class="brand-name">青天牛马科技</span>
+    </a>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge" data-reveal style="--d:.05s">PRODUCT PORTAL</div>
+      <h1 data-reveal style="--d:.12s">北京青天牛马科技有限公司</h1>
+      <p class="hero-subtitle" data-reveal style="--d:.20s">旗下产品导航，欢迎选择您需要的产品。</p>
+    </section>
+
+    <!-- Product cards -->
+    <div class="product-grid">
+
+      <!-- Card 1: 心穹 App -->
+      <article class="card card--blue" data-reveal style="--d:.28s">
+        <div class="card-inner">
+          <div class="card-left">
+            <div class="card-accent"></div>
+            <h2 class="card-title">心穹 App · VastHub</h2>
+            <p class="card-desc">可对话的 3D 数字人世界。高品质数字人互动、沉浸空间探索、AR 现实融合与 AI 实时交流于一体。</p>
+            <a class="btn-primary" href="./design-xq-web-v2.html">
+              进入产品页
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            <p class="card-qr-hint">或扫码加入心穹产品交流群</p>
+          </div>
+          <div class="card-right">
+            <div class="qr-wrap">
+              <img
+                src="https://tangfuling.oss-cn-hangzhou.aliyuncs.com/mypublic/app/%E5%BF%83%E7%A9%B9APP.jpg"
+                alt="心穹 App 交流群二维码"
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Card 2: 公众号运营助手 -->
+      <article class="card card--teal" data-reveal style="--d:.36s">
+        <div class="card-inner">
+          <div class="card-left">
+            <div class="card-accent"></div>
+            <h2 class="card-title">公众号运营助手</h2>
+            <p class="card-desc">AI 驱动的公众号数据分析平台。一键同步历史数据，智能分析写作趋势，助力内容持续增长。</p>
+            <a class="btn-primary" href="./design-gzh-web-v2.html">
+              进入产品页
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            <p class="card-qr-hint">或扫码加入公众号助手交流群</p>
+          </div>
+          <div class="card-right">
+            <div class="qr-wrap">
+              <img
+                src="https://tangfuling.oss-cn-hangzhou.aliyuncs.com/mypublic/app/%E5%85%AC%E4%BC%97%E5%8F%B7%E5%8A%A9%E6%89%8B.jpg"
+                alt="公众号运营助手交流群二维码"
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    © 2026 北京青天牛马科技有限公司 版权所有 |
+    网站备案：<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备20005186号</a>
+  </footer>
+
+</body>
+</html>
