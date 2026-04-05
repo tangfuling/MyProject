@@ -1,0 +1,990 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>心穹 VastHub | 可对话的 3D 数字人世界</title>
+  <meta name="description" content="心穹 VastHub：可交流、可操控、可 AR、可陪伴的 3D 数字人智能互动应用。" />
+  <meta name="keywords" content="心穹,VastHub,3D 数字人,AI 互动,沉浸交流,AR 体验,可操控角色,智能陪伴" />
+  <style>
+    :root {
+      --blue-1: #5B8FD6;
+      --blue-2: #2E6FA1;
+      --blue-3: #94b7e9;
+      --green-1: #17B89A;
+      --green-2: #139D84;
+      --green-3: #bfeee3;
+      --bg-0: #f5f8fc;
+      --bg-1: #edf3fb;
+      --bg-2: #f9fcff;
+      --ink: #0f1d33;
+      --ink-soft: #4a607f;
+      --line: #d8e5f3;
+      --card: rgba(255,255,255,.9);
+      --shadow-soft: 0 10px 30px rgba(30, 56, 92, .08);
+      --shadow-hover: 0 14px 34px rgba(30, 56, 92, .12);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      font-family: "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1100px 480px at 10% -10%, rgba(91,143,214,.18), transparent 64%),
+        radial-gradient(980px 420px at 95% 4%, rgba(23,184,154,.12), transparent 66%),
+        linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 46%, var(--bg-0) 100%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(91,143,214,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91,143,214,.05) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(circle at 50% 30%, #000 35%, transparent 90%);
+      opacity: .22;
+      z-index: 0;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    .shell {
+      width: min(1160px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .site-head {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(245,248,252,.78);
+      border-bottom: 1px solid rgba(216,229,243,.78);
+    }
+
+    .site-head-inner {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(140deg, var(--blue-1), var(--green-1));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      font-weight: 800;
+      box-shadow: 0 10px 20px rgba(35, 131, 172, .24);
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .brand-sub {
+      margin: 0;
+      font-size: 11px;
+      color: var(--ink-soft);
+    }
+
+    .head-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      height: 40px;
+      padding: 0 18px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: .24s ease;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--blue-1), var(--green-1));
+      box-shadow: 0 8px 20px rgba(35, 131, 172, .2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(35, 131, 172, .26);
+    }
+
+    .btn-ghost {
+      color: var(--blue-2);
+      border-color: #cfe0f2;
+      background: rgba(255,255,255,.74);
+    }
+
+    .btn-ghost:hover {
+      border-color: #b3cde8;
+      background: #fff;
+    }
+
+    .hero {
+      padding: 70px 0 40px;
+      display: grid;
+      grid-template-columns: 1.06fr .94fr;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid #d0e1f3;
+      background: rgba(255,255,255,.74);
+      padding: 7px 14px;
+      font-size: 11px;
+      color: var(--blue-2);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .hero h1 {
+      margin: 14px 0 14px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.08;
+      letter-spacing: -.03em;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(120deg, var(--blue-2), var(--green-1));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero-sub {
+      margin: 0;
+      font-size: 20px;
+      color: var(--ink-soft);
+      letter-spacing: .02em;
+    }
+
+    .hero-desc {
+      margin: 16px 0 0;
+      max-width: 640px;
+      color: #516a8e;
+      line-height: 1.86;
+      font-size: 15px;
+    }
+
+    .hero-actions {
+      margin-top: 24px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .keywords {
+      margin-top: 18px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      border: 1px solid #d4e3f2;
+      background: rgba(255,255,255,.76);
+      color: #3e5d84;
+      font-size: 12px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      white-space: nowrap;
+    }
+
+    .hero-stage {
+      position: relative;
+      min-height: 430px;
+      border-radius: var(--radius-xl);
+      border: 1px solid #d6e6f5;
+      background:
+        radial-gradient(420px 260px at 18% 22%, rgba(91,143,214,.22), transparent 74%),
+        radial-gradient(380px 220px at 82% 72%, rgba(23,184,154,.19), transparent 72%),
+        linear-gradient(160deg, #f3f8fe 0%, #eef5fd 46%, #f6fbff 100%);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+      padding: 22px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      isolation: isolate;
+    }
+
+    .ring {
+      position: absolute;
+      width: 290px;
+      height: 290px;
+      border-radius: 50%;
+      border: 1px dashed rgba(46,111,161,.28);
+      animation: spin 22s linear infinite;
+      opacity: .76;
+    }
+
+    .ring.small {
+      width: 220px;
+      height: 220px;
+      border-color: rgba(23,184,154,.36);
+      animation-duration: 17s;
+      animation-direction: reverse;
+    }
+
+    .avatar {
+      width: min(350px, 100%);
+      border-radius: 22px;
+      border: 1px solid #cce0f2;
+      background: linear-gradient(160deg, rgba(255,255,255,.78), rgba(240,247,254,.96));
+      box-shadow: 0 16px 30px rgba(33, 66, 108, .14);
+      padding: 18px;
+      backdrop-filter: blur(8px);
+      position: relative;
+      z-index: 2;
+    }
+
+    .avatar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      font-size: 12px;
+      color: #4a6286;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green-1);
+      box-shadow: 0 0 0 8px rgba(23,184,154,.16);
+      animation: pulse 1.8s ease infinite;
+    }
+
+    .avatar-face {
+      aspect-ratio: 4 / 5;
+      border-radius: 16px;
+      background:
+        radial-gradient(120% 90% at 50% 8%, rgba(91,143,214,.26), transparent 56%),
+        radial-gradient(100% 78% at 68% 88%, rgba(23,184,154,.22), transparent 58%),
+        linear-gradient(150deg, #edf5ff, #f8fcff);
+      border: 1px solid #dbe8f6;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .avatar-face::before,
+    .avatar-face::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(2px);
+    }
+
+    .avatar-face::before {
+      width: 120px;
+      height: 120px;
+      left: 14%;
+      top: 20%;
+      background: rgba(91,143,214,.18);
+    }
+
+    .avatar-face::after {
+      width: 90px;
+      height: 90px;
+      right: 16%;
+      bottom: 18%;
+      background: rgba(23,184,154,.18);
+    }
+
+    .section {
+      padding: 46px 0 8px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: clamp(24px, 3.4vw, 36px);
+      letter-spacing: -.02em;
+    }
+
+    .section-sub {
+      margin: 6px 0 0;
+      color: #5a7194;
+      line-height: 1.75;
+      max-width: 760px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--card);
+      box-shadow: var(--shadow-soft);
+      transition: .2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-hover);
+      border-color: #c8ddf0;
+    }
+
+    .feature {
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 200px;
+    }
+
+    .feature-no {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--blue-1), var(--green-1));
+    }
+
+    .feature h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .feature p {
+      margin: 0;
+      color: #5b7397;
+      line-height: 1.7;
+      font-size: 13px;
+    }
+
+    .gallery {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .shot {
+      padding: 12px;
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .shot-frame {
+      flex: 1;
+      border-radius: 16px;
+      border: 1px solid #d5e5f3;
+      background:
+        linear-gradient(170deg, #ffffff 0%, #f1f7fe 100%);
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .shot-frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(180px 120px at 20% 0%, rgba(91,143,214,.25), transparent 70%),
+        radial-gradient(160px 120px at 80% 100%, rgba(23,184,154,.22), transparent 70%);
+      z-index: 0;
+    }
+
+    .shot-label {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      z-index: 1;
+      border-radius: 999px;
+      border: 1px solid #c8dbef;
+      background: rgba(255,255,255,.82);
+      color: #3f5f86;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+    }
+
+    .shot-ui {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 1;
+      border-radius: 12px;
+      background: rgba(255,255,255,.86);
+      border: 1px solid #d8e8f7;
+      padding: 10px;
+      color: #4a6489;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .shot-title {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .cta {
+      margin: 56px 0 70px;
+      border-radius: var(--radius-xl);
+      border: 1px solid #d2e3f3;
+      background:
+        radial-gradient(420px 200px at 12% 0%, rgba(91,143,214,.2), transparent 72%),
+        radial-gradient(380px 180px at 86% 100%, rgba(23,184,154,.18), transparent 68%),
+        linear-gradient(170deg, rgba(255,255,255,.86), rgba(244,250,255,.92));
+      box-shadow: var(--shadow-soft);
+      padding: 34px 28px;
+      text-align: center;
+    }
+
+    .cta h2 {
+      margin: 0;
+      font-size: clamp(24px, 3.6vw, 38px);
+      letter-spacing: -.02em;
+    }
+
+    .cta p {
+      margin: 10px auto 0;
+      max-width: 740px;
+      color: #587196;
+      line-height: 1.8;
+    }
+
+    .cta-actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .download-hint {
+      margin: 12px auto 0;
+      color: #5c7599;
+      font-size: 12px;
+      line-height: 1.7;
+      max-width: 760px;
+    }
+
+    .download-desktop {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      text-align: left;
+    }
+
+    .qr-card {
+      border: 1px solid #d6e5f4;
+      border-radius: 16px;
+      background: rgba(255,255,255,.82);
+      box-shadow: 0 8px 18px rgba(30,56,92,.08);
+      padding: 14px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .qr-media {
+      width: 96px;
+      height: 96px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #d7e7f5;
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    .qr-media img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .qr-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .qr-desc {
+      margin: 6px 0 0;
+      color: #587095;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .qr-link {
+      display: inline-flex;
+      margin-top: 8px;
+      text-decoration: none;
+      color: var(--blue-2);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .qr-link:hover {
+      color: var(--green-2);
+    }
+
+    .download-mobile {
+      margin-top: 14px;
+      display: none;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .download-mobile .btn {
+      min-width: 228px;
+    }
+
+    body.mobile-env .download-desktop {
+      display: none;
+    }
+
+    body.mobile-env .download-mobile {
+      display: flex;
+    }
+
+    body.desktop-env .download-mobile {
+      display: none;
+    }
+
+    .site-foot {
+      padding: 0 0 26px;
+      color: #6982a6;
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .site-foot a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .site-foot a:hover {
+      text-decoration: underline;
+    }
+
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: rise .72s ease forwards;
+      animation-delay: var(--d, 0s);
+    }
+
+    @keyframes rise {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(23,184,154,.24); }
+      50% { box-shadow: 0 0 0 8px rgba(23,184,154,0); }
+    }
+
+    @media (max-width: 1120px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-stage {
+        min-height: 380px;
+      }
+
+      .feature-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .gallery {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .download-desktop {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(1160px, calc(100% - 24px));
+      }
+
+      .site-head-inner {
+        height: auto;
+        padding: 12px 0;
+        align-items: flex-start;
+      }
+
+      .head-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .hero {
+        padding: 42px 0 20px;
+      }
+
+      .hero h1 {
+        font-size: 34px;
+      }
+
+      .hero-sub {
+        font-size: 17px;
+      }
+
+      .hero-desc {
+        font-size: 14px;
+      }
+
+      .hero-stage {
+        min-height: 310px;
+        padding: 16px;
+      }
+
+      .feature-grid,
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .cta {
+        margin: 40px 0 52px;
+        padding: 28px 16px;
+      }
+
+      .download-mobile .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="site-head">
+      <div class="shell site-head-inner">
+        <a class="brand" href="#top" aria-label="心穹 VastHub">
+          <div class="brand-mark">心</div>
+          <div class="brand-text">
+            <p class="brand-title">心穹 · VastHub</p>
+            <p class="brand-sub">可对话的 3D 数字人世界</p>
+          </div>
+        </a>
+        <div class="head-actions">
+          <a class="btn btn-ghost" href="#features">核心功能</a>
+          <a class="btn btn-primary" href="#download">立即体验</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell" id="top">
+      <section class="hero">
+        <div data-reveal style="--d:.04s;">
+          <div class="hero-tag">XINQIONG APP · 3D DIGITAL HUMAN + AR + AI</div>
+          <h1>心穹・<span>可对话的 3D 数字人世界</span></h1>
+          <p class="hero-sub">会交流・能操控・可 AR・可陪伴</p>
+          <p class="hero-desc">
+            心穹・VastHub 以 3D 数字人、沉浸空间、AI 实时交流与 AR 现实融合为核心，打造更自然的互动体验。
+            你可以自由探索 360° 全景、实时操控角色动作，并通过文字 / 语音与数字人即时对话。
+            AI 让角色真正“会回应”，空间让互动更有在场感。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download">下载心穹 App</a>
+            <a class="btn btn-ghost" href="#gallery">查看截图</a>
+          </div>
+          <div class="keywords">
+            <span class="chip">心穹</span>
+            <span class="chip">VastHub</span>
+            <span class="chip">3D 数字人</span>
+            <span class="chip">AI 互动</span>
+            <span class="chip">沉浸交流</span>
+            <span class="chip">AR 体验</span>
+            <span class="chip">可操控角色</span>
+            <span class="chip">智能陪伴</span>
+          </div>
+        </div>
+
+        <div class="hero-stage card" data-reveal style="--d:.16s;">
+          <div class="ring"></div>
+          <div class="ring small"></div>
+          <article class="avatar">
+            <div class="avatar-head">
+              <span>数字人 · AI Real-time</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;"><i class="live-dot"></i>在线互动</span>
+            </div>
+            <div class="avatar-face"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section-head" data-reveal style="--d:.08s;">
+          <div>
+            <h2 class="section-title">核心功能</h2>
+            <p class="section-sub">围绕“数字人 + 空间 + 交流 + 现实融合”打造完整互动闭环。</p>
+          </div>
+        </div>
+        <div class="feature-grid">
+          <article class="card feature" data-reveal style="--d:.12s;">
+            <div class="feature-no">1</div>
+            <h3>高品质 3D 数字人，形象生动</h3>
+            <p>高细节角色表现，表情与姿态自然，塑造更有“在场感”的互动体验。</p>
+          </article>
+          <article class="card feature" data-reveal style="--d:.18s;">
+            <div class="feature-no">2</div>
+            <h3>360° 全景空间，自由探索</h3>
+            <p>沉浸式全景环境，支持多视角浏览与路径探索，体验更连贯。</p>
+          </article>
+          <article class="card feature" data-reveal style="--d:.24s;">
+            <div class="feature-no">3</div>
+            <h3>实时动作操控，互动更真实</h3>
+            <p>可操控角色动作与状态反馈，让互动从“观看”升级为“参与”。</p>
+          </article>
+          <article class="card feature" data-reveal style="--d:.30s;">
+            <div class="feature-no">4</div>
+            <h3>AI 智能实时交流，可对话可回应</h3>
+            <p>支持文字 / 语音双通道交流，具备自然理解与即时回应能力。</p>
+          </article>
+          <article class="card feature" data-reveal style="--d:.36s;">
+            <div class="feature-no">5</div>
+            <h3>AR 现实融合，拓展更多使用场景</h3>
+            <p>将数字人带入真实空间，增强展示、互动与陪伴的场景延展性。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="gallery">
+        <div class="section-head" data-reveal style="--d:.08s;">
+          <div>
+            <h2 class="section-title">功能截图与场景展示</h2>
+            <p class="section-sub">以下截图均来自心穹 App 实际界面，展示 AI 实时交流、沉浸空间、动作操控与 AR 融合体验。</p>
+          </div>
+        </div>
+        <div class="gallery">
+          <article class="card shot" data-reveal style="--d:.12s;">
+            <div class="shot-frame">
+              <span class="shot-label">Screenshot 01</span>
+              <div class="shot-ui">AI 智能实时交流</div>
+            </div>
+            <h3 class="shot-title">AI 智能实时交流</h3>
+          </article>
+          <article class="card shot" data-reveal style="--d:.18s;">
+            <div class="shot-frame">
+              <span class="shot-label">Screenshot 02</span>
+              <div class="shot-ui">360° 全景沉浸空间</div>
+            </div>
+            <h3 class="shot-title">360° 全景沉浸空间</h3>
+          </article>
+          <article class="card shot" data-reveal style="--d:.24s;">
+            <div class="shot-frame">
+              <span class="shot-label">Screenshot 03</span>
+              <div class="shot-ui">可操控角色动作</div>
+            </div>
+            <h3 class="shot-title">可操控角色动作</h3>
+          </article>
+          <article class="card shot" data-reveal style="--d:.30s;">
+            <div class="shot-frame">
+              <span class="shot-label">Screenshot 04</span>
+              <div class="shot-ui">AR 融合现实世界</div>
+            </div>
+            <h3 class="shot-title">AR 融合现实世界</h3>
+          </article>
+          <article class="card shot" data-reveal style="--d:.36s;">
+            <div class="shot-frame">
+              <span class="shot-label">Screenshot 05</span>
+              <div class="shot-ui">自然对话即时回应</div>
+            </div>
+            <h3 class="shot-title">自然对话即时回应</h3>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta" id="download" data-reveal style="--d:.14s;">
+        <h2>开启你的数字人沉浸交流</h2>
+        <p>在统一应用内完成数字人互动、空间探索、AR 融合与 AI 陪伴体验。欢迎下载心穹 App，进入可对话的 3D 数字人世界。</p>
+        <div class="cta-actions">
+          <a class="btn btn-primary" id="smartDownloadBtn" href="#">立即下载（自动识别设备）</a>
+          <a class="btn btn-ghost" href="#top">返回顶部</a>
+        </div>
+        <p class="download-hint" id="downloadHint">PC 端：扫码下载；手机端：点击按钮自动识别系统并跳转。</p>
+
+        <div class="download-desktop" id="downloadDesktop">
+          <article class="qr-card">
+            <div class="qr-media"><img id="iosQr" alt="iOS 下载二维码" /></div>
+            <div>
+              <h3 class="qr-title">iOS 下载</h3>
+              <p class="qr-desc">使用 iPhone 扫码后跳转 App Store 安装。</p>
+              <a id="iosLink" class="qr-link" href="#" target="_blank" rel="noreferrer">打开 iOS 下载链接</a>
+            </div>
+          </article>
+          <article class="qr-card">
+            <div class="qr-media"><img id="androidQr" alt="Android 下载二维码" /></div>
+            <div>
+              <h3 class="qr-title">Android 下载</h3>
+              <p class="qr-desc">使用 Android 扫码后在浏览器下载安装包。</p>
+              <a id="androidLink" class="qr-link" href="#" target="_blank" rel="noreferrer">打开 Android 下载链接</a>
+            </div>
+          </article>
+        </div>
+
+        <div class="download-mobile" id="downloadMobile">
+          <a class="btn btn-primary" id="iosMobileBtn" href="#">iOS 下载（App Store）</a>
+          <a class="btn btn-primary" id="androidMobileBtn" href="#">Android 下载（浏览器安装）</a>
+        </div>
+      </section>
+
+      <footer class="site-foot">
+        © 2026 北京青天牛马科技有限公司 版权所有 | 网站备案：<a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">京ICP备20005186号</a>
+      </footer>
+    </main>
+  </div>
+  <script>
+    const XQ_DOWNLOAD_CONFIG = {
+      androidDownloadUrl: 'https://www.niumatech.com/download/xinqiong-android',
+      iosDownloadUrl: 'https://www.niumatech.com/download/xinqiong-ios'
+    };
+
+    const buildQr = (url) =>
+      `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=0&color=0f1d33&bgcolor=ffffff&data=${encodeURIComponent(url)}`;
+
+    const ua = navigator.userAgent || '';
+    const isAndroid = /Android/i.test(ua);
+    const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+
+    document.body.classList.add(isMobile ? 'mobile-env' : 'desktop-env');
+
+    const setHref = (id, url) => {
+      const node = document.getElementById(id);
+      if (node) node.href = url;
+    };
+
+    setHref('iosLink', XQ_DOWNLOAD_CONFIG.iosDownloadUrl);
+    setHref('androidLink', XQ_DOWNLOAD_CONFIG.androidDownloadUrl);
+    setHref('iosMobileBtn', XQ_DOWNLOAD_CONFIG.iosDownloadUrl);
+    setHref('androidMobileBtn', XQ_DOWNLOAD_CONFIG.androidDownloadUrl);
+
+    const iosQr = document.getElementById('iosQr');
+    const androidQr = document.getElementById('androidQr');
+    if (iosQr) iosQr.src = buildQr(XQ_DOWNLOAD_CONFIG.iosDownloadUrl);
+    if (androidQr) androidQr.src = buildQr(XQ_DOWNLOAD_CONFIG.androidDownloadUrl);
+
+    const smartBtn = document.getElementById('smartDownloadBtn');
+    const downloadHint = document.getElementById('downloadHint');
+    const iosMobileBtn = document.getElementById('iosMobileBtn');
+    const androidMobileBtn = document.getElementById('androidMobileBtn');
+
+    if (isIOS && androidMobileBtn) androidMobileBtn.style.display = 'none';
+    if (isAndroid && iosMobileBtn) iosMobileBtn.style.display = 'none';
+
+    if (smartBtn) {
+      if (isIOS) smartBtn.textContent = '前往 App Store 下载 iOS';
+      else if (isAndroid) smartBtn.textContent = '浏览器下载安装 Android';
+      else smartBtn.textContent = isMobile ? '选择系统下载' : '手机扫码下载';
+
+      smartBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (isIOS) {
+          window.location.href = XQ_DOWNLOAD_CONFIG.iosDownloadUrl;
+          return;
+        }
+        if (isAndroid) {
+          window.location.href = XQ_DOWNLOAD_CONFIG.androidDownloadUrl;
+          return;
+        }
+        const target = document.getElementById('downloadDesktop');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+
+    if (downloadHint && isMobile) {
+      if (isIOS) {
+        downloadHint.textContent = '当前为 iOS 设备，点击按钮将跳转 App Store 下载。';
+      } else if (isAndroid) {
+        downloadHint.textContent = '当前为 Android 设备，点击按钮将在浏览器下载安装。';
+      } else {
+        downloadHint.textContent = '当前为移动设备，请选择对应系统下载安装。';
+      }
+    }
+  </script>
+</body>
+</html>

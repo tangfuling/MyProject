@@ -95,7 +95,7 @@ export default function LandingPage() {
             登录
           </button>
           <button className="btn btn-primary btn-sm" type="button" onClick={() => openLogin(RoutePath.WORKSPACE)}>
-            免费开始
+            安装插件
           </button>
         </div>
       </header>
@@ -137,6 +137,14 @@ export default function LandingPage() {
           <div className="hero-mini-kpi"><span>核心 KPI</span><b>推荐率</b></div>
           <div className="hero-mini-kpi"><span>每周动作</span><b>3 个重点动作</b></div>
           <div className="hero-mini-kpi"><span>接入时间</span><b>2 分钟</b></div>
+        </div>
+
+        <div className="hero-proof">
+          <div className="hero-proof-card">
+            <div className="proof-head">真实样例 · 过程展示</div>
+            <div className="proof-main">推荐率 <b>8.2% -&gt; 18.6%</b>，阅读环比 <b>+12%</b></div>
+            <div className="proof-sub">同阶段账号路径示例，结果受选题、发布节奏和执行质量影响。</div>
+          </div>
         </div>
 
         <div className="hero-preview">
@@ -193,6 +201,11 @@ export default function LandingPage() {
         </div>
 
         <div className="hero-note">新用户赠送 <b>CNY 1.00</b> 试用额度 | 按 token 计费 | 无月费</div>
+        <div className="hero-trust">
+          <div className="hero-trust-item">无需改公众号设置</div>
+          <div className="hero-trust-item">支持多维筛选与样本追踪</div>
+          <div className="hero-trust-item">建议可执行、可验证、可复盘</div>
+        </div>
       </section>
 
       <section className="steps-section">
@@ -210,6 +223,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="feature-section">
+        <div className="feature-inner">
+          <div className="feature-item">
+            <div className="feature-icon blue">1</div>
+            <div className="feature-title">决策先于分析</div>
+            <div className="feature-desc">先判断本周优先级，再看证据细节，避免陷入指标堆叠。</div>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon green">2</div>
+            <div className="feature-title">建议可落地</div>
+            <div className="feature-desc">每条建议绑定观察指标，执行后可量化验证是否有效。</div>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon purple">3</div>
+            <div className="feature-title">样本可追踪</div>
+            <div className="feature-desc">支持发布时间、阅读、完读、互动等多维排序定位样本。</div>
+          </div>
+        </div>
+      </section>
+
       <section className="pricing-section">
         <div className="pricing-inner">
           <h2 className="pricing-title">轻量起步，按结果扩投入</h2>
@@ -220,6 +253,7 @@ export default function LandingPage() {
             <div className="pricing-item">每轮对话约 CNY 0.01-0.05</div>
             <div className="pricing-item">调用前展示预估 token 与成本</div>
           </div>
+          <div className="pricing-cost-note">参考：每周 2 次分析 + 20 轮对话，约 CNY {cost} / 周。</div>
           <button
             className="btn btn-primary"
             type="button"
