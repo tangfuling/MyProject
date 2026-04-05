@@ -15,7 +15,10 @@ const SettingsApi = {
     return http.get<PaymentOrderPage>('/payment/orders', { params: { page, size } });
   },
   createPayment(amountCent: number) {
-    return http.post<PaymentCreateResult>('/payment/create', { amountCent, subject: '公众号助手充值' });
+    return http.post<PaymentCreateResult>('/payment/create', {
+      amountCent,
+      subject: 'Content Ops Assistant Recharge',
+    });
   },
 };
 

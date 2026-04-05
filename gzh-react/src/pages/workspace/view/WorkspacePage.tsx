@@ -1,615 +1,478 @@
-import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
+import { useAuthStore } from '../../../common/state/authStore';
+import ErrorState from '../../../common/ui/ErrorState';
+import Loading from '../../../common/ui/Loading';
 import MainNavTabs from '../../../common/ui/MainNavTabs';
-import type { ChatDoneEvent, ChatMessage } from '../../chat/model/ChatModels';
-import ChatApi from '../../chat/api/ChatApi';
-import type { AnalysisDoneEvent } from '../../analysis/model/AnalysisModels';
 import AnalysisApi from '../../analysis/api/AnalysisApi';
+import type { AnalysisDoneEvent, AnalysisReport } from '../../analysis/model/AnalysisModels';
+import ChatApi from '../../chat/api/ChatApi';
+import type { ChatDoneEvent, ChatMessage } from '../../chat/model/ChatModels';
 import SettingsApi from '../../settings/api/SettingsApi';
 import WorkspaceApi from '../api/WorkspaceApi';
-import { ApiConfig } from '../../../common/network/ApiConfig';
-import { useAuthStore } from '../../../common/state/authStore';
+import type { WorkspaceArticleCard } from '../model/WorkspaceModels';
 
-const modelOptions = [
-  { code: 'qwen', label: '千问', price: '¥2/百万tok' },
-  { code: 'doubao', label: '豆包', price: '¥3/百万tok' },
-  { code: 'claude', label: 'Claude', price: '¥15/百万tok' },
-  { code: 'gpt', label: 'GPT', price: '¥10/百万tok' },
+type RangeCode = '7d' | '30d' | '90d' | 'all';
+type SortKey = 'publish' | 'read' | 'finish' | 'duration' | 'like' | 'share' | 'wow' | 'comment' | 'follow' | 'recommend';
+type ViewMode = 'all' | 'top5' | 'low3';
+type ExportFormat = 'pdf' | 'image' | 'md';
+type ExportStage = 'idle' | 'queue' | 'running' | 'done' | 'downloaded';
+
+type UiMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  meta?: string;
+  streaming?: boolean;
+};
+
+const RANGE_OPTIONS: Array<{ value: RangeCode; label: string }> = [
+  { value: '7d', label: '7 天' },
+  { value: '30d', label: '30 天' },
+  { value: '90d', label: '90 天' },
+  { value: 'all', label: '全部' },
 ];
-const ARTICLE_PAGE_SIZE = 20;
 
-function formatDateTime(value?: string) {
-  if (!value) {
-    return '--';
-  }
-  return value.replace('T', ' ').slice(0, 16);
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'publish', label: '发布时间' },
+  { value: 'read', label: '阅读数' },
+  { value: 'finish', label: '完读率' },
+  { value: 'duration', label: '阅读时长' },
+  { value: 'like', label: '点赞' },
+  { value: 'share', label: '分享' },
+  { value: 'wow', label: '在看' },
+  { value: 'comment', label: '评论' },
+  { value: 'follow', label: '关注' },
+  { value: 'recommend', label: '推荐率' },
+];
+
+const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'top5', label: '前 5' },
+  { value: 'low3', label: '后 3' },
+];
+
+const MODEL_OPTIONS = [
+  { code: 'qwen', name: 'Qwen', price: 'CNY 2 / M tok' },
+  { code: 'doubao', name: 'Doubao', price: 'CNY 3 / M tok' },
+  { code: 'claude', name: 'Claude', price: 'CNY 15 / M tok' },
+  { code: 'gpt', name: 'GPT', price: 'CNY 10 / M tok' },
+];
+
+const CHAT_SESSION_KEY = 'gzh_chat_session_id';
+const PAGE_SIZE = 20;
+
+function createSessionId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `sess-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-function formatRangeLabel(range: string) {
-  switch (range) {
-    case '7d':
-      return '7天';
-    case '30d':
-      return '30天';
-    case '90d':
-      return '90天';
-    case 'all':
-      return '全部';
-    default:
-      return range;
-  }
+function fmtNum(v?: number | null) { return (v ?? 0).toLocaleString('zh-CN'); }
+function fmtMoneyCent(v?: number | null) { return `CNY ${((v ?? 0) / 100).toFixed(2)}`; }
+function fmtDateTime(v?: string | Date) {
+  if (!v) return '--';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return '--';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-
-function formatDuration(seconds?: number) {
-  const sec = Math.max(0, Math.round(Number(seconds || 0)));
-  if (sec <= 0) {
-    return '0秒';
-  }
-  if (sec < 60) {
-    return `${sec}秒`;
-  }
-  const min = Math.floor(sec / 60);
-  const remain = sec % 60;
-  return remain > 0 ? `${min}分${remain}秒` : `${min}分`;
+function fmtDateShort(v?: string) {
+  if (!v) return '--';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return '--';
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-
-function formatRate(value?: number) {
-  const rate = Number(value ?? 0);
-  if (!Number.isFinite(rate) || rate <= 0) {
-    return '0%';
-  }
-  if (rate >= 100) {
-    return `${Math.round(rate)}%`;
-  }
-  return `${(Math.round(rate * 10) / 10).toFixed(1)}%`;
+function fmtPercent(v?: number | null, d = 1) {
+  const raw = v ?? 0;
+  const p = Math.abs(raw) <= 1 ? raw * 100 : raw;
+  return `${p.toFixed(d)}%`;
 }
-
-function toTimestamp(value?: string) {
-  if (!value) {
-    return 0;
-  }
-  const time = new Date(value).getTime();
-  return Number.isFinite(time) ? time : 0;
+function fmtDuration(sec?: number | null) {
+  const s = sec ?? 0;
+  if (s <= 0) return '--';
+  const m = Math.floor(s / 60);
+  return `${m}m${String(s % 60).padStart(2, '0')}s`;
 }
-
-function percentText(value: number) {
-  const abs = Math.abs(value).toFixed(0);
-  if (value > 0) {
-    return `↑ ${abs}%`;
+function recommendRateFromSummary(summary: Record<string, number>) {
+  for (const [k, v] of Object.entries(summary || {})) {
+    if (k.includes('推荐') || k.toLowerCase().includes('recommend')) return v || 0;
   }
-  if (value < 0) {
-    return `↓ ${abs}%`;
-  }
-  return '0%';
+  return 0;
 }
-
-function renderTraffic(items: Record<string, number>) {
-  return Object.entries(items).sort((a, b) => b[1] - a[1]);
+function recommendCount(sources: Record<string, number>) {
+  return Object.entries(sources || {}).reduce((sum, [k, v]) => {
+    if (k.includes('推荐') || k.toLowerCase().includes('recommend')) return sum + (v || 0);
+    return sum;
+  }, 0);
+}
+function recommendRateByArticle(article: WorkspaceArticleCard) {
+  const read = Math.max(article.readCount || 0, 1);
+  return (recommendCount(article.trafficSources || {}) * 100) / read;
+}
+function sortValue(article: WorkspaceArticleCard, key: SortKey) {
+  if (key === 'publish') return article.publishTime ? new Date(article.publishTime).getTime() : 0;
+  if (key === 'read') return article.readCount || 0;
+  if (key === 'finish') return Math.abs(article.completionRate || 0) <= 1 ? (article.completionRate || 0) * 100 : (article.completionRate || 0);
+  if (key === 'duration') return article.avgReadTimeSec || 0;
+  if (key === 'like') return article.likeCount || 0;
+  if (key === 'share') return article.shareCount || 0;
+  if (key === 'wow') return article.wowCount || 0;
+  if (key === 'comment') return article.commentCount || 0;
+  if (key === 'follow') return article.newFollowers || 0;
+  return recommendRateByArticle(article);
+}
+function metricText(article: WorkspaceArticleCard, key: SortKey) {
+  if (key === 'publish') return `发布时间 ${fmtDateShort(article.publishTime)}`;
+  if (key === 'read') return `阅读 ${fmtNum(article.readCount)}`;
+  if (key === 'finish') return `完读率 ${fmtPercent(article.completionRate, 0)}`;
+  if (key === 'duration') return `时长 ${fmtDuration(article.avgReadTimeSec)}`;
+  if (key === 'recommend') return `推荐率 ${fmtPercent(recommendRateByArticle(article), 0)}`;
+  return '';
+}
+function mapHistory(msg: ChatMessage): UiMessage {
+  const tok = (msg.inputTokens || 0) + (msg.outputTokens || 0);
+  return {
+    id: `h-${msg.id}`,
+    role: msg.role === 'assistant' ? 'assistant' : 'user',
+    content: msg.content,
+    meta: msg.role === 'assistant'
+      ? `${msg.aiModel || 'AI'} | ${fmtDateTime(msg.createdAt)} | ${tok.toLocaleString('zh-CN')} tok | ${fmtMoneyCent(msg.costCent)}`
+      : fmtDateTime(msg.createdAt),
+  };
 }
 
 export default function WorkspacePage() {
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token);
-  const [range, setRange] = useState('all');
+  const queryClient = useQueryClient();
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+
+  const [range, setRange] = useState<RangeCode>('30d');
+  const [sortKey, setSortKey] = useState<SortKey>('publish');
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [visibleCount, setVisibleCount] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  const [sessionId, setSessionId] = useState('');
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [streamText, setStreamText] = useState('');
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [chatDone, setChatDone] = useState<ChatDoneEvent | null>(null);
-  const streamTextRef = useRef('');
-  const chatAbortRef = useRef<AbortController | null>(null);
-  const drawerBodyRef = useRef<HTMLDivElement | null>(null);
-
-  const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisDetail, setAnalysisDetail] = useState<AnalysisReport | null>(null);
+  const [analysisGenerating, setAnalysisGenerating] = useState(false);
+  const [analysisLive, setAnalysisLive] = useState('');
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  const [chatMessages, setChatMessages] = useState<UiMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatStreaming, setChatStreaming] = useState(false);
+  const [chatDoneMeta, setChatDoneMeta] = useState('');
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  const [sessionId, setSessionId] = useState(() => {
+    const cached = localStorage.getItem(CHAT_SESSION_KEY);
+    if (cached) return cached;
+    const created = createSessionId();
+    localStorage.setItem(CHAT_SESSION_KEY, created);
+    return created;
+  });
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf');
+  const [exportStage, setExportStage] = useState<ExportStage>('idle');
+
+  const chatRef = useRef<HTMLDivElement | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const analysisAbortRef = useRef<AbortController | null>(null);
+  const exportTimersRef = useRef<number[]>([]);
+
+  const overviewQuery = useQuery({
+    queryKey: ['workspace-overview', range],
+    queryFn: () => WorkspaceApi.overview(range),
+  });
+
+  const articlesQuery = useInfiniteQuery({
+    queryKey: ['workspace-articles', range],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => WorkspaceApi.articles(range, Number(pageParam), PAGE_SIZE),
+    getNextPageParam: (last, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.records.length, 0);
+      return loaded >= last.total ? undefined : last.page + 1;
+    },
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ['chat-history', sessionId],
+    queryFn: () => ChatApi.history(sessionId),
+    enabled: Boolean(sessionId),
+    staleTime: 60_000,
+  });
+
+  const modelMutation = useMutation({
+    mutationFn: (model: string) => SettingsApi.updateModel(model),
+    onSuccess: (_res, model) => {
+      updateProfile({ aiModel: model });
+      void queryClient.invalidateQueries({ queryKey: ['workspace-overview'] });
+    },
+  });
+
+  const overview = overviewQuery.data;
+  const pages = articlesQuery.data?.pages ?? [];
+  const allArticles = useMemo(() => pages.flatMap((p) => p.records), [pages]);
+  const totalArticles = (pages.length > 0 ? pages[pages.length - 1].total : undefined) ?? allArticles.length;
+
+  const sortedArticles = useMemo(() => {
+    const list = [...allArticles];
+    list.sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey));
+    return list;
+  }, [allArticles, sortKey]);
+
+  const viewArticles = useMemo(() => {
+    if (viewMode === 'top5') return sortedArticles.slice(0, 5);
+    if (viewMode === 'low3') return sortedArticles.slice(Math.max(0, sortedArticles.length - 3));
+    return sortedArticles;
+  }, [sortedArticles, viewMode]);
+
+  const shownArticles = useMemo(() => (viewMode === 'all' ? viewArticles.slice(0, visibleCount) : viewArticles), [viewMode, viewArticles, visibleCount]);
+  const canLoadMore = viewMode === 'all' && (shownArticles.length < totalArticles || Boolean(articlesQuery.hasNextPage));
+
+  const header = overview?.header;
+  const metrics = overview?.dataPanel.metrics;
+  const changes = overview?.dataPanel.changes;
+  const recommendRate = recommendRateFromSummary(overview?.dataPanel.trafficSummary ?? {});
+  const analysisPanel = overview?.analysisPanel;
+  const analysisSummary = analysisPanel?.summary || '暂无分析总结。';
+  const analysisText = analysisGenerating ? analysisLive : (analysisDetail?.content || analysisPanel?.content || analysisSummary);
+  const currentModelCode = header?.aiModel || profile?.aiModel || 'qwen';
+  const currentModelName = MODEL_OPTIONS.find((x) => x.code === currentModelCode)?.name || currentModelCode;
+
+  const quickPrompts = useMemo(() => {
+    const list = [
+      ...(overview?.quickQuestions ?? []),
+      ...(analysisPanel?.suggestedQuestions ?? []),
+      ...(analysisDetail?.suggestedQuestions ?? []),
+      '下周写什么？请给 3 个选题和 KPI 检查点。',
+      '如何提升分享率？请给标题/结构/CTA 的具体动作。',
+      '对比本周与上周，并调整优先级。',
+    ].filter((x) => x && x.trim());
+    return Array.from(new Set(list)).slice(0, 5);
+  }, [overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
+
+  useEffect(() => {
+    if (!historyQuery.data || chatMessages.length > 0) return;
+    setChatMessages(historyQuery.data.map(mapHistory));
+  }, [historyQuery.data, chatMessages.length]);
+
+  useEffect(() => {
+    const node = chatRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+  }, [chatMessages, analysisLive]);
 
   useEffect(() => {
     return () => {
       chatAbortRef.current?.abort();
       analysisAbortRef.current?.abort();
+      exportTimersRef.current.forEach((t) => window.clearTimeout(t));
     };
   }, []);
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) {
-      return;
-    }
-    console.info('[gzh-react][workspace] mounted', {
-      path: window.location.pathname,
-      hasToken: !!token,
-      apiBase: ApiConfig.baseUrl,
-    });
-  }, [token]);
-
-  const overviewQuery = useQuery({
-    queryKey: ['workspace-overview', range],
-    queryFn: async () => {
-      if (import.meta.env.DEV) {
-        console.info('[gzh-react][workspace] request overview', { range, apiBase: ApiConfig.baseUrl });
-      }
-      const data = await WorkspaceApi.overview(range);
-      if (import.meta.env.DEV) {
-        console.info('[gzh-react][workspace] response overview', {
-          range,
-          articleCount: data?.header?.articleCount,
-          totalRead: data?.dataPanel?.metrics?.totalRead,
-          articles: data?.articles?.length,
-        });
-      }
-      return data;
-    },
-    networkMode: 'always',
-    refetchOnMount: 'always',
-    refetchOnReconnect: 'always',
-    staleTime: 0,
-  });
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) {
-      return;
-    }
-    console.info('[gzh-react][workspace] query state', {
-      range,
-      status: overviewQuery.status,
-      fetchStatus: overviewQuery.fetchStatus,
-      hasData: !!overviewQuery.data,
-      isError: overviewQuery.isError,
-    });
-  }, [overviewQuery.status, overviewQuery.fetchStatus, overviewQuery.data, overviewQuery.isError, range]);
-
-  const articleListQuery = useInfiniteQuery({
-    queryKey: ['workspace-articles', range],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }) => WorkspaceApi.articles(range, pageParam, ARTICLE_PAGE_SIZE),
-    getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((sum, page) => sum + page.records.length, 0);
-      if (loaded >= lastPage.total) {
-        return undefined;
-      }
-      return allPages.length + 1;
-    },
-    enabled: drawerOpen,
-    networkMode: 'always',
-    refetchOnMount: 'always',
-    refetchOnReconnect: 'always',
-    staleTime: 0,
-  });
-
-  const updateModelMutation = useMutation({
-    mutationFn: async (model: string) => SettingsApi.updateModel(model),
-    onSuccess: () => {
-      void overviewQuery.refetch();
-    },
-  });
-
-  const overview = overviewQuery.data;
-  const analysisPanel = overview?.analysisPanel;
-  const reportId = analysisPanel?.reportId;
-  const rangeLabel = formatRangeLabel(range);
-  const metrics = overview?.dataPanel.metrics;
-  const changes = overview?.dataPanel.changes;
-  const pagedArticles = useMemo(
-    () => articleListQuery.data?.pages.flatMap((page) => page.records) ?? [],
-    [articleListQuery.data]
-  );
-  const orderedArticles = useMemo(() => {
-    const list = [...pagedArticles];
-    list.sort((a, b) => {
-      const diff = toTimestamp(b.publishTime) - toTimestamp(a.publishTime);
-      if (diff !== 0) {
-        return diff;
-      }
-      return (b.id ?? 0) - (a.id ?? 0);
-    });
-    return list;
-  }, [pagedArticles]);
-  const drawerTotal = articleListQuery.data?.pages[0]?.total ?? 0;
-  const drawerLoaded = orderedArticles.length;
-
-  const onDrawerBodyScroll = (event: UIEvent<HTMLDivElement>) => {
-    if (!articleListQuery.hasNextPage || articleListQuery.isFetchingNextPage) {
-      return;
-    }
-    const target = event.currentTarget;
-    const remain = target.scrollHeight - target.scrollTop - target.clientHeight;
-    if (remain < 120) {
-      void articleListQuery.fetchNextPage();
+  const syncWorkspace = async () => {
+    setSyncing(true);
+    try {
+      await Promise.all([overviewQuery.refetch(), articlesQuery.refetch()]);
+    } finally {
+      setSyncing(false);
     }
   };
 
-  useEffect(() => {
-    if (!drawerOpen || !articleListQuery.hasNextPage || articleListQuery.isFetchingNextPage) {
-      return;
-    }
-    const element = drawerBodyRef.current;
-    if (!element) {
-      return;
-    }
-    if (element.scrollHeight <= element.clientHeight + 8) {
-      void articleListQuery.fetchNextPage();
-    }
-  }, [drawerOpen, articleListQuery.hasNextPage, articleListQuery.isFetchingNextPage, articleListQuery.data, articleListQuery.fetchNextPage]);
+  const changeModel = (model: string) => {
+    if (modelMutation.isPending || model === currentModelCode) return;
+    modelMutation.mutate(model);
+  };
 
-  const onSend = () => {
-    const message = input.trim();
-    if (!message || !overview) {
-      return;
-    }
+  const loadMore = async () => {
+    if (!canLoadMore) return;
+    setVisibleCount((prev) => prev + 4);
+    if (articlesQuery.hasNextPage) await articlesQuery.fetchNextPage();
+  };
+
+  const stopChat = () => {
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    setChatStreaming(false);
+    setChatDoneMeta('已停止生成。');
+  };
+
+  const sendPrompt = (raw: string) => {
+    const text = raw.trim();
+    if (!text || chatStreaming) return;
+    const aiId = `a-${Date.now()}`;
     setChatError(null);
-    setStreaming(true);
-    setStreamText('');
-    streamTextRef.current = '';
-    setChatDone(null);
-
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      sessionId: sessionId || 'pending',
-      reportId: reportId ?? null,
-      role: 'user',
-      content: message,
-      aiModel: '',
-      inputTokens: 0,
-      outputTokens: 0,
-      costCent: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    setChatDoneMeta('');
+    setChatMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', content: text, meta: '刚刚' }, { id: aiId, role: 'assistant', content: '', meta: '生成中...', streaming: true }]);
+    setChatStreaming(true);
 
     chatAbortRef.current = ChatApi.send(
-      { message, sessionId: sessionId || undefined, reportId, range },
-      (chunk) => {
-        streamTextRef.current += chunk;
-        setStreamText((prev) => prev + chunk);
+      { message: text, sessionId, reportId: analysisDetail?.id ?? analysisPanel?.reportId, range },
+      (chunk) => setChatMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, content: `${m.content}${chunk}` } : m))),
+      (event: ChatDoneEvent) => {
+        chatAbortRef.current = null;
+        setChatStreaming(false);
+        setChatDoneMeta(`消耗 ${fmtMoneyCent(event.costCent)} | ${(event.inputTokens + event.outputTokens).toLocaleString('zh-CN')} tok`);
+        setChatMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, streaming: false, meta: `${event.aiModel || 'AI'} | 刚刚` } : m)));
+        if (event.sessionId && event.sessionId !== sessionId) {
+          localStorage.setItem(CHAT_SESSION_KEY, event.sessionId);
+          setSessionId(event.sessionId);
+        }
       },
-      (done) => {
-        setStreaming(false);
-        setChatDone(done);
-        setSessionId(done.sessionId);
-        setInput('');
-        const assistant: ChatMessage = {
-          id: Date.now() + 1,
-          sessionId: done.sessionId,
-          reportId: reportId ?? null,
-          role: 'assistant',
-          content: streamTextRef.current,
-          aiModel: done.aiModel,
-          inputTokens: done.inputTokens,
-          outputTokens: done.outputTokens,
-          costCent: done.costCent,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistant]);
-      },
-      (error) => {
-        setStreaming(false);
-        setChatError(error.message || '对话失败，请稍后重试');
+      (error: Error) => {
+        chatAbortRef.current = null;
+        setChatStreaming(false);
+        setChatError(error.message || '对话失败。');
+        setChatMessages((prev) => prev.map((m) => (m.id === aiId ? { ...m, streaming: false, content: m.content || '生成失败，请重试。', meta: '失败' } : m)));
       }
     );
   };
 
-  const onStopChat = () => {
-    chatAbortRef.current?.abort();
-    setStreaming(false);
-  };
-
-  const onRegenerateAnalysis = () => {
+  const regenerateAnalysis = () => {
+    if (analysisGenerating) return;
+    setAnalysisGenerating(true);
+    setAnalysisLive('');
     setAnalysisError(null);
-    setAnalysisRunning(true);
     analysisAbortRef.current = AnalysisApi.generate(
       range,
-      () => undefined,
-      (_done: AnalysisDoneEvent) => {
-        setAnalysisRunning(false);
-        void overviewQuery.refetch();
+      (chunk) => setAnalysisLive((prev) => prev + chunk),
+      (event: AnalysisDoneEvent) => {
+        analysisAbortRef.current = null;
+        setAnalysisGenerating(false);
+        setChatDoneMeta(`分析完成。tok ${(event.inputTokens + event.outputTokens).toLocaleString('zh-CN')}，消耗 ${fmtMoneyCent(event.costCent)}`);
+        void AnalysisApi.detail(event.reportId).then(setAnalysisDetail).catch(() => setAnalysisError('分析详情加载失败。'));
       },
       (error) => {
-        setAnalysisRunning(false);
-        setAnalysisError(error.message || '分析失败，请稍后重试');
+        analysisAbortRef.current = null;
+        setAnalysisGenerating(false);
+        setAnalysisError(error.message || '分析生成失败。');
       }
     );
   };
 
-  const activeModel = modelOptions.find((item) => item.code === overview?.header.aiModel) ?? modelOptions[0];
+  const generateExport = () => {
+    if (exportStage === 'queue' || exportStage === 'running') return;
+    exportTimersRef.current.forEach((t) => window.clearTimeout(t));
+    setExportStage('queue');
+    exportTimersRef.current = [
+      window.setTimeout(() => setExportStage('running'), 700),
+      window.setTimeout(() => setExportStage('done'), 2100),
+    ];
+  };
 
-  if (overviewQuery.isPending) {
-    return <div className="loading-state">Loading...</div>;
-  }
+  const downloadExport = () => {
+    const lines = [
+      '# 周复盘',
+      '',
+      `生成时间：${fmtDateTime(new Date())}`,
+      `周期：${range}`,
+      `总阅读：${fmtNum(metrics?.totalRead)}`,
+      `完读率：${fmtPercent(metrics?.completionRate, 0)}`,
+      `推荐率：${fmtPercent(recommendRate, 1)}`,
+      '',
+      analysisText || '暂无',
+    ];
+    const ext = exportFormat === 'md' ? 'md' : 'txt';
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weekly-review-${Date.now()}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportStage('downloaded');
+  };
 
-  if (overviewQuery.error) {
-    return <div className="error-state">{overviewQuery.error.message}</div>;
-  }
+  if (overviewQuery.isLoading && !overview) return <Loading />;
+  if (overviewQuery.error) return <ErrorState message={(overviewQuery.error as Error).message || '加载工作台失败'} />;
 
   return (
     <div className="workspace-page">
-      <div className="app-topbar">
-        <a
-          className="brand"
-          href={RoutePath.ROOT}
-          onClick={(event) => {
-            event.preventDefault();
-            navigate(RoutePath.ROOT);
-          }}
-        >
-          <img className="brand-icon" src="/site-icon-64.png" alt="公众号助手" />
-          <div className="brand-name">公众号助手</div>
-        </a>
-        <MainNavTabs />
-
-        <div className="topbar-right">
-          <div className="model-chip">
-            <span>{activeModel.label}</span>
-            <div className="model-dropdown">
-              {modelOptions.map((item) => (
-                <button
-                  key={item.code}
-                  type="button"
-                  className={`model-opt${item.code === activeModel.code ? ' active' : ''}`}
-                  onClick={() => updateModelMutation.mutate(item.code)}
-                  disabled={updateModelMutation.isPending}
-                >
-                  <span>{item.label}</span>
-                  <span className="model-opt-price">{item.price}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <span className="sync-meta">上次同步 {formatDateTime(overview?.header.lastSyncAt)} · {overview?.header.articleCount ?? 0} 篇</span>
-          <button type="button" className="btn btn-ghost btn-xs" onClick={() => void overviewQuery.refetch()}>同步</button>
-          <button type="button" className="balance-chip" onClick={() => navigate(RoutePath.PROFILE)}>¥{(((overview?.header.balanceCent ?? 0) + (overview?.header.freeQuotaCent ?? 0)) / 100).toFixed(2)}</button>
-          <button type="button" className="avatar-btn" onClick={() => navigate(RoutePath.PROFILE)}>我</button>
-        </div>
-      </div>
-
-      <div className="workspace-body">
-        <div className="ctx">
-          <div className="ctx-sec">
-            <div className="ctx-head">
-              <div className="ctx-head-left">
-                <span className="ctx-head-icon">📊</span>
-                <span className="ctx-head-title">数据</span>
-              </div>
-              <div className="time-tabs">
-                <button type="button" className={`time-tab${range === '7d' ? ' active' : ''}`} onClick={() => setRange('7d')}>7天</button>
-                <button type="button" className={`time-tab${range === '30d' ? ' active' : ''}`} onClick={() => setRange('30d')}>30天</button>
-                <button type="button" className={`time-tab${range === '90d' ? ' active' : ''}`} onClick={() => setRange('90d')}>90天</button>
-                <button type="button" className={`time-tab${range === 'all' ? ' active' : ''}`} onClick={() => setRange('all')}>全部</button>
-              </div>
-            </div>
-
-            <div className="ctx-body">
-              <div className="kpi-layout">
-                <div className="kpi-main-grid">
-                  <div className="kpi-main-card">
-                    <div className="kpi-main-label">阅读</div>
-                    <div className="kpi-main-value">{metrics?.totalRead ?? 0}</div>
-                    <div className="kpi-main-meta">
-                      <span className={`stat-cell-delta ${(changes?.totalRead ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.totalRead ?? 0)}</span>
-                      <span>篇均 <b>{metrics?.avgRead ?? 0}</b></span>
-                    </div>
-                  </div>
-                  <div className="kpi-main-card">
-                    <div className="kpi-main-label">完读</div>
-                    <div className="kpi-main-value">{Math.round(metrics?.completionRate ?? 0)}%</div>
-                    <div className="kpi-main-meta">
-                      <span className={`stat-cell-delta ${(changes?.completionRate ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.completionRate ?? 0)}</span>
-                      <span>时长 <b>{formatDuration(metrics?.avgReadTimeSec)}</b></span>
-                    </div>
-                  </div>
-                  <div className="kpi-main-card">
-                    <div className="kpi-main-label">点赞</div>
-                    <div className="kpi-main-value">{metrics?.totalLike ?? 0}</div>
-                    <div className="kpi-main-meta">
-                      <span className={`stat-cell-delta ${(changes?.totalLike ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.totalLike ?? 0)}</span>
-                      <span><b>{formatRate(metrics?.likeRate)}</b></span>
-                    </div>
-                  </div>
-                  <div className="kpi-main-card">
-                    <div className="kpi-main-label">关注</div>
-                    <div className="kpi-main-value">{metrics?.newFollowers ?? 0}</div>
-                    <div className="kpi-main-meta">
-                      <span className={`stat-cell-delta ${(changes?.newFollowers ?? 0) >= 0 ? 'up' : 'down'}`}>{percentText(changes?.newFollowers ?? 0)}</span>
-                      <span><b>{formatRate(metrics?.followRate)}</b></span>
-                    </div>
-                  </div>
-                </div>
-                <div className="kpi-interact-card">
-                  <div className="kpi-interact-head">其他指标</div>
-                  <div className="kpi-interact-list">
-                    <div className="kpi-interact-item"><span className="name">分享</span><span className="val">{metrics?.totalShare ?? 0}</span><span className="rate">{formatRate(metrics?.shareRate)}</span></div>
-                    <div className="kpi-interact-item"><span className="name">在看</span><span className="val">{metrics?.totalWow ?? 0}</span><span className="rate">{formatRate(metrics?.wowRate)}</span></div>
-                    <div className="kpi-interact-item"><span className="name">留言</span><span className="val">{metrics?.totalComment ?? 0}</span><span className="rate">{formatRate(metrics?.commentRate)}</span></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mini-trend">
-                <div className="mini-trend-label">阅读趋势（{rangeLabel}）</div>
-                <svg className="sparkline" viewBox="0 0 240 40" preserveAspectRatio="none">
-                  <polyline
-                    fill="none"
-                    stroke="var(--accent)"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={(overview?.dataPanel.trend ?? []).map((item, index) => `${index * 30},${40 - Math.max(2, Math.min(38, item.readCount / 5))}`).join(' ')}
-                  />
-                </svg>
-              </div>
-
-              <button type="button" className="detail-link" onClick={() => setDrawerOpen(true)}>查看全部指标与文章详情 →</button>
-            </div>
-          </div>
-
-          <div className="ctx-sec ctx-analysis-wrap">
-            <div className="ctx-head">
-              <div className="ctx-head-left">
-                <span className="ctx-head-icon">📋</span>
-                <span className="ctx-head-title">分析</span>
-              </div>
-              <span className="ctx-head-time">{analysisPanel?.createdAt ? `${formatDateTime(analysisPanel.createdAt)} 生成` : '暂无报告'}</span>
-            </div>
-
-            <div className="ctx-analysis">
-              <div className="analysis-stage">{analysisPanel?.summary || '暂无分析摘要'}</div>
-              <div className="ctx-sec-title">本周建议</div>
-              {(analysisPanel?.actionSuggestions ?? []).map((item, index) => (
-                <div key={`${item}-${index}`} className="suggestion">
-                  <div className="sug-num">{index + 1}</div>
-                  <div className="sug-text">{item}</div>
-                </div>
-              ))}
-              {analysisError ? <div className="error-tip">{analysisError}</div> : null}
-            </div>
-
-            <div className="ctx-footer">
-              <div className="ctx-footer-meta">{analysisPanel?.rangeCode ?? range} · <b>≈¥{((analysisPanel?.costCent ?? 0) / 100).toFixed(2)}</b></div>
-              <button type="button" className="btn btn-ghost btn-xs" disabled={analysisRunning} onClick={onRegenerateAnalysis}>
-                {analysisRunning ? '生成中...' : '重新生成'}
-              </button>
-            </div>
+      <div className="workspace-shell">
+        <div className="app-topbar">
+          <a className="brand" href={RoutePath.ROOT} onClick={(e) => { e.preventDefault(); navigate(RoutePath.ROOT); }}>
+            <img className="brand-icon" src="/site-icon-64.png" alt="内容运营助手" />
+            <div className="brand-name">内容运营助手</div>
+          </a>
+          <MainNavTabs />
+          <span className="app-topbar-account">{header?.accountName || '运营账号'}</span>
+          <div className="topbar-right">
+            <div className="model-chip">模型：{currentModelName}<div className="model-dropdown">{MODEL_OPTIONS.map((m) => <button key={m.code} type="button" className={`model-opt${m.code === currentModelCode ? ' active' : ''}`} onClick={() => changeModel(m.code)}><span>{m.name}</span><span className="model-opt-price">{m.price}</span></button>)}</div></div>
+            <button className="btn btn-outline btn-xs" type="button" onClick={() => void syncWorkspace()} disabled={syncing}>{syncing ? '同步中...' : '同步'}</button>
+            <button className="balance-chip" type="button" onClick={() => navigate(RoutePath.PROFILE)}>{fmtMoneyCent((header?.balanceCent || 0) + (header?.freeQuotaCent || 0))}</button>
           </div>
         </div>
 
-        <div className="chat-wrap">
-          <div className="chat-msgs">
-            {analysisPanel?.reportId ? (
-              <div className="msg">
-                <div className="msg-av ai">🤖</div>
-                <div>
-                  <div className="analysis-msg">
-                    <div className="am-head">
-                      <div className="am-head-title">
-                        已分析你 {analysisPanel.rangeCode} 的数据
-                        <span className="am-chip">{analysisPanel.aiModel} · {(analysisPanel.inputTokens ?? 0) + (analysisPanel.outputTokens ?? 0)} tok</span>
-                      </div>
-                    </div>
-                    <div className="am-body pre-wrap">{analysisPanel.content}</div>
+        <div className="workspace-body">
+          <div className="ctx">
+            <div className="ctx-scroll">
+              <div className="ctx-sec">
+                <div className="ctx-head"><div className="ctx-head-left"><span className="ctx-head-title">数据总览</span></div><div className="time-tabs">{RANGE_OPTIONS.map((r) => <button key={r.value} type="button" className={`time-tab${range === r.value ? ' active' : ''}`} onClick={() => setRange(r.value)}>{r.label}</button>)}</div></div>
+                <div className="ctx-body">
+                  <div className="kpi-lite-row">
+                    <div className="kpi-lite-item"><span>总阅读</span><b>{fmtNum(metrics?.totalRead)}</b></div>
+                    <div className="kpi-lite-item"><span>完读率</span><b>{fmtPercent(metrics?.completionRate, 0)}</b></div>
+                    <div className="kpi-lite-item"><span>推荐率</span><b>{fmtPercent(recommendRate, 1)}</b></div>
                   </div>
-                  <div className="msg-meta">{formatDateTime(analysisPanel.createdAt)}</div>
+                  <div className="risk-alert">{recommendRate < 15 ? '风险：推荐率低于目标区间，优先稳住分发信号。' : '状态良好：推荐率在目标区间，保持节奏。'}</div>
                 </div>
               </div>
-            ) : null}
 
-            {messages.map((message) => (
-              <div key={`${message.id}-${message.createdAt}`} className={`msg ${message.role === 'user' ? 'user' : ''}`}>
-                <div className={`msg-av ${message.role === 'user' ? 'user' : 'ai'}`}>{message.role === 'user' ? '我' : '🤖'}</div>
-                <div>
-                  <div className={`bubble ${message.role === 'user' ? 'user' : 'ai'} pre-wrap`}>{message.content}</div>
-                  {message.role === 'assistant' ? (
-                    <div className="msg-meta">{message.aiModel} · {message.inputTokens + message.outputTokens} tok · ¥{(message.costCent / 100).toFixed(2)}</div>
-                  ) : null}
+              <div className="ctx-sec ctx-sec-analysis">
+                <div className="ctx-head"><div className="ctx-head-left"><span className="ctx-head-title">分析结论</span></div><span className="ctx-head-time">{analysisPanel?.createdAt ? fmtDateTime(analysisPanel.createdAt) : 'N/A'}</span></div>
+                <div className="ctx-analysis">
+                  <div className="analysis-stage">阶段判断：{analysisSummary}</div>
+                  <div className="ctx-sec-title">本周动作</div>
+                  {(analysisPanel?.actionSuggestions?.length ? analysisPanel.actionSuggestions : ['保持每周节奏，并用 KPI 验证效果。']).slice(0, 3).map((x, idx) => <div key={`${x}-${idx}`} className="suggestion"><div className="sug-num">{idx + 1}</div><div className="sug-text">{x}</div></div>)}
+                  {analysisText ? <pre className="analysis-content pre-wrap">{analysisText}</pre> : null}
                 </div>
+                <div className="ctx-footer"><div className="ctx-footer-meta">范围 {range} | {currentModelName}</div><button className="btn btn-ghost btn-xs" type="button" onClick={regenerateAnalysis} disabled={analysisGenerating}>{analysisGenerating ? '生成中...' : '重新生成'}</button></div>
+                {analysisError ? <div className="error-tip" style={{ padding: '0 12px 10px' }}>{analysisError}</div> : null}
               </div>
-            ))}
-
-            {streaming ? (
-              <div className="msg">
-                <div className="msg-av ai">🤖</div>
-                <div>
-                  <div className="bubble ai pre-wrap">{streamText || '思考中...'}</div>
-                </div>
-              </div>
-            ) : null}
+            </div>
           </div>
 
-          <div className="chat-bottom">
-            <div className="shortcut-row">
-              {(overview?.quickQuestions ?? []).map((question) => (
-                <button key={question} type="button" className="chip" onClick={() => setInput(question)}>{question}</button>
-              ))}
+          <div className="chat-wrap">
+            <div className="chat-msgs" ref={chatRef}>
+              {historyQuery.isLoading && chatMessages.length === 0 ? <div className="msg"><div className="msg-av ai">AI</div><div className="bubble ai">加载历史对话中...</div></div> : null}
+              {chatMessages.map((m) => <div key={m.id} className={`msg${m.role === 'user' ? ' user' : ''}`}><div className={`msg-av ${m.role === 'user' ? 'user' : 'ai'}`}>{m.role === 'user' ? 'U' : 'AI'}</div><div><div className={`bubble ${m.role === 'user' ? 'user' : 'ai'}`}>{m.content ? <pre className="pre-wrap">{m.content}</pre> : '...'}</div>{m.meta ? <div className="msg-meta">{m.meta}</div> : null}</div></div>)}
             </div>
-
-            <div className="input-row">
-              <textarea className="chat-input" placeholder="问我关于你账号的任何问题..." value={input} onChange={(event) => setInput(event.target.value)} />
-              <button type="button" className="send-btn" onClick={onSend} disabled={streaming}>发送</button>
-              <button type="button" className="btn btn-ghost btn-xs" onClick={onStopChat} disabled={!streaming}>停止</button>
+            <div className="chat-bottom">
+              <div className="chat-quick-strip">{quickPrompts.map((p) => <button key={p} className="chat-quick-btn" type="button" onClick={() => sendPrompt(p)}>{p}</button>)}</div>
+              <div className="input-row">
+                <textarea className="chat-input" placeholder="请输入关于账号运营的问题..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (chatStreaming) stopChat(); else { const t = chatInput.trim(); if (t) { setChatInput(''); sendPrompt(t); } } } }} />
+                <button className="send-btn" type="button" onClick={() => { if (chatStreaming) stopChat(); else { const t = chatInput.trim(); if (t) { setChatInput(''); sendPrompt(t); } } }}>{chatStreaming ? '停止' : '发送'}</button>
+              </div>
+              {chatDoneMeta ? <div className="chat-done">{chatDoneMeta}</div> : null}
+              {chatError ? <div className="error-tip">{chatError}</div> : null}
             </div>
-
-            {chatError ? <div className="error-tip">{chatError}</div> : null}
-            {chatDone ? <div className="chat-done">本轮消耗 {chatDone.inputTokens + chatDone.outputTokens} tok · ¥{(chatDone.costCent / 100).toFixed(2)}</div> : null}
           </div>
         </div>
       </div>
 
       <div className={`overlay${drawerOpen ? ' open' : ''}`} onClick={() => setDrawerOpen(false)} />
       <div className={`drawer${drawerOpen ? ' open' : ''}`}>
-        <div className="drawer-head">
-          <div>
-            <div className="drawer-head-title">文章数据 · {rangeLabel}</div>
-            <div className="drawer-head-sub">已加载 {drawerLoaded}/{drawerTotal || drawerLoaded} 篇 · 按发布时间倒序</div>
-          </div>
-          <button type="button" className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
+        <div className="drawer-head"><div className="drawer-head-main"><div className="drawer-head-title">文章列表</div><div className="drawer-head-sub"><span>总计 {totalArticles}</span><span>更新 {fmtDateTime(header?.lastSyncAt)}</span></div></div><div className="drawer-head-actions"><button className="btn btn-ghost btn-xs drawer-export-btn" type="button" onClick={() => { setExportOpen(true); setExportStage('idle'); }}>导出周复盘</button><button className="drawer-close" type="button" onClick={() => setDrawerOpen(false)}>x</button></div></div>
+        <div className="drawer-body">
+          <div className="article-filter article-filter-gap"><div className="article-filter-head"><div className="drawer-block-head green article-list-head-tag">排序</div><div className="filter-metrics">{SORT_OPTIONS.map((s) => <button key={s.value} type="button" className={`filter-chip${sortKey === s.value ? ' active' : ''}`} onClick={() => setSortKey(s.value)}>{s.label}</button>)}</div></div><div className="filter-views">{VIEW_OPTIONS.map((v) => <button key={v.value} type="button" className={`view-chip${viewMode === v.value ? ' active' : ''}`} onClick={() => { setViewMode(v.value); if (v.value === 'all') setVisibleCount(6); }}>{v.label}</button>)}</div></div>
+          {shownArticles.map((a) => <div key={a.id} className="art-row"><div className="art-top"><div className="art-top-main"><div className="art-title">{a.title}</div></div><div className="art-date">{fmtDateShort(a.publishTime)}</div></div><div className="art-stats primary"><div className="art-stat">阅读 <b>{fmtNum(a.readCount)}</b></div><div className="art-stat">完读率 <b>{fmtPercent(a.completionRate, 0)}</b></div><div className="art-stat">推荐率 <b>{fmtPercent(recommendRateByArticle(a), 0)}</b></div></div><div className="art-insight">洞察：{metricText(a, sortKey)}</div></div>)}
+          <div className="load-status">已加载 {shownArticles.length}/{totalArticles}</div>
+          <button className={`more-link drawer-load-more${!canLoadMore ? ' is-disabled' : ''}`} type="button" onClick={() => void loadMore()} disabled={!canLoadMore}>{canLoadMore ? '加载更多' : '已全部加载'}</button>
         </div>
+      </div>
 
-        <div ref={drawerBodyRef} className="drawer-body" onScroll={onDrawerBodyScroll}>
-          <div className="drawer-section-title">阅读与质量</div>
-          <div className="drawer-stat-grid">
-            <div className="dstat"><div className="dstat-label">总阅读</div><div className="dstat-val">{metrics?.totalRead ?? 0}</div></div>
-            <div className="dstat"><div className="dstat-label">篇均阅读</div><div className="dstat-val">{metrics?.avgRead ?? 0}</div></div>
-            <div className="dstat"><div className="dstat-label">完读率</div><div className="dstat-val">{Math.round(metrics?.completionRate ?? 0)}%</div></div>
-            <div className="dstat"><div className="dstat-label">篇均时长</div><div className="dstat-val">{formatDuration(metrics?.avgReadTimeSec)}</div></div>
+      <div className={`export-modal-overlay${exportOpen ? ' open' : ''}`} onClick={(e) => e.target === e.currentTarget && setExportOpen(false)}>
+        <div className="export-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="export-modal-head"><div><div className="export-modal-title">导出周复盘</div><div className="export-modal-sub">任务排队生成，完成后可下载。</div></div><button className="export-modal-close" type="button" onClick={() => setExportOpen(false)}>x</button></div>
+          <div className="export-modal-body">
+            <div className="export-section"><div className="export-section-title">格式</div><div className="export-format-row"><button className={`export-format-chip${exportFormat === 'pdf' ? ' active' : ''}`} type="button" onClick={() => setExportFormat('pdf')}>PDF</button><button className={`export-format-chip${exportFormat === 'image' ? ' active' : ''}`} type="button" onClick={() => setExportFormat('image')}>图片</button><button className={`export-format-chip${exportFormat === 'md' ? ' active' : ''}`} type="button" onClick={() => setExportFormat('md')}>Markdown</button></div></div>
+            <div className="export-task"><div className="export-task-state">{exportStage === 'idle' ? '未开始' : exportStage === 'queue' ? '排队中' : exportStage === 'running' ? '执行中' : exportStage === 'done' ? '已完成，可下载' : '已下载'}</div><div className="export-task-progress"><span style={{ width: exportStage === 'idle' ? '0%' : exportStage === 'queue' ? '25%' : exportStage === 'running' ? '65%' : '100%' }} /></div></div>
           </div>
-
-          <div className="drawer-section-title">互动</div>
-          <div className="drawer-stat-grid">
-            <div className="dstat"><div className="dstat-label">总分享</div><div className="dstat-val">{metrics?.totalShare ?? 0}</div><div className="dstat-sub">分享率 {formatRate(metrics?.shareRate)}</div></div>
-            <div className="dstat"><div className="dstat-label">总点赞</div><div className="dstat-val">{metrics?.totalLike ?? 0}</div><div className="dstat-sub">点赞率 {formatRate(metrics?.likeRate)}</div></div>
-            <div className="dstat"><div className="dstat-label">总在看</div><div className="dstat-val">{metrics?.totalWow ?? 0}</div><div className="dstat-sub">在看率 {formatRate(metrics?.wowRate)}</div></div>
-            <div className="dstat"><div className="dstat-label">总留言</div><div className="dstat-val">{metrics?.totalComment ?? 0}</div><div className="dstat-sub">留言率 {formatRate(metrics?.commentRate)}</div></div>
-          </div>
-
-          <div className="drawer-section-title">增长</div>
-          <div className="drawer-stat-grid">
-            <div className="dstat"><div className="dstat-label">新增关注</div><div className="dstat-val">{metrics?.newFollowers ?? 0}</div><div className="dstat-sub">关注率 {formatRate(metrics?.followRate)}</div></div>
-          </div>
-
-          <div className="drawer-section-title">流量来源</div>
-          <div className="src-labels">
-            {renderTraffic(overview?.dataPanel.trafficSummary ?? {}).map(([name, ratio]) => (
-              <div key={name} className="src-label">{name} {ratio}%</div>
-            ))}
-          </div>
-
-          <div className="drawer-section-title">文章列表</div>
-          {articleListQuery.isPending ? <div className="drawer-list-tip">加载中...</div> : null}
-          {articleListQuery.isError ? <div className="drawer-list-tip">加载失败，请稍后重试</div> : null}
-          {!articleListQuery.isPending && !articleListQuery.isError && orderedArticles.length === 0 ? <div className="drawer-list-tip">暂无文章</div> : null}
-          {orderedArticles.map((article) => (
-            <div key={article.id} className="art-row">
-              <div className="art-top">
-                <div className="art-title">{article.title}</div>
-                <div className="art-date">{formatDateTime(article.publishTime)}</div>
-              </div>
-              <div className="art-stats">
-                <div className="art-stat">阅读 <b>{article.readCount ?? 0}</b></div>
-                <div className="art-stat">分享 <b>{article.shareCount ?? 0}</b></div>
-                <div className="art-stat">点赞 <b>{article.likeCount ?? 0}</b></div>
-                <div className="art-stat">在看 <b>{article.wowCount ?? 0}</b></div>
-                <div className="art-stat">留言 <b>{article.commentCount ?? 0}</b></div>
-                <div className="art-stat">完读 <b>{Math.round(Number(article.completionRate ?? 0))}%</b></div>
-                <div className="art-stat">阅读时长 <b>{formatDuration(article.avgReadTimeSec)}</b></div>
-              </div>
-              <div className="src-labels compact">
-                {renderTraffic(article.trafficSources ?? {}).slice(0, 3).map(([source, ratio]) => (
-                  <div key={`${article.id}-${source}`} className="src-label">{source} {ratio}%</div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {articleListQuery.isFetchingNextPage ? <div className="drawer-list-tip">加载更多中...</div> : null}
-          {!articleListQuery.isPending && !articleListQuery.isFetchingNextPage && articleListQuery.hasNextPage ? (
-            <div className="drawer-list-tip">向下滑动加载更多</div>
-          ) : null}
-          {!articleListQuery.isPending && !articleListQuery.hasNextPage && orderedArticles.length > 0 ? (
-            <div className="drawer-list-tip">已加载全部</div>
-          ) : null}
+          <div className="export-modal-foot"><button className="btn btn-ghost btn-sm" type="button" onClick={() => setExportOpen(false)}>关闭</button><button className="btn btn-primary btn-sm" type="button" onClick={generateExport} disabled={exportStage === 'queue' || exportStage === 'running'}>{exportStage === 'queue' || exportStage === 'running' ? '执行中...' : (exportStage === 'done' || exportStage === 'downloaded' ? '重新生成' : '生成')}</button>{(exportStage === 'done' || exportStage === 'downloaded') ? <button className="btn btn-outline btn-sm" type="button" onClick={downloadExport}>下载</button> : null}</div>
         </div>
       </div>
     </div>

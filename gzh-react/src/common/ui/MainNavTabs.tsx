@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+﻿import { useLocation, useNavigate } from 'react-router-dom';
 import { RoutePath } from '../router/RoutePath';
 import { useAuthStore } from '../state/authStore';
 import { useLoginModalStore } from '../state/loginModalStore';
@@ -41,7 +41,7 @@ export default function MainNavTabs({ className }: MainNavTabsProps) {
   };
 
   return (
-    <nav className={className || 'main-nav-tabs'} aria-label="主导航">
+    <nav className={className || 'main-nav-tabs'} aria-label="Main navigation">
       {navItems.map((item) => (
         <button
           key={item.path}
@@ -55,3 +55,5 @@ export default function MainNavTabs({ className }: MainNavTabsProps) {
     </nav>
   );
 }
+
+
