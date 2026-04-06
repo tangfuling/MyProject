@@ -1,3 +1,6 @@
 gzh-react/node_modules/
 gzh-react/dist/
 gzh-react/package-lock.json
+gzh-java/.m2/
+gzh-java/.idea/
+gzh-java/target/

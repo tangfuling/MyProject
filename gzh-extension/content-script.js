@@ -20,16 +20,22 @@
     idle: '待同步',
   };
 
+  const HTTP_CONFIG = globalThis.GzhHttpConfig;
+  if (!HTTP_CONFIG) {
+    throw new Error('GzhHttpConfig is required.');
+  }
+  const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
   const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
-  const DEFAULT_WEB_BASE = 'http://localhost:5173';
+  const DEFAULT_WEB_BASE = HTTP_CONFIG.isDebug ? 'http://localhost:5173' : 'https://gzh.niumatech.com';
   const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
   const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
   const LOG_PREFIX = '[tfling]';
-  const METRICS_BASE_INTERVAL_MS = 180;
-  const METRICS_MIN_INTERVAL_MS = 120;
+  const METRICS_BASE_INTERVAL_MS = 140;
+  const METRICS_MIN_INTERVAL_MS = 90;
   const METRICS_MAX_INTERVAL_MS = 1400;
-  const METRICS_FREQ_RETRY_MIN_MS = 900;
+  const METRICS_FREQ_RETRY_MIN_MS = 700;
   const METRICS_FREQ_RETRY_JITTER_MS = 350;
+  const UPLOAD_BATCH_SIZE = 5;
 
   let latestAuthToken = '';
   let latestLastSync = null;
@@ -127,8 +133,11 @@
   }
 
   function normalizeWebBase(raw) {
-    const value = (raw || '').trim();
-    if (!value) return DEFAULT_WEB_BASE;
+    if (HTTP_CONFIG.isDebug) {
+      return DEFAULT_WEB_BASE;
+    }
+    const candidate = String(raw || '').trim();
+    const value = candidate || DEFAULT_WEB_BASE;
     return value.replace(/\/+$/, '');
   }
 
@@ -980,6 +989,23 @@
       || Number(snapshot.newFollowers || 0) > 0;
   }
 
+  function createUploadError(message, extra) {
+    const error = new Error(message || 'sync upload failed');
+    if (extra && typeof extra === 'object') {
+      Object.assign(error, extra);
+    }
+    return error;
+  }
+
+  function isUnauthorizedUploadError(error) {
+    const code = Number(error?.code || 0);
+    if (code === 40101) {
+      return true;
+    }
+    const message = String(error?.message || '');
+    return /40101|unauthorized|not logged|token/i.test(message);
+  }
+
   async function uploadSyncChunk(apiBase, authToken, articles, snapshots) {
     const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
       method: 'POST',
@@ -992,19 +1018,41 @@
         snapshots: Array.isArray(snapshots) ? snapshots : [],
       }),
     });
+
     const response = {
       status: proxyResponse.status,
       ok: !!proxyResponse.httpOk,
     };
     const json = proxyResponse.body || {};
-    if (!response.ok || json.code !== 0) {
-      throw new Error(json.message || `同步上传失败(status=${response.status})`);
+
+    if (!response.ok) {
+      throw createUploadError(
+        json.message || `sync upload failed(status=${response.status})`,
+        {
+          code: Number(json.code || 0),
+          status: response.status,
+          apiBase,
+        }
+      );
     }
+
+    if (Number(json.code || 0) !== 0) {
+      throw createUploadError(
+        json.message || `sync upload failed(code=${json.code})`,
+        {
+          code: Number(json.code || 0),
+          status: response.status,
+          apiBase,
+        }
+      );
+    }
+
     return {
       newArticles: json.data?.newArticles ?? json.data?.new_articles ?? 0,
       updatedArticles: json.data?.updatedArticles ?? json.data?.updated_articles ?? 0,
       status: response.status,
       message: json?.message || 'OK',
+      apiBase,
     };
   }
 
@@ -1025,9 +1073,9 @@
         return;
       }
 
-      const storage = await getStorage(['gzhAuthToken', 'gzhApiBase', 'gzhSyncedArticleIds']);
+      const storage = await getStorage(['gzhAuthToken', 'gzhSyncedArticleIds']);
       const authToken = storage.gzhAuthToken;
-      const apiBase = storage.gzhApiBase || 'http://127.0.0.1:8081';
+      const apiBase = API_BASE_URL;
       const syncedArticleIds = storage.gzhSyncedArticleIds || {};
 
       latestAuthToken = authToken || '';
@@ -1069,8 +1117,103 @@
       let uploadedSnapshotsWithMetrics = 0;
       let newArticles = 0;
       let updatedArticles = 0;
+      let firstUploadError = '';
       let lastMetricsRequestedAt = 0;
       let metricsRequestIntervalMs = METRICS_BASE_INTERVAL_MS;
+      let processedArticles = 0;
+      let pendingSyncItems = [];
+      let pendingSnapshots = [];
+      let pendingArticleIds = [];
+      let pendingSnapshotsWithMetrics = 0;
+
+      const flushPendingUploads = async (index, total) => {
+        if (pendingSyncItems.length === 0) {
+          return true;
+        }
+
+        notifyState({
+          stage: 'upload',
+          message: `姝ｅ湪涓婁紶 ${index}/${total}...`,
+          progress: 70 + Math.round((index / Math.max(1, total)) * 28),
+          total,
+          synced: processedArticles,
+        });
+
+        try {
+          const uploadResult = await uploadSyncChunk(
+            apiBase,
+            authToken,
+            pendingSyncItems,
+            pendingSnapshots
+          );
+          newArticles += Number(uploadResult.newArticles || 0);
+          updatedArticles += Number(uploadResult.updatedArticles || 0);
+          uploadedArticles += pendingSyncItems.length;
+          uploadedSnapshots += pendingSnapshots.length;
+          uploadedSnapshotsWithMetrics += pendingSnapshotsWithMetrics;
+          pendingArticleIds.forEach((wxArticleId) => {
+            mergedIds[wxArticleId] = true;
+          });
+
+          if (index <= 3 || index % 10 === 0 || index === total) {
+            safeLog('info', 'sync incremental progress', {
+              index,
+              total,
+              uploadedArticles,
+              uploadedSnapshots,
+              uploadedSnapshotsWithMetrics,
+              newArticles,
+              updatedArticles,
+              failedMetrics,
+              failedContent,
+              failedUpload,
+              metricsRequestIntervalMs,
+              batchSize: pendingSyncItems.length,
+            });
+          }
+        } catch (error) {
+          const uploadReason = error?.message || String(error);
+          if (!firstUploadError) {
+            firstUploadError = uploadReason;
+          }
+          if (isUnauthorizedUploadError(error)) {
+            notifyState({
+              stage: 'need_login_web',
+              message: 'Web auth expired, please login again and retry sync.',
+              progress: 0,
+            });
+            safeLog('warn', 'upload unauthorized, abort sync', {
+              index,
+              wxArticleId: pendingArticleIds[0] || '',
+              batchSize: pendingSyncItems.length,
+              apiBase: error?.apiBase || apiBase,
+              status: error?.status || 0,
+              code: error?.code || 0,
+              reason: uploadReason,
+            });
+            return false;
+          }
+          failedUpload += pendingSyncItems.length;
+          if (failedUpload <= 10) {
+            safeLog('warn', 'upload failed', {
+              index,
+              wxArticleId: pendingArticleIds[0] || '',
+              batchSize: pendingSyncItems.length,
+              apiBase: error?.apiBase || apiBase,
+              status: error?.status || 0,
+              code: error?.code || 0,
+              reason: uploadReason,
+            });
+          }
+        } finally {
+          pendingSyncItems = [];
+          pendingSnapshots = [];
+          pendingArticleIds = [];
+          pendingSnapshotsWithMetrics = 0;
+        }
+
+        return true;
+      };
 
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
@@ -1084,7 +1227,7 @@
           message: `${isNew ? '新文章' : '旧文章'}：${index + 1}/${articles.length}`,
           progress: Math.round(((index + 1) / articles.length) * 70) + 10,
           total: articles.length,
-          synced: index,
+          synced: processedArticles,
         });
 
         const contentPromise = isNew
@@ -1171,54 +1314,21 @@
 
         const snapshot = buildSnapshotPayload(article, metrics);
         const snapshotHasMetrics = hasSnapshotCoreMetrics(snapshot);
-        notifyState({
-          stage: 'upload',
-          message: `正在上传 ${index + 1}/${articles.length}...`,
-          progress: 70 + Math.round(((index + 1) / Math.max(1, articles.length)) * 28),
-          total: articles.length,
-          synced: uploadedArticles,
-        });
-        try {
-          const uploadResult = await uploadSyncChunk(
-            apiBase,
-            authToken,
-            [syncItem],
-            snapshot ? [snapshot] : []
-          );
-          newArticles += Number(uploadResult.newArticles || 0);
-          updatedArticles += Number(uploadResult.updatedArticles || 0);
-          uploadedArticles += 1;
-          if (snapshot) {
-            uploadedSnapshots += 1;
-            if (snapshotHasMetrics) {
-              uploadedSnapshotsWithMetrics += 1;
-            }
+        pendingSyncItems.push(syncItem);
+        pendingArticleIds.push(article.wxArticleId);
+        if (snapshot) {
+          pendingSnapshots.push(snapshot);
+          if (snapshotHasMetrics) {
+            pendingSnapshotsWithMetrics += 1;
           }
-          mergedIds[article.wxArticleId] = true;
-          if (index < 3 || (index + 1) % 10 === 0 || index + 1 === articles.length) {
-            safeLog('info', 'sync incremental progress', {
-              index: index + 1,
-              total: articles.length,
-              uploadedArticles,
-              uploadedSnapshots,
-              uploadedSnapshotsWithMetrics,
-              newArticles,
-              updatedArticles,
-              failedMetrics,
-              failedContent,
-              failedUpload,
-              metricsRequestIntervalMs,
-            });
-          }
-        } catch (error) {
-          failedUpload += 1;
-          if (failedUpload <= 5) {
-            safeLog('warn', 'upload failed', {
-              index,
-              wxArticleId: article?.wxArticleId ?? '',
-              title: article?.title ?? '',
-              reason: error?.message || String(error),
-            });
+        }
+
+        processedArticles = index + 1;
+        const shouldFlush = pendingSyncItems.length >= UPLOAD_BATCH_SIZE || processedArticles === articles.length;
+        if (shouldFlush) {
+          const continueSync = await flushPendingUploads(processedArticles, articles.length);
+          if (!continueSync) {
+            return;
           }
         }
       }
@@ -1233,6 +1343,7 @@
         failedMetrics,
         failedContent,
         failedUpload,
+        firstUploadError,
         newArticles,
         updatedArticles,
       });

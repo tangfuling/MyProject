@@ -1,62 +1,23 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import type { ApiResponse } from './ApiResponse';
-import { ApiConfig } from './ApiConfig';
+import { HttpConfig } from './HttpConfig';
 import { authInterceptor } from './interceptors/authInterceptor';
 import { errorInterceptor } from './interceptors/errorInterceptor';
 
+const HTTP_TIMEOUT = 10_000;
+
 const instance = axios.create({
-  baseURL: ApiConfig.baseUrl,
-  timeout: ApiConfig.timeout,
+  baseURL: HttpConfig.getBaseUrl(),
+  timeout: HTTP_TIMEOUT,
 });
 
-type DebugRequestConfig = InternalAxiosRequestConfig & {
-  _gzhReqStartAt?: number;
-};
-
 instance.interceptors.request.use((config) => {
-  const next = authInterceptor(config) as DebugRequestConfig;
-  next._gzhReqStartAt = Date.now();
-  if (import.meta.env.DEV) {
-    console.info('[gzh-react][http][request]', {
-      method: (next.method || 'get').toUpperCase(),
-      baseURL: next.baseURL,
-      url: next.url,
-      params: next.params,
-    });
-  }
-  return next;
+  return authInterceptor(config) as InternalAxiosRequestConfig;
 });
 
 instance.interceptors.response.use(
-  (response) => {
-    if (import.meta.env.DEV) {
-      const debugConfig = response.config as DebugRequestConfig;
-      const costMs = debugConfig._gzhReqStartAt ? (Date.now() - debugConfig._gzhReqStartAt) : null;
-      console.info('[gzh-react][http][response]', {
-        method: (debugConfig.method || 'get').toUpperCase(),
-        url: debugConfig.url,
-        status: response.status,
-        costMs,
-        code: response.data?.code,
-        message: response.data?.message,
-      });
-    }
-    return response;
-  },
-  (error) => {
-    if (import.meta.env.DEV) {
-      const debugConfig = (error?.config || {}) as DebugRequestConfig;
-      const costMs = debugConfig._gzhReqStartAt ? (Date.now() - debugConfig._gzhReqStartAt) : null;
-      console.warn('[gzh-react][http][error]', {
-        method: (debugConfig.method || 'get').toUpperCase(),
-        url: debugConfig.url,
-        status: error?.response?.status,
-        costMs,
-        message: error?.message,
-      });
-    }
-    return errorInterceptor(error);
-  }
+  (response) => response,
+  (error) => errorInterceptor(error)
 );
 
 async function unwrap<T>(request: Promise<AxiosResponse<ApiResponse<T>>>): Promise<T> {

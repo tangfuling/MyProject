@@ -13,6 +13,11 @@ const stepText = document.getElementById('stepText');
 const summaryText = document.getElementById('summaryText');
 const primaryBtn = document.getElementById('primaryBtn');
 const secondaryBtn = document.getElementById('secondaryBtn');
+const HTTP_CONFIG = globalThis.GzhHttpConfig;
+if (!HTTP_CONFIG) {
+  throw new Error('GzhHttpConfig is required.');
+}
+const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
 
 const STAGE_LABELS = {
   need_login_web: '未登录',
@@ -28,7 +33,7 @@ const STAGE_LABELS = {
 };
 
 const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
-const DEFAULT_WEB_BASE = 'http://localhost:5173';
+const DEFAULT_WEB_BASE = HTTP_CONFIG.isDebug ? 'http://localhost:5173' : 'https://gzh.niumatech.com';
 
 let latestAuthToken = '';
 let latestLastSync = null;
@@ -36,8 +41,11 @@ let currentState = null;
 let webBase = DEFAULT_WEB_BASE;
 
 function normalizeWebBase(raw) {
-  const value = (raw || '').trim();
-  if (!value) return DEFAULT_WEB_BASE;
+  if (HTTP_CONFIG.isDebug) {
+    return DEFAULT_WEB_BASE;
+  }
+  const candidate = String(raw || '').trim();
+  const value = candidate || DEFAULT_WEB_BASE;
   return value.replace(/\/+$/, '');
 }
 
@@ -347,13 +355,14 @@ function handleAction(action) {
 }
 
 function loadConfig() {
-  chrome.storage.local.get(['gzhAuthToken', 'gzhApiBase', 'gzhWebBase', 'gzhLastSync'], (result) => {
+  chrome.storage.local.get(['gzhAuthToken', 'gzhWebBase', 'gzhLastSync'], (result) => {
     latestAuthToken = result.gzhAuthToken || '';
     latestLastSync = result.gzhLastSync || null;
     webBase = normalizeWebBase(result.gzhWebBase || DEFAULT_WEB_BASE);
 
     authTokenInput.value = latestAuthToken;
-    apiBaseInput.value = result.gzhApiBase || 'http://127.0.0.1:8081';
+    apiBaseInput.value = API_BASE_URL;
+    apiBaseInput.disabled = true;
     webBaseInput.value = webBase;
 
     chrome.runtime.sendMessage({ type: 'get-state' }, (state) => {
@@ -367,7 +376,6 @@ saveBtn.addEventListener('click', () => {
   chrome.storage.local.set(
     {
       gzhAuthToken: latestAuthToken,
-      gzhApiBase: apiBaseInput.value.trim() || 'http://127.0.0.1:8081',
       gzhWebBase: normalizeWebBase(webBaseInput.value || DEFAULT_WEB_BASE),
     },
     () => {

@@ -1,9 +1,12 @@
+importScripts('http-config.js');
+
 const STORAGE_KEY = 'gzh_extension_state';
-const ALLOWED_PROXY_PREFIXES = [
-  'http://127.0.0.1:8081/',
-  'https://api-gzh.niuma.com/',
-  'https://api-gzh.niumatech.com/',
-];
+const HTTP_CONFIG = globalThis.GzhHttpConfig;
+if (!HTTP_CONFIG) {
+  throw new Error('GzhHttpConfig is required.');
+}
+const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
+const ALLOWED_PROXY_PREFIX = `${API_BASE_URL}/`;
 const LOG_PREFIX = '[tfling]';
 
 function bgLog(level, message, payload) {
@@ -19,7 +22,7 @@ function isAllowedProxyUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') {
     return false;
   }
-  return ALLOWED_PROXY_PREFIXES.some((prefix) => rawUrl.startsWith(prefix));
+  return rawUrl.startsWith(ALLOWED_PROXY_PREFIX);
 }
 
 function setState(state) {
@@ -55,12 +58,7 @@ function safeBroadcast(payload) {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  setState({ stage: 'idle', message: '等待同步', progress: 0, synced: 0, total: 0 });
-  try {
-    chrome.storage.local.set({ gzhApiBase: 'http://127.0.0.1:8081' });
-  } catch (error) {
-    bgLog('warn', 'bg init api base failed', error?.message || error);
-  }
+  setState({ stage: 'idle', message: 'Waiting sync', progress: 0, synced: 0, total: 0 });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

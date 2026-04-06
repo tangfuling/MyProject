@@ -16,13 +16,12 @@
     "https://gzh.niuma.com/*",
     "https://gzh.niumatech.com/*",
     "http://127.0.0.1:8081/*",
-    "https://api-gzh.niuma.com/*",
     "https://api-gzh.niumatech.com/*"
   ],
   "content_scripts": [
     {
       "matches": ["https://mp.weixin.qq.com/*"],
-      "js": ["content-script.js"],
+      "js": ["http-config.js", "content-script.js"],
       "run_at": "document_idle"
     },
     {
@@ -31,7 +30,7 @@
         "https://gzh.niuma.com/*",
         "https://gzh.niumatech.com/*"
       ],
-      "js": ["web-auth-sync.js"],
+      "js": ["http-config.js", "web-auth-sync.js"],
       "run_at": "document_idle"
     }
   ],

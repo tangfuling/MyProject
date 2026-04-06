@@ -1,5 +1,5 @@
 import http from '../../../common/network/HttpClient';
-import { ApiConfig } from '../../../common/network/ApiConfig';
+import { HttpConfig } from '../../../common/network/HttpConfig';
 import { createSseStream } from '../../../common/network/SseClient';
 import { useAuthStore } from '../../../common/state/authStore';
 import type { AnalysisDoneEvent, AnalysisEstimate, AnalysisReport, AnalysisReportPage } from '../model/AnalysisModels';
@@ -17,7 +17,7 @@ const AnalysisApi = {
   generate(range: string, onChunk: (chunk: string) => void, onDone: (event: AnalysisDoneEvent) => void, onError: (error: Error) => void) {
     const token = useAuthStore.getState().token ?? '';
     return createSseStream<AnalysisDoneEvent>(
-      `${ApiConfig.baseUrl}/analysis/generate`,
+      `${HttpConfig.getBaseUrl()}/analysis/generate`,
       { range },
       token,
       { onChunk, onDone, onError }

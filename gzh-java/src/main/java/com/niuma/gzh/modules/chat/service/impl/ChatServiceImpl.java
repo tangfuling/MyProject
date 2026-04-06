@@ -257,7 +257,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         if (calls == null || calls.isEmpty()) {
             return null;
         }
-        AiToolCall first = calls.getFirst();
+        AiToolCall first = calls.get(0);
         if (first == null || first.name() == null || first.name().isBlank()) {
             return null;
         }
