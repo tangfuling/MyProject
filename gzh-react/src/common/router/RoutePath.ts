@@ -1,9 +1,8 @@
 export const RoutePath = {
   ROOT: '/',
-  WORKSPACE: '/workspace',
-  PROFILE: '/profile',
-  DATA: '/data',
-  ANALYSIS: '/analysis',
-  CHAT: '/chat',
-  SETTINGS: '/settings',
+  XQ: '/xq',
+  GZH_HOME: '/gzh',
+  GZH_WORKSPACE: '/gzh/workspace',
+  GZH_DETAIL: '/gzh/detail',
+  GZH_PROFILE: '/gzh/profile',
 } as const;

@@ -21,7 +21,7 @@
   };
 
   const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
-  const WEB_URL = 'http://localhost:5173';
+  const DEFAULT_WEB_BASE = 'http://localhost:5173';
   const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
   const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
   const LOG_PREFIX = '[tfling]';
@@ -126,6 +126,17 @@
     }
   }
 
+  function normalizeWebBase(raw) {
+    const value = (raw || '').trim();
+    if (!value) return DEFAULT_WEB_BASE;
+    return value.replace(/\/+$/, '');
+  }
+
+  async function getWebBase() {
+    const storage = await getStorage(['gzhWebBase']);
+    return normalizeWebBase(storage.gzhWebBase || DEFAULT_WEB_BASE);
+  }
+
   function stageClass(stage) {
     if (stage === 'done') {
       return 'done';
@@ -178,7 +189,7 @@
     if (!latestAuthToken) {
       return {
         stage: 'need_login_web',
-        message: '请先前往公众号助手登录，才能同步数据',
+        message: '请先前往运营助手登录，才能同步数据',
         progress: 0,
         synced: 0,
         total: 0,
@@ -206,28 +217,27 @@
       #${PANEL_ID} {
         position: fixed;
         right: 20px;
-        bottom: 72px;
-        width: 320px;
-        border-radius: 14px;
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.2);
-        z-index: 1000000;
+        bottom: 76px;
+        width: 340px;
+        border-radius: 16px;
+        border: 1px solid #dbe7f7;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 24px 56px -28px rgba(15, 23, 42, 0.45);
         overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+        z-index: 1000000;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
       }
       #${PANEL_ID}.hidden {
         display: none;
       }
       .gzh-sync-head {
-        height: 40px;
-        background: linear-gradient(135deg, #1f2937, #111827);
-        color: #f3f4f6;
+        height: 42px;
+        background: linear-gradient(135deg, #1d4ed8, #0f766e);
+        color: #f8fafc;
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 0 12px;
-        font-size: 13px;
       }
       .gzh-sync-title-wrap {
         display: flex;
@@ -235,24 +245,20 @@
         gap: 8px;
       }
       .gzh-sync-title-icon {
-        width: 16px;
-        height: 16px;
-        display: block;
-        object-fit: contain;
-        border-radius: 4px;
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
       }
       .gzh-sync-title {
-        font-weight: 700;
+        font-size: 13px;
+        font-weight: 800;
       }
       .gzh-sync-close {
         border: none;
         background: none;
-        color: #9ca3af;
+        color: rgba(248, 250, 252, 0.76);
         font-size: 14px;
         cursor: pointer;
-      }
-      .gzh-sync-close:hover {
-        color: #e5e7eb;
       }
       .gzh-sync-body {
         padding: 12px;
@@ -261,51 +267,57 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 6px;
         gap: 8px;
       }
       .gzh-sync-state {
         border-radius: 999px;
         font-size: 11px;
         font-weight: 700;
-        padding: 4px 8px;
-        color: #4b5563;
-        background: #f3f4f6;
+        padding: 5px 9px;
+        color: #92400e;
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
       }
       .gzh-sync-state.ready {
-        color: #4338ca;
-        background: #eef2ff;
+        color: #0f766e;
+        background: #ccfbf1;
+        border-color: #5eead4;
       }
       .gzh-sync-state.running {
-        color: #5b21b6;
+        color: #4338ca;
         background: #ede9fe;
+        border-color: #c4b5fd;
       }
       .gzh-sync-state.done {
-        color: #047857;
-        background: #ecfdf5;
+        color: #166534;
+        background: #dcfce7;
+        border-color: #86efac;
       }
       .gzh-sync-state.warn {
         color: #b45309;
-        background: #fffbeb;
+        background: #fef3c7;
+        border-color: #fcd34d;
       }
       .gzh-sync-state.error {
-        color: #b91c1c;
-        background: #fef2f2;
+        color: #991b1b;
+        background: #fee2e2;
+        border-color: #fecaca;
       }
       .gzh-sync-progress-text {
-        font-size: 11px;
         color: #64748b;
+        font-size: 11px;
       }
       .gzh-sync-message {
-        font-size: 12px;
+        margin-top: 8px;
         color: #334155;
-        line-height: 1.45;
-        margin-bottom: 8px;
+        font-size: 12px;
+        line-height: 1.6;
       }
       .gzh-sync-progress-wrap {
-        height: 6px;
+        margin-top: 8px;
+        height: 8px;
         border-radius: 999px;
-        background: #e5e7eb;
+        background: #e2e8f0;
         overflow: hidden;
       }
       .gzh-sync-progress-bar {
@@ -313,47 +325,40 @@
         height: 100%;
         width: 0;
         border-radius: 999px;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
       }
-      .gzh-sync-count {
-        margin-top: 6px;
-        font-size: 11px;
-        color: #64748b;
-      }
-      .gzh-sync-steps {
-        margin-top: 8px;
-        font-size: 11px;
-        color: #94a3b8;
-      }
+      .gzh-sync-count,
+      .gzh-sync-steps,
       .gzh-sync-summary {
         margin-top: 6px;
+        color: #94a3b8;
         font-size: 11px;
-        color: #64748b;
+        line-height: 1.5;
       }
       .gzh-sync-actions {
+        margin-top: 10px;
         display: flex;
         gap: 8px;
-        margin-top: 10px;
       }
       .gzh-sync-btn {
         flex: 1;
-        border-radius: 9px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
         background: #fff;
         color: #334155;
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 700;
         padding: 9px 10px;
         cursor: pointer;
       }
       .gzh-sync-btn.primary {
         border: none;
         color: #fff;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
       }
       .gzh-sync-btn:disabled {
-        cursor: not-allowed;
         opacity: 0.6;
+        cursor: not-allowed;
       }
       #${LAUNCHER_ID} {
         position: fixed;
@@ -365,29 +370,23 @@
         border: none;
         border-radius: 999px;
         padding: 10px 14px;
-        color: #ffffff;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
-        box-shadow: 0 12px 28px -12px rgba(99, 102, 241, 0.75);
+        color: #fff;
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
+        box-shadow: 0 16px 34px -18px rgba(37, 99, 235, 0.62);
         font-size: 13px;
         font-weight: 700;
-        line-height: 1;
         cursor: pointer;
         z-index: 999999;
-      }
-      #${LAUNCHER_ID}:hover {
-        transform: translateY(-1px);
       }
       #${LAUNCHER_ID} img {
         width: 20px;
         height: 20px;
         border-radius: 6px;
-        background: rgba(255, 255, 255, 0.96);
+        background: rgba(255, 255, 255, 0.94);
         padding: 2px;
-        object-fit: contain;
-        display: block;
       }
       #${LAUNCHER_ID}[data-running="true"] {
-        opacity: 0.86;
+        opacity: 0.84;
       }
     `;
     document.documentElement.appendChild(style);
@@ -473,7 +472,7 @@
       launcher.setAttribute('title', '同步中，点击查看进度');
     } else {
       launcher.setAttribute('data-running', 'false');
-      launcher.setAttribute('title', '同步到公众号助手');
+      launcher.setAttribute('title', '同步到运营助手');
     }
   }
 
@@ -532,21 +531,21 @@
     }
 
     let primaryAction = 'start';
-    let primaryText = '同步到公众号助手';
+    let primaryText = '同步到运营助手';
     let secondaryAction = 'close';
     let secondaryText = '关闭';
     let primaryDisabled = false;
 
     if (state.stage === 'need_login_web') {
       primaryAction = 'open_web_login';
-      primaryText = '前往公众号助手登录';
+      primaryText = '前往运营助手登录';
       secondaryAction = 'close';
       secondaryText = '取消';
     } else if (state.stage === 'login_expired') {
       primaryAction = 'refresh';
       primaryText = '刷新页面';
       secondaryAction = 'open_web';
-      secondaryText = '打开公众号助手';
+      secondaryText = '打开运营助手';
     } else if (RUNNING_STAGES.has(state.stage)) {
       primaryAction = 'running';
       primaryText = '同步中...';
@@ -555,7 +554,7 @@
       secondaryText = '收起';
     } else if (state.stage === 'done' || state.stage === 'partial_failed') {
       primaryAction = 'open_workspace';
-      primaryText = '前往公众号助手查看 →';
+      primaryText = '前往运营助手查看 →';
       secondaryAction = 'start';
       secondaryText = '重新同步';
     } else if (state.stage === 'error') {
@@ -573,28 +572,32 @@
     secondaryBtn.dataset.action = secondaryAction;
   }
 
-  function handlePanelAction(action) {
+  async function handlePanelAction(action) {
+    const webBase = await getWebBase();
+    const webHome = `${webBase}/gzh`;
+    const workspace = `${webBase}/gzh/workspace`;
+
     if (action === 'start') {
       openPanel();
       void startSync();
       return;
     }
     if (action === 'open_web') {
-      window.open(WEB_URL, '_blank', 'noopener,noreferrer');
+      window.open(webHome, '_blank', 'noopener,noreferrer');
       return;
     }
     if (action === 'open_workspace') {
-      window.open(`${WEB_URL}/workspace`, '_blank', 'noopener,noreferrer');
+      window.open(workspace, '_blank', 'noopener,noreferrer');
       return;
     }
     if (action === 'open_web_login') {
       try {
-        const url = new URL(WEB_URL);
+        const url = new URL(webHome);
         url.searchParams.set('openLogin', '1');
-        url.searchParams.set('redirect', '/workspace');
+        url.searchParams.set('redirect', '/gzh/workspace');
         window.open(url.toString(), '_blank', 'noopener,noreferrer');
       } catch {
-        window.open(`${WEB_URL}?openLogin=1&redirect=%2Fworkspace`, '_blank', 'noopener,noreferrer');
+        window.open(`${webHome}?openLogin=1&redirect=%2Fgzh%2Fworkspace`, '_blank', 'noopener,noreferrer');
       }
       return;
     }
@@ -616,13 +619,13 @@
     panel.className = 'hidden';
     const iconUrl = runtimeGetURL('icons/icon-32.png');
     const titleIcon = iconUrl
-      ? `<img class="gzh-sync-title-icon" src="${iconUrl}" alt="公众号助手" />`
+      ? `<img class="gzh-sync-title-icon" src="${iconUrl}" alt="公众号数据运营助手" />`
       : '<span class="gzh-sync-title-icon" aria-hidden="true"></span>';
     panel.innerHTML = `
       <div class="gzh-sync-head">
         <div class="gzh-sync-title-wrap">
           ${titleIcon}
-          <div class="gzh-sync-title">公众号助手</div>
+          <div class="gzh-sync-title">公众号数据运营助手</div>
         </div>
         <button type="button" class="gzh-sync-close" id="gzh-sync-close">✕</button>
       </div>
@@ -637,7 +640,7 @@
         <div class="gzh-sync-steps" id="gzh-sync-steps"></div>
         <div class="gzh-sync-summary" id="gzh-sync-summary"></div>
         <div class="gzh-sync-actions">
-          <button type="button" class="gzh-sync-btn primary" id="gzh-sync-primary" data-action="start">同步到公众号助手</button>
+          <button type="button" class="gzh-sync-btn primary" id="gzh-sync-primary" data-action="start">同步到运营助手</button>
           <button type="button" class="gzh-sync-btn" id="gzh-sync-secondary" data-action="close">关闭</button>
         </div>
       </div>
@@ -654,12 +657,12 @@
     }
     if (primaryBtn) {
       primaryBtn.addEventListener('click', () => {
-        handlePanelAction(primaryBtn.dataset.action || 'close');
+        void handlePanelAction(primaryBtn.dataset.action || 'close');
       });
     }
     if (secondaryBtn) {
       secondaryBtn.addEventListener('click', () => {
-        handlePanelAction(secondaryBtn.dataset.action || 'close');
+        void handlePanelAction(secondaryBtn.dataset.action || 'close');
       });
     }
 
@@ -677,8 +680,8 @@
     launcher.id = LAUNCHER_ID;
     launcher.type = 'button';
     const iconUrl = runtimeGetURL('icons/icon-32.png');
-    const launcherIcon = iconUrl ? `<img src="${iconUrl}" alt="公众号助手" />` : '';
-    launcher.innerHTML = `${launcherIcon}<span>同步到公众号助手</span>`;
+    const launcherIcon = iconUrl ? `<img src="${iconUrl}" alt="公众号数据运营助手" />` : '';
+    launcher.innerHTML = `${launcherIcon}<span>同步到运营助手</span>`;
     launcher.addEventListener('click', () => {
       createPanel();
       openPanel();
@@ -1032,7 +1035,7 @@
       if (!authToken) {
         notifyState({
           stage: 'need_login_web',
-          message: '请先前往公众号助手登录，才能同步数据',
+          message: '请先前往运营助手登录，才能同步数据',
           progress: 0,
         });
         return;

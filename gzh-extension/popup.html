@@ -3,42 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>公众号助手</title>
+  <title>公众号运营助手</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <main class="popup">
-    <h1 class="popup-title">
-      <img src="icons/icon-32.png" alt="公众号助手" />
-      <span>公众号助手</span>
-    </h1>
+  <main class="popup-shell">
+    <div class="popup-card">
+      <header class="popup-header">
+        <div class="popup-header-icon">
+          <img src="icons/icon-32.png" alt="公众号运营助手" />
+        </div>
+        <div class="popup-header-text">
+          <div class="htitle">公众号运营助手</div>
+          <div class="hsub">v2.0 · Chrome Extension</div>
+        </div>
+        <span id="stateLabel" class="badge badge-warning">待同步</span>
+      </header>
 
-    <label>后端 API 地址</label>
-    <input id="apiBase" placeholder="http://127.0.0.1:8081" />
+      <section id="stateView" class="popup-body"></section>
 
-    <label>Web 登录 JWT</label>
-    <textarea id="authToken" placeholder="登录 Web 后复制 token 粘贴到这里"></textarea>
-
-    <div class="actions">
-      <button id="saveBtn">保存配置</button>
-      <button id="syncBtn">同步到公众号助手</button>
-    </div>
-
-    <div class="actions">
-      <button id="openWebBtn" class="ghost">前往公众号助手</button>
-    </div>
-
-    <section class="status">
-      <div class="status-head">
-        <span id="stateLabel" class="state-label">待同步</span>
-        <span id="progressText">0%</span>
+      <div class="progress-wrap">
+        <div class="progress-head">
+          <span id="progressTitle">同步进度</span>
+          <span id="progressText">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill" style="width:0%"></div>
+        </div>
+        <div id="statusText" class="status-text">等待同步</div>
+        <div id="countText" class="count-text"></div>
+        <div id="stepText" class="step-text"></div>
+        <div id="summaryText" class="summary-text"></div>
       </div>
-      <div id="statusText">等待同步</div>
-      <div id="progressBar"><span id="progressInner"></span></div>
-      <div id="countText"></div>
-      <div id="stepText" class="step-text"></div>
-      <div id="summaryText" class="summary-text"></div>
-    </section>
+
+      <div class="action-row">
+        <button id="primaryBtn" class="btn btn-primary" type="button">开始同步</button>
+        <button id="secondaryBtn" class="btn btn-outline" type="button">前往运营助手</button>
+      </div>
+
+      <details class="advanced">
+        <summary>高级配置</summary>
+        <label class="field-label" for="apiBase">后端 API 地址</label>
+        <input id="apiBase" class="field-input" placeholder="http://127.0.0.1:8081" />
+        <label class="field-label" for="webBase">Web 地址</label>
+        <input id="webBase" class="field-input" placeholder="http://localhost:5173" />
+        <label class="field-label" for="authToken">Web 登录 JWT</label>
+        <textarea id="authToken" class="field-input field-area" placeholder="登录 Web 后可自动同步，如需手动可粘贴 token"></textarea>
+        <button id="saveBtn" class="btn btn-ghost" type="button">保存配置</button>
+      </details>
+    </div>
   </main>
 
   <script src="popup.js"></script>

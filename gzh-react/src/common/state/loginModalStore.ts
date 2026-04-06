@@ -10,11 +10,11 @@ type LoginModalState = {
 
 export const useLoginModalStore = create<LoginModalState>((set) => ({
   open: false,
-  redirect: RoutePath.WORKSPACE,
+  redirect: RoutePath.GZH_WORKSPACE,
   openModal: (redirect) => {
     set({
       open: true,
-      redirect: redirect || RoutePath.WORKSPACE,
+      redirect: redirect || RoutePath.GZH_WORKSPACE,
     });
   },
   closeModal: () => {

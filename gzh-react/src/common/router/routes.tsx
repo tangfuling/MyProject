@@ -5,9 +5,12 @@ import RouterManager from './RouterManager';
 import Loading from '../ui/Loading';
 import { useAuthStore } from '../state/authStore';
 
-const LandingPage = lazy(() => import('../../pages/landing/view/LandingPage'));
-const WorkspacePage = lazy(() => import('../../pages/workspace/view/WorkspacePage'));
-const ProfilePage = lazy(() => import('../../pages/profile/view/ProfilePage'));
+const PortalPage = lazy(() => import('../../pages/portal/view/PortalPage'));
+const XqLandingPage = lazy(() => import('../../pages/xq/view/XqLandingPage'));
+const GzhHomePage = lazy(() => import('../../pages/gzh/view/GzhHomePage'));
+const GzhWorkspacePage = lazy(() => import('../../pages/gzh/view/GzhWorkspacePage'));
+const GzhDetailPage = lazy(() => import('../../pages/gzh/view/GzhDetailPage'));
+const GzhProfilePage = lazy(() => import('../../pages/gzh/view/GzhProfilePage'));
 
 function RequireAuth({ element }: { element: JSX.Element }) {
   const token = useAuthStore((s) => s.token);
@@ -16,7 +19,7 @@ function RequireAuth({ element }: { element: JSX.Element }) {
     return element;
   }
   const redirect = `${location.pathname}${location.search}`;
-  return <Navigate to={RoutePath.ROOT} replace state={{ loginRequired: true, redirect }} />;
+  return <Navigate to={RoutePath.GZH_HOME} replace state={{ loginRequired: true, redirect }} />;
 }
 
 export default function AppRoutes() {
@@ -29,13 +32,12 @@ export default function AppRoutes() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        <Route path={RoutePath.ROOT} element={<LandingPage />} />
-        <Route path={RoutePath.WORKSPACE} element={<RequireAuth element={<WorkspacePage />} />} />
-        <Route path={RoutePath.PROFILE} element={<RequireAuth element={<ProfilePage />} />} />
-        <Route path="/data" element={<Navigate to={RoutePath.WORKSPACE} replace />} />
-        <Route path="/analysis" element={<Navigate to={RoutePath.WORKSPACE} replace />} />
-        <Route path="/chat" element={<Navigate to={RoutePath.WORKSPACE} replace />} />
-        <Route path="/settings" element={<Navigate to={RoutePath.PROFILE} replace />} />
+        <Route path={RoutePath.ROOT} element={<PortalPage />} />
+        <Route path={RoutePath.XQ} element={<XqLandingPage />} />
+        <Route path={RoutePath.GZH_HOME} element={<GzhHomePage />} />
+        <Route path={RoutePath.GZH_WORKSPACE} element={<RequireAuth element={<GzhWorkspacePage />} />} />
+        <Route path={RoutePath.GZH_DETAIL} element={<RequireAuth element={<GzhDetailPage />} />} />
+        <Route path={RoutePath.GZH_PROFILE} element={<RequireAuth element={<GzhProfilePage />} />} />
         <Route path="*" element={<Navigate to={RoutePath.ROOT} replace />} />
       </Routes>
     </Suspense>
