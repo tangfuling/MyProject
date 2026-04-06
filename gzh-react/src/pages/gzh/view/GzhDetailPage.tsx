@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -73,18 +73,69 @@ function fmtDuration(sec?: number | null) {
   return `${m}分${String(remain).padStart(2, '0')}秒`;
 }
 
+const SOURCE_FRIEND = '\u670b\u53cb\u5708';
+const SOURCE_MESSAGE = '\u516c\u4f17\u53f7\u6d88\u606f';
+const SOURCE_RECOMMEND = '\u63a8\u8350';
+const SOURCE_HOME = '\u516c\u4f17\u53f7\u4e3b\u9875';
+const SOURCE_CHAT = '\u804a\u5929\u4f1a\u8bdd';
+const SOURCE_SEARCH = '\u641c\u4e00\u641c';
+const SOURCE_OTHER = '\u5176\u5b83';
+
+const SOURCE_ORDER = [
+  SOURCE_FRIEND,
+  SOURCE_MESSAGE,
+  SOURCE_RECOMMEND,
+  SOURCE_HOME,
+  SOURCE_CHAT,
+  SOURCE_SEARCH,
+  SOURCE_OTHER,
+] as const;
+
+function normalizeSourceKey(key: string) {
+  const raw = (key || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (raw.includes('\u670b\u53cb') || lower.includes('friend') || lower.includes('feed')) return SOURCE_FRIEND;
+  if (raw.includes('\u6d88\u606f') || (raw.includes('\u516c\u4f17\u53f7') && !raw.includes('\u4e3b\u9875')) || lower.includes('message') || lower.includes('subscription') || lower.includes('frommsg')) return SOURCE_MESSAGE;
+  if (raw.includes('\u63a8\u8350') || lower.includes('recommend')) return SOURCE_RECOMMEND;
+  if (raw.includes('\u4e3b\u9875') || lower.includes('home') || lower.includes('profile')) return SOURCE_HOME;
+  if (raw.includes('\u804a\u5929') || raw.includes('\u4f1a\u8bdd') || lower.includes('chat') || lower.includes('session')) return SOURCE_CHAT;
+  if (raw.includes('\u641c') || lower.includes('search') || lower.includes('sogou')) return SOURCE_SEARCH;
+  if (raw.includes('\u5176\u4ed6') || raw.includes('\u5176\u5b83') || lower.includes('other')) return SOURCE_OTHER;
+  return SOURCE_OTHER;
+}
+
+function normalizeSourceMap(sources?: Record<string, number>) {
+  const result: Record<string, number> = {
+    [SOURCE_FRIEND]: 0,
+    [SOURCE_MESSAGE]: 0,
+    [SOURCE_RECOMMEND]: 0,
+    [SOURCE_HOME]: 0,
+    [SOURCE_CHAT]: 0,
+    [SOURCE_SEARCH]: 0,
+    [SOURCE_OTHER]: 0,
+  };
+
+  for (const [key, rawValue] of Object.entries(sources || {})) {
+    const value = Number(rawValue) || 0;
+    if (value <= 0) continue;
+    const normalizedKey = normalizeSourceKey(key);
+    result[normalizedKey] = (result[normalizedKey] || 0) + value;
+  }
+
+  return result;
+}
+
 function recommendCount(sources: Record<string, number>) {
-  return Object.entries(sources || {}).reduce((sum, [k, v]) => {
-    if (k.includes('推荐') || k.toLowerCase().includes('recommend')) {
-      return sum + (v || 0);
-    }
-    return sum;
-  }, 0);
+  const normalized = normalizeSourceMap(sources);
+  return normalized[SOURCE_RECOMMEND] || 0;
 }
 
 function recommendRateByArticle(article: WorkspaceArticleCard) {
-  const read = Math.max(article.readCount || 0, 1);
-  return (recommendCount(article.trafficSources || {}) * 100) / read;
+  const normalized = normalizeSourceMap(article.trafficSources || {});
+  const total = Object.values(normalized).reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return 0;
+  return ((normalized[SOURCE_RECOMMEND] || 0) * 100) / total;
 }
 
 function sortValue(article: WorkspaceArticleCard, key: SortKey) {
@@ -97,60 +148,61 @@ function sortValue(article: WorkspaceArticleCard, key: SortKey) {
   return recommendRateByArticle(article);
 }
 
-function mapSourceLabel(key: string) {
-  const lower = key.toLowerCase();
-  if (lower.includes('friend')) return '朋友圈';
-  if (lower.includes('message') || lower.includes('subscription')) return '公众号消息';
-  if (lower.includes('search')) return '搜一搜';
-  if (lower.includes('other')) return '其他';
-  if (key.includes('朋友')) return '朋友圈';
-  if (key.includes('搜')) return '搜一搜';
-  if (key.includes('公众')) return '公众号消息';
-  return key;
-}
+function buildSourceSegments(sources?: Record<string, number>, limit: number = SOURCE_ORDER.length) {
+  const normalized = normalizeSourceMap(sources);
+  const ordered = SOURCE_ORDER.map((label) => ({
+    key: label,
+    label,
+    value: normalized[label] || 0,
+  }));
 
-function buildSourceSegments(sources?: Record<string, number>, limit = 3) {
-  const entries = Object.entries(sources || {}).filter(([, value]) => Number(value) > 0);
-  if (entries.length === 0) {
-    return [
-      { key: 'friend', label: '朋友圈', value: 52, percent: 52, color: SOURCE_COLORS[0] },
-      { key: 'message', label: '公众号消息', value: 30, percent: 30, color: SOURCE_COLORS[1] },
-      { key: 'search', label: '搜一搜', value: 8, percent: 8, color: SOURCE_COLORS[2] },
-      { key: 'other', label: '其他', value: 10, percent: 10, color: SOURCE_COLORS[3] },
-    ];
+  const total = ordered.reduce((sum, item) => sum + item.value, 0);
+
+  if (limit >= SOURCE_ORDER.length) {
+    return ordered.map((item, index) => ({
+      ...item,
+      percent: total <= 0 ? 0 : (item.value * 100) / total,
+      color: SOURCE_COLORS[index % SOURCE_COLORS.length],
+    }));
   }
 
-  const total = entries.reduce((sum, [, value]) => sum + value, 0) || 1;
-  const sorted = [...entries].sort((a, b) => b[1] - a[1]);
-  const top = sorted.slice(0, limit).map(([key, value], index) => ({
-    key,
-    label: mapSourceLabel(key),
-    value,
-    percent: (value * 100) / total,
+  const sorted = [...ordered].filter((item) => item.value > 0).sort((a, b) => b.value - a.value);
+  if (sorted.length === 0) {
+    return ordered.slice(0, limit).map((item, index) => ({
+      ...item,
+      percent: 0,
+      color: SOURCE_COLORS[index % SOURCE_COLORS.length],
+    }));
+  }
+
+  const top = sorted.slice(0, limit).map((item, index) => ({
+    ...item,
     color: SOURCE_COLORS[index % SOURCE_COLORS.length],
   }));
 
-  const restValue = sorted.slice(limit).reduce((sum, [, value]) => sum + value, 0);
+  const restValue = sorted.slice(limit).reduce((sum, item) => sum + item.value, 0);
   if (restValue > 0) {
     top.push({
-      key: 'other',
-      label: '其他',
+      key: SOURCE_OTHER,
+      label: SOURCE_OTHER,
       value: restValue,
-      percent: (restValue * 100) / total,
       color: SOURCE_COLORS[top.length % SOURCE_COLORS.length],
     });
   }
 
-  return top;
+  const compactTotal = top.reduce((sum, item) => sum + item.value, 0);
+  return top.map((item) => ({
+    ...item,
+    percent: compactTotal <= 0 ? 0 : (item.value * 100) / compactTotal,
+  }));
 }
 
 function recommendRateFromSummary(summary: Record<string, number>) {
-  for (const [k, v] of Object.entries(summary || {})) {
-    if (k.includes('推荐') || k.toLowerCase().includes('recommend')) return v || 0;
-  }
-  return 0;
+  const normalized = normalizeSourceMap(summary);
+  const total = Object.values(normalized).reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return 0;
+  return ((normalized[SOURCE_RECOMMEND] || 0) * 100) / total;
 }
-
 function sampleTrendPoints(list: TrendPoint[], count = 6) {
   if (list.length === 0) {
     return [
@@ -282,7 +334,10 @@ export default function GzhDetailPage() {
   const metrics = overview?.dataPanel.metrics;
   const changes = overview?.dataPanel.changes;
   const recommendRate = recommendRateFromSummary(overview?.dataPanel.trafficSummary ?? {});
-  const trafficSegments = useMemo(() => buildSourceSegments(overview?.dataPanel.trafficSummary || undefined, 3), [overview?.dataPanel.trafficSummary]);
+  const trafficSegments = useMemo(
+    () => buildSourceSegments(overview?.dataPanel.trafficSummary || undefined, SOURCE_ORDER.length),
+    [overview?.dataPanel.trafficSummary]
+  );
 
   const trendPoints = useMemo(() => {
     return (overview?.dataPanel.trend ?? []).map((item) => ({
@@ -292,24 +347,22 @@ export default function GzhDetailPage() {
   }, [overview?.dataPanel.trend]);
 
   const trendChart = useMemo(() => buildTrendChart(trendPoints), [trendPoints]);
+  const accountName = overview?.header.accountName || '\u516c\u4f17\u53f7\u8d26\u53f7';
 
-  const balanceText = `¥${(((overview?.header.balanceCent ?? 0) + (overview?.header.freeQuotaCent ?? 0)) / 100).toFixed(2)}`;
+  const balanceText = `\u00A5${(((overview?.header.balanceCent ?? 0) + (overview?.header.freeQuotaCent ?? 0)) / 100).toFixed(2)}`;
 
   return (
     <div className="gzh-v2-root gzh-v2-detail">
       <div className="topbar">
-        <a
-          className="topbar-brand"
-          href={RoutePath.GZH_HOME}
-          onClick={(event) => {
-            event.preventDefault();
-            navigate(RoutePath.GZH_HOME);
-          }}
-        >
-          <img src="/site-icon-64.png" alt="icon" />
-          公众号运营助手
-        </a>
-        <div className="topbar-center">{overview?.header.accountName || '公众号账号'}</div>
+        <div className="topbar-left">
+          <div className="topbar-nav">
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'\u9996\u9875'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>{'\u5de5\u4f5c\u53f0'}</button>
+            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>{'\u6587\u7ae0\u8be6\u60c5'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>{'\u4e2a\u4eba\u4e2d\u5fc3'}</button>
+          </div>
+          <div className="topbar-account">{accountName}</div>
+        </div>
         <div className="topbar-right">
           <span className="sync-meta">统计近30天 · 同步 {fmtDateShort(overview?.header.lastSyncAt)}</span>
           <button
@@ -576,7 +629,7 @@ export default function GzhDetailPage() {
                   key={`${item.key}-${index}`}
                   className="stacked-seg"
                   style={{
-                    width: `${Math.max(4, item.percent)}%`,
+                    width: `${item.percent}%`,
                     background: item.color,
                     color: item.color === '#D5DEEB' ? '#64748b' : '#fff',
                   }}

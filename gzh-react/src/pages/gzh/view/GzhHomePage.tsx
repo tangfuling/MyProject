@@ -14,6 +14,7 @@ export default function GzhHomePage() {
   const openLogin = (redirect?: string) => {
     openLoginModal(redirect || RoutePath.GZH_WORKSPACE);
   };
+  const accountName = '\u516c\u4f17\u53f7\u8d26\u53f7';
 
   useEffect(() => {
     document.title = '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b';
@@ -39,13 +40,18 @@ export default function GzhHomePage() {
   return (
     <div className="gzh-v2-root gzh-v2-home">
       <div className="home-topbar">
-        <div className="home-topbar-brand">
-          <img src="/site-icon-64.png" alt="icon" />
-          公众号运营助手
+        <div className="topbar-left">
+          <div className="topbar-nav">
+            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'\u9996\u9875'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => (token ? navigate(RoutePath.GZH_WORKSPACE) : openLogin(RoutePath.GZH_WORKSPACE))}>{'\u5de5\u4f5c\u53f0'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => (token ? navigate(RoutePath.GZH_DETAIL) : openLogin(RoutePath.GZH_DETAIL))}>{'\u6587\u7ae0\u8be6\u60c5'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => (token ? navigate(RoutePath.GZH_PROFILE) : openLogin(RoutePath.GZH_PROFILE))}>{'\u4e2a\u4eba\u4e2d\u5fc3'}</button>
+          </div>
+          <div className="topbar-account">{accountName}</div>
         </div>
         <div className="home-topbar-right">
-          <button className="btn btn-ghost" type="button" onClick={() => openLogin(RoutePath.GZH_WORKSPACE)}>登录 / 注册</button>
-          <button className="btn btn-primary" type="button" onClick={() => openLogin(RoutePath.GZH_WORKSPACE)}>免费使用</button>
+          <button className="btn btn-ghost" type="button" onClick={() => openLogin(RoutePath.GZH_WORKSPACE)}>{'\u767b\u5f55 / \u6ce8\u518c'}</button>
+          <button className="btn btn-primary" type="button" onClick={() => openLogin(RoutePath.GZH_WORKSPACE)}>{'\u514d\u8d39\u4f7f\u7528'}</button>
         </div>
       </div>
 

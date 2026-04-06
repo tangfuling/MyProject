@@ -2155,21 +2155,29 @@
 
   function buildTrafficSources(root) {
     const direct = {
-      '公众号消息': findFirstNumberByKeys(root, ['frommsg']),
-      '朋友圈': findFirstNumberByKeys(root, ['fromfeed']),
-      '搜一搜': findFirstNumberByKeys(root, ['fromsogou']),
-      '推荐': findFirstNumberByKeys(root, ['fromrecommend']),
+      '\u670b\u53cb\u5708': findFirstNumberByKeys(root, ['fromfeed', 'friend', 'friend_circle']),
+      '\u516c\u4f17\u53f7\u6d88\u606f': findFirstNumberByKeys(root, ['frommsg', 'message', 'subscription']),
+      '\u63a8\u8350': findFirstNumberByKeys(root, ['fromrecommend', 'recommend']),
+      '\u516c\u4f17\u53f7\u4e3b\u9875': findFirstNumberByKeys(root, ['fromhome', 'fromprofile', 'home', 'profile']),
+      '\u804a\u5929\u4f1a\u8bdd': findFirstNumberByKeys(root, ['fromsession', 'fromchat', 'chat', 'session']),
+      '\u641c\u4e00\u641c': findFirstNumberByKeys(root, ['fromsogou', 'search', 'sogou']),
+      '\u5176\u5b83': findFirstNumberByKeys(root, ['fromother', 'other']),
     };
-    if (Object.values(direct).some((v) => v > 0)) {
+
+    if (Object.values(direct).some((v) => Number(v) > 0)) {
       return direct;
     }
 
     const byScene = {
-      '公众号消息': 0,
-      '朋友圈': 0,
-      '搜一搜': 0,
-      '推荐': 0,
+      '\u670b\u53cb\u5708': 0,
+      '\u516c\u4f17\u53f7\u6d88\u606f': 0,
+      '\u63a8\u8350': 0,
+      '\u516c\u4f17\u53f7\u4e3b\u9875': 0,
+      '\u804a\u5929\u4f1a\u8bdd': 0,
+      '\u641c\u4e00\u641c': 0,
+      '\u5176\u5b83': 0,
     };
+
     const sceneItems = collectSceneItems(root);
     sceneItems.forEach((item) => {
       const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
@@ -2177,19 +2185,26 @@
       if (!Number.isFinite(scene) || !Number.isFinite(count) || count <= 0) {
         return;
       }
+
       if (scene === 0) {
-        byScene['公众号消息'] += count;
+        byScene['\u516c\u4f17\u53f7\u6d88\u606f'] += count;
+      } else if (scene === 1) {
+        byScene['\u516c\u4f17\u53f7\u4e3b\u9875'] += count;
       } else if (scene === 2) {
-        byScene['朋友圈'] += count;
-      } else if (scene === 7) {
-        byScene['搜一搜'] += count;
+        byScene['\u670b\u53cb\u5708'] += count;
+      } else if (scene === 5) {
+        byScene['\u804a\u5929\u4f1a\u8bdd'] += count;
       } else if (scene === 6) {
-        byScene['推荐'] += count;
+        byScene['\u63a8\u8350'] += count;
+      } else if (scene === 7) {
+        byScene['\u641c\u4e00\u641c'] += count;
+      } else {
+        byScene['\u5176\u5b83'] += count;
       }
     });
+
     return byScene;
   }
-
   function extractMetricsFromPayload(payload) {
     const articleData = parseMaybeJson(payload.articleData) || payload.articleData || {};
     const articleDataNew = parseMaybeJson(articleData.article_data_new || payload.article_data_new)

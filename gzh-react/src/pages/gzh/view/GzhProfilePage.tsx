@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
@@ -123,7 +123,7 @@ export default function GzhProfilePage() {
   });
 
   const profile = profileQuery.data;
-  const accountName = workspaceBriefQuery.data?.header.accountName || '公众号运营助手';
+  const accountName = workspaceBriefQuery.data?.header.accountName || '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b';
   const balanceAmount = ((profile?.balanceCent ?? 0) + (profile?.freeQuotaCent ?? 0)) / 100;
   const hasMoreToken = useMemo(() => tokenLogs.length < (tokenQuery.data?.total ?? 0), [tokenLogs.length, tokenQuery.data?.total]);
   const hasMorePayment = useMemo(() => paymentOrders.length < (paymentQuery.data?.total ?? 0), [paymentOrders.length, paymentQuery.data?.total]);
@@ -131,17 +131,15 @@ export default function GzhProfilePage() {
   return (
     <div className="gzh-v2-root gzh-v2-profile">
       <div className="topbar">
-        <a
-          className="topbar-brand"
-          href={RoutePath.GZH_HOME}
-          onClick={(event) => {
-            event.preventDefault();
-            navigate(RoutePath.GZH_HOME);
-          }}
-        >
-          <img src="/site-icon-64.png" alt="icon" />
-          公众号运营助手
-        </a>
+        <div className="topbar-left">
+          <div className="topbar-nav">
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'\u9996\u9875'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>{'\u5de5\u4f5c\u53f0'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>{'\u6587\u7ae0\u8be6\u60c5'}</button>
+            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>{'\u4e2a\u4eba\u4e2d\u5fc3'}</button>
+          </div>
+          <div className="topbar-account">{accountName}</div>
+        </div>
         <div className="topbar-right">
           <button className="btn btn-ghost" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>
             ← 返回工作台

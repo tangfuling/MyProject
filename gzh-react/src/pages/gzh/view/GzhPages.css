@@ -155,6 +155,59 @@
   border-radius: 6px;
 }
 
+.gzh-v2-root .topbar-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gzh-v2-root .topbar-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.gzh-v2-root .topbar-nav-item {
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.gzh-v2-root .topbar-nav-item:hover {
+  color: var(--blue-dark);
+  background: var(--blue-light);
+}
+
+.gzh-v2-root .topbar-nav-item.active {
+  color: #fff;
+  background: linear-gradient(132deg, var(--blue-dark), var(--teal));
+  box-shadow: var(--shadow-sm);
+}
+
+.gzh-v2-root .topbar-account {
+  min-width: 0;
+  max-width: 280px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+
 .gzh-v2-root .topbar-center {
   flex: 1;
   text-align: center;
@@ -281,6 +334,11 @@
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.gzh-v2-home .home-topbar .topbar-left {
+  flex: 1;
+  min-width: 0;
 }
 
 .gzh-v2-home .hero {
@@ -933,7 +991,7 @@
   display: flex;
   gap: 6px;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--line-light);
+  border-top: 1px solid var(--line-light);
   flex-wrap: wrap;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.92);
@@ -1897,6 +1955,27 @@
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .gzh-v2-root .topbar-left {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .gzh-v2-root .topbar-nav {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .gzh-v2-root .topbar-account {
+    border-left: none;
+    padding-left: 0;
+    max-width: 100%;
   }
 
   .gzh-v2-home .hero {

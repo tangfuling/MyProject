@@ -27,7 +27,9 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +39,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 public class ArticleServiceImpl extends BaseService implements ArticleService {
+    private static final String SOURCE_FRIEND = "\u670b\u53cb\u5708";
+    private static final String SOURCE_MESSAGE = "\u516c\u4f17\u53f7\u6d88\u606f";
+    private static final String SOURCE_RECOMMEND = "\u63a8\u8350";
+    private static final String SOURCE_HOME = "\u516c\u4f17\u53f7\u4e3b\u9875";
+    private static final String SOURCE_CHAT = "\u804a\u5929\u4f1a\u8bdd";
+    private static final String SOURCE_SEARCH = "\u641c\u4e00\u641c";
+    private static final String SOURCE_OTHER = "\u5176\u5b83";
+    private static final List<String> SOURCE_ORDER = List.of(
+        SOURCE_FRIEND,
+        SOURCE_MESSAGE,
+        SOURCE_RECOMMEND,
+        SOURCE_HOME,
+        SOURCE_CHAT,
+        SOURCE_SEARCH,
+        SOURCE_OTHER
+    );
+
     private static final List<DateTimeFormatter> LOCAL_DATE_TIME_FORMATTERS = List.of(
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
@@ -138,7 +157,8 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setCompletionRate(normalizeCompletionRate(snapshotItem.getCompletionRate()));
             snapshot.setAvgReadTimeSec(defaultInt(snapshotItem.getAvgReadTimeSec()));
             snapshot.setNewFollowers(defaultInt(snapshotItem.getNewFollowers()));
-            snapshot.setTrafficSourcesJson(jsonUtil.toJson(snapshotItem.getTrafficSources() == null ? Map.of() : snapshotItem.getTrafficSources()));
+            Map<String, Integer> normalizedTrafficSources = normalizeTrafficSources(snapshotItem.getTrafficSources());
+            snapshot.setTrafficSourcesJson(jsonUtil.toJson(normalizedTrafficSources));
             snapshot.setSnapshotTime(LocalDateTime.now());
             snapshotRepository.save(snapshot);
             snapshotSaved++;
@@ -273,7 +293,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             vo.setNewFollowers(latest.getNewFollowers());
             vo.setAvgReadTimeSec(latest.getAvgReadTimeSec());
             vo.setCompletionRate(normalizeCompletionRate(latest.getCompletionRate()));
-            vo.setTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
+            vo.setTrafficSources(normalizeTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson())));
         }
         return vo;
     }
@@ -317,7 +337,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 completionCount++;
             }
 
-            Map<String, Integer> oneMap = jsonUtil.toIntMap(latest.getTrafficSourcesJson());
+            Map<String, Integer> oneMap = normalizeTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
             oneMap.forEach((k, v) -> trafficCount.put(k, trafficCount.getOrDefault(k, 0) + defaultInt(v)));
         }
 
@@ -332,7 +352,10 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         double commentRate = pctValue(totalComment, totalRead);
 
         int trafficTotal = trafficCount.values().stream().mapToInt(Integer::intValue).sum();
-        Map<String, Integer> trafficPercent = new HashMap<>();
+        Map<String, Integer> trafficPercent = new LinkedHashMap<>();
+        for (String key : SOURCE_ORDER) {
+            trafficPercent.put(key, 0);
+        }
         if (trafficTotal > 0) {
             trafficCount.forEach((k, v) -> trafficPercent.put(k, (int) Math.round(v * 100.0 / trafficTotal)));
         }
@@ -356,6 +379,60 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             commentRate,
             trafficPercent
         );
+    }
+
+    private Map<String, Integer> normalizeTrafficSources(Map<String, Integer> raw) {
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        for (String key : SOURCE_ORDER) {
+            normalized.put(key, 0);
+        }
+        if (raw == null || raw.isEmpty()) {
+            return normalized;
+        }
+        for (Map.Entry<String, Integer> entry : raw.entrySet()) {
+            String sourceKey = normalizeTrafficSourceKey(entry.getKey());
+            int value = Math.max(0, defaultInt(entry.getValue()));
+            if (value <= 0) {
+                continue;
+            }
+            normalized.put(sourceKey, normalized.getOrDefault(sourceKey, 0) + value);
+        }
+        return normalized;
+    }
+
+    private String normalizeTrafficSourceKey(String rawKey) {
+        String key = rawKey == null ? "" : rawKey.trim();
+        String lower = key.toLowerCase(Locale.ROOT);
+
+        if (key.contains("\u670b\u53cb") || lower.contains("friend") || lower.contains("feed")) {
+            return SOURCE_FRIEND;
+        }
+        if (key.contains("\u6d88\u606f")
+            || (key.contains("\u516c\u4f17\u53f7") && !key.contains("\u4e3b\u9875"))
+            || lower.contains("message")
+            || lower.contains("subscription")
+            || lower.contains("frommsg")) {
+            return SOURCE_MESSAGE;
+        }
+        if (key.contains("\u63a8\u8350") || lower.contains("recommend")) {
+            return SOURCE_RECOMMEND;
+        }
+        if (key.contains("\u4e3b\u9875") || lower.contains("home") || lower.contains("profile")) {
+            return SOURCE_HOME;
+        }
+        if (key.contains("\u804a\u5929")
+            || key.contains("\u4f1a\u8bdd")
+            || lower.contains("chat")
+            || lower.contains("session")) {
+            return SOURCE_CHAT;
+        }
+        if (key.contains("\u641c") || lower.contains("search") || lower.contains("sogou")) {
+            return SOURCE_SEARCH;
+        }
+        if (key.contains("\u5176\u4ed6") || key.contains("\u5176\u5b83") || lower.contains("other")) {
+            return SOURCE_OTHER;
+        }
+        return SOURCE_OTHER;
     }
 
     private double pctChange(double current, double previous) {

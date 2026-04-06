@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
@@ -90,12 +90,31 @@ function fmtDuration(sec?: number | null) {
 }
 
 function recommendRateFromSummary(summary: Record<string, number>) {
-  for (const [k, v] of Object.entries(summary || {})) {
-    if (k.includes('推荐') || k.toLowerCase().includes('recommend')) {
-      return v || 0;
+  const entries = Object.entries(summary || {}).filter(([, v]) => Number(v) > 0);
+  if (entries.length === 0) return 0;
+
+  let explicitRate: number | null = null;
+  let recommendCount = 0;
+  let total = 0;
+
+  for (const [k, raw] of entries) {
+    const value = Number(raw) || 0;
+    const lower = k.toLowerCase();
+    const isRecommend = k.includes('\u63a8\u8350') || lower.includes('recommend');
+    const isRateKey = k.includes('\u7387') || lower.includes('rate');
+
+    total += value;
+    if (isRecommend) {
+      recommendCount += value;
+      if (isRateKey) {
+        explicitRate = Math.abs(value) <= 1 ? value * 100 : value;
+      }
     }
   }
-  return 0;
+
+  if (explicitRate !== null) return explicitRate;
+  if (total <= 0) return 0;
+  return (recommendCount * 100) / total;
 }
 
 function mapHistory(msg: ChatMessage): UiMessage {
@@ -436,18 +455,15 @@ export default function GzhWorkspacePage() {
   return (
     <div className="gzh-v2-root gzh-v2-workspace">
       <div className="topbar">
-        <a
-          className="topbar-brand"
-          href={RoutePath.GZH_HOME}
-          onClick={(event) => {
-            event.preventDefault();
-            navigate(RoutePath.GZH_HOME);
-          }}
-        >
-          <img src="/site-icon-64.png" alt="icon" />
-          公众号运营助手
-        </a>
-        <div className="topbar-center">{header?.accountName || '公众号账号'}</div>
+        <div className="topbar-left">
+          <div className="topbar-nav">
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>首页</button>
+            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>工作台</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>文章详情</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>个人中心</button>
+          </div>
+          <div className="topbar-account">{header?.accountName || '公众号账号'}</div>
+        </div>
         <div className="topbar-right">
           <div className="model-dd-wrap" ref={modelRef}>
             <button className="chip" type="button" onClick={() => setModelOpen((prev) => !prev)}>
@@ -578,7 +594,7 @@ export default function GzhWorkspacePage() {
               <div className="rec-sub">近7天区间 15%~21%</div>
             </div>
 
-            <details className="interact-details">
+            <details className="interact-details" open>
               <summary>互动详情</summary>
               <div className="interact-row">
                 <div className="interact-chip">分享 {fmtNum(metrics?.totalShare)}（{fmtPercent(metrics?.shareRate, 1)}）</div>
@@ -617,14 +633,6 @@ export default function GzhWorkspacePage() {
         </aside>
 
         <section className="chat-wrap">
-          <div className="chat-quick">
-            {quickPrompts.slice(0, 4).map((item) => (
-              <button key={item} className="quick-btn" type="button" onClick={() => setChatInput(item)}>
-                {item}
-              </button>
-            ))}
-          </div>
-
           <div className="chat-messages" ref={chatRef} id="chat-messages">
             <div className="msg-ai">
               <div className="ai-card">
@@ -681,6 +689,14 @@ export default function GzhWorkspacePage() {
             ))}
 
             {chatMessages.length === 0 ? <div className="empty-tip">输入问题，基于你的数据和分析报告进行对话。</div> : null}
+          </div>
+
+          <div className="chat-quick">
+            {quickPrompts.slice(0, 4).map((item) => (
+              <button key={item} className="quick-btn" type="button" onClick={() => setChatInput(item)}>
+                {item}
+              </button>
+            ))}
           </div>
 
           <div className="chat-input-bar">
