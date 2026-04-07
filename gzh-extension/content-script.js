@@ -35,13 +35,18 @@
   const METRICS_MAX_INTERVAL_MS = 1400;
   const METRICS_FREQ_RETRY_MIN_MS = 700;
   const METRICS_FREQ_RETRY_JITTER_MS = 350;
-  const UPLOAD_BATCH_SIZE = 5;
+  const CONTENT_FETCH_CONCURRENCY = 4;
+  const CONTENT_PREFETCH_WINDOW = 12;
+  const ARTICLE_PAGE_CACHE_MAX = 320;
+  const ARTICLE_CONTENT_MAX_LENGTH = 20000;
+  const UPLOAD_BATCH_SIZE = 10;
 
   let latestAuthToken = '';
   let latestLastSync = null;
   let lastAutoSyncAuthToken = '';
   let zeroMetricsLogCount = 0;
   let publishListParseHintCount = 0;
+  const articlePageCache = new Map();
   let panelState = {
     stage: 'idle',
     message: '等待同步',
@@ -936,6 +941,84 @@
     });
   }
 
+  function createTaskLimiter(maxConcurrent) {
+    const limit = Math.max(1, toPositiveInt(maxConcurrent, 1));
+    let running = 0;
+    const queue = [];
+
+    const drain = () => {
+      while (running < limit && queue.length > 0) {
+        const task = queue.shift();
+        running += 1;
+        Promise.resolve()
+          .then(() => task.runner())
+          .then(task.resolve, task.reject)
+          .finally(() => {
+            running -= 1;
+            drain();
+          });
+      }
+    };
+
+    return (runner) => new Promise((resolve, reject) => {
+      queue.push({ runner, resolve, reject });
+      drain();
+    });
+  }
+
+  function extractArticleTextFromHtml(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(html || ''), 'text/html');
+    return (doc.body?.innerText || '').trim().slice(0, ARTICLE_CONTENT_MAX_LENGTH);
+  }
+
+  async function fetchArticlePageData(secureUrl) {
+    const response = await fetch(secureUrl, { credentials: 'include' });
+    const html = await response.text();
+    return {
+      contentText: extractArticleTextFromHtml(html),
+      meta: parseArticleMetaFromHtml(html, secureUrl),
+    };
+  }
+
+  function getArticlePageData(rawUrl) {
+    const secureUrl = normalizeMpUrl(rawUrl || '');
+    if (!secureUrl) {
+      return Promise.resolve({
+        secureUrl: '',
+        contentText: '',
+        meta: null,
+      });
+    }
+
+    const cachedPromise = articlePageCache.get(secureUrl);
+    if (cachedPromise) {
+      // Refresh cache order to keep hot entries longer.
+      articlePageCache.delete(secureUrl);
+      articlePageCache.set(secureUrl, cachedPromise);
+      return cachedPromise;
+    }
+
+    const requestPromise = fetchArticlePageData(secureUrl)
+      .then((data) => ({
+        secureUrl,
+        contentText: data?.contentText || '',
+        meta: data?.meta || null,
+      }))
+      .catch((error) => {
+        articlePageCache.delete(secureUrl);
+        throw error;
+      });
+
+    articlePageCache.set(secureUrl, requestPromise);
+    while (articlePageCache.size > ARTICLE_PAGE_CACHE_MAX) {
+      const oldestKey = articlePageCache.keys().next().value;
+      articlePageCache.delete(oldestKey);
+    }
+
+    return requestPromise;
+  }
+
   function isFreqControlReason(reason) {
     return FREQ_CONTROL_RE.test(String(reason || ''));
   }
@@ -1125,6 +1208,40 @@
       let pendingSnapshots = [];
       let pendingArticleIds = [];
       let pendingSnapshotsWithMetrics = 0;
+      const runContentFetch = createTaskLimiter(CONTENT_FETCH_CONCURRENCY);
+      const contentPromiseByArticleId = new Map();
+
+      const ensureContentFetchTask = (article) => {
+        if (!article || !article.contentUrl) {
+          return Promise.resolve({ ok: true, text: '' });
+        }
+        const cacheKey = String(article.wxArticleId || article.contentUrl);
+        const cached = contentPromiseByArticleId.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+        const task = runContentFetch(async () => {
+          const pageData = await getArticlePageData(article.contentUrl);
+          return pageData?.contentText || '';
+        })
+          .then((text) => ({ ok: true, text }))
+          .catch((error) => ({ ok: false, error }));
+        contentPromiseByArticleId.set(cacheKey, task);
+        return task;
+      };
+
+      const warmContentPrefetch = (startIndex) => {
+        for (let offset = 0; offset < CONTENT_PREFETCH_WINDOW; offset += 1) {
+          const one = articles[startIndex + offset];
+          if (!one) {
+            break;
+          }
+          if (mergedIds[one.wxArticleId]) {
+            continue;
+          }
+          ensureContentFetchTask(one);
+        }
+      };
 
       const flushPendingUploads = async (index, total) => {
         if (pendingSyncItems.length === 0) {
@@ -1133,7 +1250,7 @@
 
         notifyState({
           stage: 'upload',
-          message: `姝ｅ湪涓婁紶 ${index}/${total}...`,
+          message: `正在上传 ${index}/${total}...`,
           progress: 70 + Math.round((index / Math.max(1, total)) * 28),
           total,
           synced: processedArticles,
@@ -1221,6 +1338,7 @@
         if (isNew) {
           newCandidates += 1;
         }
+        warmContentPrefetch(index);
 
         notifyState({
           stage: 'fetch_detail',
@@ -1231,9 +1349,7 @@
         });
 
         const contentPromise = isNew
-          ? fetchArticleContent(article.contentUrl)
-            .then((text) => ({ ok: true, text }))
-            .catch((error) => ({ ok: false, error }))
+          ? ensureContentFetchTask(article)
           : null;
 
         let metrics = null;
@@ -1286,6 +1402,7 @@
         let wordCount = null;
         if (isNew && contentPromise) {
           const contentResult = await contentPromise;
+          contentPromiseByArticleId.delete(String(article.wxArticleId || article.contentUrl || ''));
           if (!contentResult.ok) {
             const error = contentResult.error;
             failedContent += 1;
@@ -2260,14 +2377,9 @@
   }
 
   async function resolveMetricParamsFromArticlePage(article) {
-    const secureUrl = normalizeMpUrl(article?.contentUrl || '');
-    if (!secureUrl) {
-      return null;
-    }
-    const response = await fetch(secureUrl, { credentials: 'include' });
-    const html = await response.text();
-    const meta = parseArticleMetaFromHtml(html, secureUrl);
-    if (!meta.msgIdBase && !meta.publishDate && !meta.publishTime) {
+    const pageData = await getArticlePageData(article?.contentUrl || '');
+    const meta = pageData?.meta || null;
+    if (!meta || (!meta.msgIdBase && !meta.publishDate && !meta.publishTime)) {
       return null;
     }
     return meta;
@@ -2411,21 +2523,6 @@
       trafficSources: metrics.trafficSources,
       newFollowers: metrics.newFollowers,
     };
-  }
-
-  async function fetchArticleContent(url) {
-    if (!url) {
-      return '';
-    }
-    const secureUrl = normalizeMpUrl(url);
-    if (!secureUrl) {
-      return '';
-    }
-    const response = await fetch(secureUrl, { credentials: 'include' });
-    const html = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    return (doc.body?.innerText || '').trim().slice(0, 20000);
   }
 
   function parseMaybeJson(value) {
