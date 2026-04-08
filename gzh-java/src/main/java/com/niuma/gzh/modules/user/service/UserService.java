@@ -4,6 +4,7 @@ import com.niuma.gzh.common.base.PageResult;
 import com.niuma.gzh.modules.user.model.entity.UserEntity;
 import com.niuma.gzh.modules.user.model.vo.TokenLogVO;
 import com.niuma.gzh.modules.user.model.vo.UserProfileVO;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface UserService {
     UserEntity findOrCreateByPhone(String phone);
@@ -11,6 +12,10 @@ public interface UserService {
     UserEntity getById(Long userId);
 
     UserProfileVO profile();
+
+    void updateProfile(String displayName, String avatarUrl);
+
+    String uploadAvatar(MultipartFile file);
 
     void updateAiModel(String model);
 

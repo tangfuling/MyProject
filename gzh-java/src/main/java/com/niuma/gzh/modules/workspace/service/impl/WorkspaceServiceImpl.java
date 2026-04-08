@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class WorkspaceServiceImpl extends BaseService implements WorkspaceService {
     private static final DateTimeFormatter TREND_LABEL_FORMAT = DateTimeFormatter.ofPattern("MM-dd", Locale.CHINA);
+    private static final Pattern TECHNICAL_MP_ID_PATTERN = Pattern.compile("^(gh_|wxid_)[a-z0-9_]{4,}$", Pattern.CASE_INSENSITIVE);
     private static final List<String> DEFAULT_QUESTIONS = List.of(
         "下一篇写什么",
         "怎么提高分享率",
@@ -85,9 +87,22 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
 
     private WorkspaceOverviewVO.Header buildHeader(UserEntity user, UserProfileVO profile) {
         WorkspaceOverviewVO.Header header = new WorkspaceOverviewVO.Header();
-        String phone = user.getPhone() == null ? "" : user.getPhone();
-        String suffix = phone.length() <= 4 ? phone : phone.substring(phone.length() - 4);
-        header.setAccountName("创作者" + (suffix.isBlank() ? "" : " " + suffix));
+        String accountName = normalizeMpAccountName(profile == null ? null : profile.getMpAccountName());
+        if (accountName == null || accountName.isBlank()) {
+            accountName = normalizeMpAccountName(user == null ? null : user.getMpAccountName());
+        }
+        if (accountName == null || accountName.isBlank()) {
+            accountName = profile == null ? null : normalizeDisplayName(profile.getDisplayName());
+        }
+        if (accountName == null || accountName.isBlank()) {
+            accountName = user == null ? null : normalizeDisplayName(user.getDisplayName());
+        }
+        if (accountName == null || accountName.isBlank()) {
+            String phone = user == null || user.getPhone() == null ? "" : user.getPhone().trim();
+            String suffix = phone.length() <= 4 ? phone : phone.substring(phone.length() - 4);
+            accountName = suffix.isBlank() ? "公众号账号" : ("公众号" + suffix);
+        }
+        header.setAccountName(accountName);
         header.setPhoneMasked(profile.getPhone());
         header.setAiModel(profile.getAiModel());
         header.setBalanceCent(profile.getBalanceCent());
@@ -95,6 +110,24 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         header.setArticleCount(profile.getArticleCount());
         header.setLastSyncAt(profile.getLastSyncAt());
         return header;
+    }
+
+    private String normalizeMpAccountName(String rawName) {
+        if (rawName == null || rawName.isBlank()) {
+            return "";
+        }
+        String normalized = rawName.trim();
+        if (TECHNICAL_MP_ID_PATTERN.matcher(normalized).matches()) {
+            return "";
+        }
+        return normalized;
+    }
+
+    private String normalizeDisplayName(String rawName) {
+        if (rawName == null || rawName.isBlank()) {
+            return "";
+        }
+        return rawName.trim();
     }
 
     private WorkspaceOverviewVO.DataPanel buildDataPanel(OverviewVO overview, List<ArticleVO> allArticles) {

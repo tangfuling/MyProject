@@ -11,6 +11,9 @@ public class LoginVO {
     public static class UserInfoVO {
         private Long id;
         private String phone;
+        private String displayName;
+        private String mpAccountName;
+        private String avatarUrl;
         private Integer balance;
         private Integer freeQuota;
         private String aiModel;

@@ -74,3 +74,6 @@ app:
       alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
       notify-url: ${ALIPAY_NOTIFY_URL:https://api-gzh.niuma.com/payment/notify}
       return-url: ${ALIPAY_RETURN_URL:https://gzh.niuma.com/settings}
+  upload:
+    avatar-dir: ${AVATAR_UPLOAD_DIR:./storage/avatars}
+    avatar-url-prefix: ${AVATAR_UPLOAD_URL_PREFIX:/uploads/avatars}

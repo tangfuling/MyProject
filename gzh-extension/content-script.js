@@ -61,6 +61,7 @@
 
   let latestAuthToken = '';
   let latestLastSync = null;
+  let latestDetectedMpAccountName = '';
   let lastAutoSyncAuthToken = '';
   let zeroMetricsLogCount = 0;
   let zeroTrafficSourceLogCount = 0;
@@ -1303,6 +1304,222 @@
     return text.slice(0, maxLen);
   }
 
+  function normalizeAccountName(rawName) {
+    const normalized = safeTrimText(rawName, 128)
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) {
+      return '';
+    }
+    if (normalized.length < 2 || normalized.length > 60) {
+      return '';
+    }
+    if (/[<>]/.test(normalized)) {
+      return '';
+    }
+    // Ignore technical ids like gh_xxx / wxid_xxx; keep only display-like names.
+    if (/^(gh_[a-z0-9_]{4,}|wxid_[a-z0-9_]{4,})$/i.test(normalized)) {
+      return '';
+    }
+    if (/^(微信公众平台|公众号运营助手|公众号数据运营助手|图文消息|文章列表|首页|设置)$/i.test(normalized)) {
+      return '';
+    }
+    return normalized;
+  }
+
+  function isLikelyAccountNameKey(rawKey) {
+    const key = String(rawKey || '').trim();
+    if (!key) {
+      return false;
+    }
+    const lower = key.toLowerCase();
+    if (lower === 'name' || lower === 'title') {
+      return false;
+    }
+    if (/title|appmsg|article|source_name|scene_name|file|image|headimg|avatar/.test(lower)) {
+      return false;
+    }
+    return /account|biz|nick|nickname|user_name|ori_name|origin_name|gh_name|weixin_name/.test(lower);
+  }
+
+  function accountNameScore(rawKey, name) {
+    const key = String(rawKey || '').toLowerCase();
+    let score = String(name || '').length;
+    if (key.includes('account_name') || key.includes('biz_name')) {
+      score += 40;
+    } else if (key.includes('nickname') || key.includes('nick_name')) {
+      score += 34;
+    } else if (key.includes('ori_name') || key.includes('origin_name')) {
+      score += 30;
+    } else if (key.includes('user_name') || key.includes('gh_name')) {
+      score += 6;
+    } else if (key.includes('account') || key.includes('biz') || key.includes('nick')) {
+      score += 16;
+    }
+    return score;
+  }
+
+  function extractAccountNameFromNode(node, depth = 0) {
+    if (!node || depth > 5) {
+      return '';
+    }
+    if (Array.isArray(node)) {
+      let bestArrayName = '';
+      let bestArrayScore = 0;
+      const limit = Math.min(node.length, 24);
+      for (let i = 0; i < limit; i += 1) {
+        const oneName = extractAccountNameFromNode(node[i], depth + 1);
+        if (!oneName) {
+          continue;
+        }
+        const oneScore = accountNameScore('', oneName);
+        if (oneScore > bestArrayScore) {
+          bestArrayScore = oneScore;
+          bestArrayName = oneName;
+        }
+      }
+      return bestArrayName;
+    }
+    if (typeof node !== 'object') {
+      return '';
+    }
+
+    let bestName = '';
+    let bestScore = 0;
+
+    for (const [rawKey, rawValue] of Object.entries(node)) {
+      if (typeof rawValue === 'string' && isLikelyAccountNameKey(rawKey)) {
+        const candidateName = normalizeAccountName(rawValue);
+        if (!candidateName) {
+          continue;
+        }
+        const score = accountNameScore(rawKey, candidateName);
+        if (score > bestScore) {
+          bestScore = score;
+          bestName = candidateName;
+        }
+      }
+      if (rawValue && typeof rawValue === 'object') {
+        const nestedName = extractAccountNameFromNode(rawValue, depth + 1);
+        if (!nestedName) {
+          continue;
+        }
+        const nestedScore = accountNameScore(rawKey, nestedName);
+        if (nestedScore > bestScore) {
+          bestScore = nestedScore;
+          bestName = nestedName;
+        }
+      }
+    }
+
+    return bestName;
+  }
+
+  function readAccountNameFromDom() {
+    const selectors = [
+      '#js_account_name',
+      '.weui-desktop-account__info_name',
+      '.weui-desktop-account__info .weui-desktop-account__name',
+      '.weui-desktop-layout__hd .weui-desktop-dropdown__name',
+      '.weui-desktop-user-info__nickname',
+      '.weui-desktop-menu-user__name',
+      '[data-account-name]',
+    ];
+    for (const selector of selectors) {
+      try {
+        const node = document.querySelector(selector);
+        if (!node) {
+          continue;
+        }
+        const candidateName = normalizeAccountName(node.textContent || '');
+        if (candidateName) {
+          return candidateName;
+        }
+      } catch {
+        // ignore selector failures
+      }
+    }
+    return '';
+  }
+
+  function readAccountNameFromWindow() {
+    const globalRef = window;
+    const directCandidates = [
+      globalRef?.wx?.commonData?.account_name,
+      globalRef?.wx?.commonData?.biz_name,
+      globalRef?.wx?.commonData?.nickname,
+      globalRef?.wx?.data?.account_name,
+      globalRef?.wx?.data?.biz_name,
+      globalRef?.wx?.data?.nickname,
+      globalRef?.wx?.data?.user_name,
+      globalRef?.wx?.cgiData?.account_name,
+      globalRef?.wx?.cgiData?.biz_name,
+      globalRef?.wx?.cgiData?.nickname,
+      globalRef?.cgiData?.account_name,
+      globalRef?.cgiData?.biz_name,
+      globalRef?.cgiData?.nickname,
+    ];
+    for (const one of directCandidates) {
+      const candidateName = normalizeAccountName(one);
+      if (candidateName) {
+        return candidateName;
+      }
+    }
+
+    return extractAccountNameFromNode(globalRef?.wx?.cgiData)
+      || extractAccountNameFromNode(globalRef?.cgiData)
+      || '';
+  }
+
+  function readAccountNameFromScripts() {
+    const scripts = Array.from(document.scripts || []);
+    const maxScripts = Math.min(scripts.length, 60);
+    const marker = /(?:account_name|biz_name|nickname|nick_name|ori_name|origin_name|user_name)\s*[:=]\s*["']([^"'\n]{2,64})["']/ig;
+    for (let i = 0; i < maxScripts; i += 1) {
+      const scriptText = String(scripts[i]?.textContent || '');
+      if (!scriptText) {
+        continue;
+      }
+      marker.lastIndex = 0;
+      let match = marker.exec(scriptText);
+      while (match) {
+        const candidateName = normalizeAccountName(match[1]);
+        if (candidateName) {
+          return candidateName;
+        }
+        match = marker.exec(scriptText);
+      }
+    }
+    return '';
+  }
+
+  function noteDetectedAccountName(rawName) {
+    const name = normalizeAccountName(rawName);
+    if (!name) {
+      return latestDetectedMpAccountName;
+    }
+    if (!latestDetectedMpAccountName || name.length > latestDetectedMpAccountName.length) {
+      latestDetectedMpAccountName = name;
+    }
+    return latestDetectedMpAccountName;
+  }
+
+  function resolveSyncAccountName(...hints) {
+    hints.forEach((item) => {
+      if (Array.isArray(item)) {
+        item.forEach((one) => noteDetectedAccountName(one));
+        return;
+      }
+      noteDetectedAccountName(item);
+    });
+    noteDetectedAccountName(readAccountNameFromWindow());
+    noteDetectedAccountName(readAccountNameFromDom());
+    if (!latestDetectedMpAccountName) {
+      noteDetectedAccountName(readAccountNameFromScripts());
+    }
+    return latestDetectedMpAccountName;
+  }
+
   function buildSyncIssueSessionId() {
     const timePart = Date.now().toString(36);
     const randPart = Math.random().toString(36).slice(2, 8);
@@ -1452,7 +1669,8 @@
     return /40101|unauthorized|not logged|token/i.test(message);
   }
 
-  async function uploadSyncChunk(apiBase, authToken, articles, snapshots, syncIssues = []) {
+  async function uploadSyncChunk(apiBase, authToken, articles, snapshots, syncIssues = [], accountName = '') {
+    const normalizedAccountName = safeTrimText(accountName || '', 128);
     const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
       method: 'POST',
       headers: {
@@ -1463,6 +1681,7 @@
         articles: Array.isArray(articles) ? articles : [],
         snapshots: Array.isArray(snapshots) ? snapshots : [],
         syncIssues: Array.isArray(syncIssues) ? syncIssues : [],
+        accountName: normalizedAccountName || undefined,
       }),
     });
 
@@ -1511,6 +1730,7 @@
     updateLauncherState();
     let apiBase = API_BASE_URL;
     let authToken = '';
+    let syncAccountName = resolveSyncAccountName();
     const flushSyncIssuesBestEffort = async () => {
       if (!authToken || syncIssueState.queue.length <= 0) {
         return;
@@ -1523,7 +1743,7 @@
           return;
         }
         try {
-          await uploadSyncChunk(apiBase, authToken, [], [], issueBatch);
+          await uploadSyncChunk(apiBase, authToken, [], [], issueBatch, syncAccountName);
         } catch (error) {
           pushSyncIssueBatchBack(issueBatch);
           if (guard <= 2) {
@@ -1570,6 +1790,7 @@
       const syncRangeLabel = syncRangeLabelByCode(syncRangeCode);
       notifyState({ stage: 'fetch_list', message: `正在读取文章列表（${syncRangeLabel}）...`, progress: 5 });
       const articles = await fetchAllArticles(token, { syncRangeDays });
+      syncAccountName = resolveSyncAccountName(latestDetectedMpAccountName);
 
       if (articles.length === 0) {
         const lastSync = {
@@ -1661,7 +1882,8 @@
             authToken,
             pendingSyncItems,
             pendingSnapshots,
-            issueBatch
+            issueBatch,
+            syncAccountName
           );
           newArticles += Number(uploadResult.newArticles || 0);
           updatedArticles += Number(uploadResult.updatedArticles || 0);
@@ -2117,6 +2339,7 @@
       }
 
       const publishPage = parseMaybeJson(json.publish_page) || parseMaybeJson(json.publishPage) || {};
+      noteDetectedAccountName(extractAccountNameFromNode(publishPage) || extractAccountNameFromNode(json));
       const publishListRaw = publishPage.publish_list
         ?? publishPage.publishList
         ?? publishPage.list

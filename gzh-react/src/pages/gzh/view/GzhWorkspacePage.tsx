@@ -29,10 +29,10 @@ const RANGE_OPTIONS: Array<{ value: RangeCode; label: string }> = [
 ];
 
 const MODEL_OPTIONS = [
-  { code: 'qwen', name: '千问', desc: '国产性价比之选', price: '¥2/百万tokens' },
-  { code: 'doubao', name: '豆包', desc: '中文理解力强', price: '¥3/百万tokens' },
-  { code: 'claude', name: 'Claude', desc: '分析能力出众', price: '¥15/百万tokens' },
-  { code: 'gpt', name: 'GPT', desc: '综合能力强', price: '¥10/百万tokens' },
+  { code: 'qwen', name: '千问', desc: '国产性价比之选' },
+  { code: 'doubao', name: '豆包', desc: '中文理解力强' },
+  { code: 'claude', name: 'Claude', desc: '分析能力出众' },
+  { code: 'gpt', name: 'GPT', desc: '综合能力强' },
 ];
 
 const QUICK_DEFAULTS = ['近30天分析', '高推荐样本', '外向型 vs 记录型', '本周选题计划'];
@@ -74,6 +74,15 @@ function fmtMoneyCent(v?: number | null) {
 
 function fmtPercent(v?: number | null, digits = 1) {
   return `${toPercentValue(v).toFixed(digits)}%`;
+}
+
+function calcRateByRead(count?: number | null, readCount?: number | null) {
+  const numerator = Number(count ?? 0);
+  const denominator = Number(readCount ?? 0);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    return 0;
+  }
+  return (numerator * 100) / denominator;
 }
 
 function fmtDeltaPercent(v?: number | null, digits = 0) {
@@ -228,6 +237,14 @@ export default function GzhWorkspacePage() {
   const changes = overview?.dataPanel.changes;
   const recommendRate = recommendRateFromSummary(overview?.dataPanel.trafficSummary || {});
   const recommendPercent = Math.max(0, Math.min(100, toPercentValue(recommendRate)));
+  const interactionRates = useMemo(
+    () => ({
+      share: calcRateByRead(metrics?.totalShare, metrics?.totalRead),
+      wow: calcRateByRead(metrics?.totalWow, metrics?.totalRead),
+      comment: calcRateByRead(metrics?.totalComment, metrics?.totalRead),
+    }),
+    [metrics?.totalComment, metrics?.totalRead, metrics?.totalShare, metrics?.totalWow]
+  );
   const analysisPanel = overview?.analysisPanel;
   const analysisSummary = analysisPanel?.summary || '暂无分析总结。';
   const analysisText = analysisGenerating ? analysisLive || '正在分析数据…' : analysisDetail?.content || analysisPanel?.content || analysisSummary;
@@ -446,6 +463,12 @@ export default function GzhWorkspacePage() {
   const aiTokens =
     (analysisDetail?.inputTokens ?? analysisPanel?.inputTokens ?? 0) +
     (analysisDetail?.outputTokens ?? analysisPanel?.outputTokens ?? 0);
+  const gotoDetailPage = () => {
+    navigate({
+      pathname: RoutePath.GZH_DETAIL,
+      search: `?range=${range}`,
+    });
+  };
 
   const riskText =
     recommendPercent < 15
@@ -459,7 +482,7 @@ export default function GzhWorkspacePage() {
           <div className="topbar-nav">
             <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>首页</button>
             <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>工作台</button>
-            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>文章详情</button>
+            <button className="topbar-nav-item" type="button" onClick={gotoDetailPage}>文章详情</button>
             <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>个人中心</button>
           </div>
           <div className="topbar-account">{header?.accountName || '公众号账号'}</div>
@@ -482,7 +505,7 @@ export default function GzhWorkspacePage() {
                     }}
                     disabled={modelMutation.isPending}
                   >
-                    {item.name} · {item.desc} · {item.price}
+                    {item.name} · {item.desc}
                   </button>
                 ))}
               </div>
@@ -491,19 +514,6 @@ export default function GzhWorkspacePage() {
           <span className="sync-meta">
             统计近{RANGE_OPTIONS.find((x) => x.value === range)?.label ?? '30天'} · 同步 {fmtDateShort(header?.lastSyncAt)}
           </span>
-          <button
-            className="btn btn-outline"
-            type="button"
-            style={{ height: '30px', fontSize: '11px', padding: '0 12px' }}
-            onClick={() => {
-              void overviewQuery.refetch();
-              void historyQuery.refetch();
-            }}
-            disabled={overviewQuery.isFetching}
-          >
-            {overviewQuery.isFetching ? '同步中...' : '一键同步'}
-          </button>
-          <span className="chip chip-balance">{fmtMoneyCent((header?.balanceCent ?? 0) + (header?.freeQuotaCent ?? 0))}</span>
           <button className="avatar-btn" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>
             T
           </button>
@@ -545,7 +555,7 @@ export default function GzhWorkspacePage() {
 
             <div className="risk-alert">{riskText}</div>
 
-            <div className="ctx-caption">核心指标（决策优先级：推荐率 &gt; 完读 &gt; 阅读）</div>
+            <div className="ctx-caption">核心指标</div>
             <div className="kpi-grid">
               <div className="kpi-item">
                 <div className="kpi-item-label">阅读</div>
@@ -597,9 +607,9 @@ export default function GzhWorkspacePage() {
             <details className="interact-details" open>
               <summary>互动详情</summary>
               <div className="interact-row">
-                <div className="interact-chip">分享 {fmtNum(metrics?.totalShare)}（{fmtPercent(metrics?.shareRate, 1)}）</div>
-                <div className="interact-chip">在看 {fmtNum(metrics?.totalWow)}（{fmtPercent(metrics?.wowRate, 1)}）</div>
-                <div className="interact-chip">留言 {fmtNum(metrics?.totalComment)}（{fmtPercent(metrics?.commentRate, 1)}）</div>
+                <div className="interact-chip">分享 {fmtNum(metrics?.totalShare)}（{interactionRates.share.toFixed(1)}%）</div>
+                <div className="interact-chip">在看 {fmtNum(metrics?.totalWow)}（{interactionRates.wow.toFixed(1)}%）</div>
+                <div className="interact-chip">留言 {fmtNum(metrics?.totalComment)}（{interactionRates.comment.toFixed(1)}%）</div>
               </div>
             </details>
 
@@ -618,7 +628,7 @@ export default function GzhWorkspacePage() {
               </svg>
             </div>
 
-            <button className="ctx-link" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>
+            <button className="ctx-link" type="button" onClick={gotoDetailPage}>
               查看文章详情 →
             </button>
 

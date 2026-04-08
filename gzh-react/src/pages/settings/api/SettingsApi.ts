@@ -1,9 +1,23 @@
 import http from '../../../common/network/HttpClient';
-import type { PaymentCreateResult, PaymentOrderPage, TokenLogPage, UserProfile } from '../model/SettingsModels';
+import type {
+  PaymentCreateResult,
+  PaymentOrderPage,
+  TokenLogPage,
+  UpdateUserProfilePayload,
+  UserProfile,
+} from '../model/SettingsModels';
 
 const SettingsApi = {
   profile() {
     return http.get<UserProfile>('/user/profile');
+  },
+  updateProfile(payload: UpdateUserProfilePayload) {
+    return http.put<void>('/user/profile', payload);
+  },
+  uploadAvatar(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return http.post<string>('/user/avatar', formData);
   },
   updateModel(model: string) {
     return http.put<void>('/user/ai-model', { model });

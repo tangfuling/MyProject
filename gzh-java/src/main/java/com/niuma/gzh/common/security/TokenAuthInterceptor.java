@@ -15,6 +15,7 @@ public class TokenAuthInterceptor implements HandlerInterceptor {
     private static final List<String> OPEN_PATH_PREFIX = List.of(
         "/auth/",
         "/payment/notify",
+        "/uploads/",
         "/actuator/",
         "/swagger-ui",
         "/v3/api-docs",

@@ -7,6 +7,9 @@ import lombok.Data;
 public class UserProfileVO {
     private Long id;
     private String phone;
+    private String displayName;
+    private String mpAccountName;
+    private String avatarUrl;
     private Integer balanceCent;
     private Integer freeQuotaCent;
     private String aiModel;

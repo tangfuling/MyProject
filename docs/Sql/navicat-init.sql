@@ -10,6 +10,9 @@ USE gzh;
 CREATE TABLE IF NOT EXISTS gzh_user (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
     phone VARCHAR(32) NOT NULL COMMENT '手机号',
+    display_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '显示名称',
+    mp_account_name VARCHAR(128) NULL COMMENT '公众号名称(来自插件同步)',
+    avatar_url VARCHAR(512) NULL COMMENT '头像地址',
     ai_model VARCHAR(32) NOT NULL DEFAULT 'qwen' COMMENT '当前 AI 模型',
     balance_cent INT NOT NULL DEFAULT 0 COMMENT '余额(分)',
     free_quota_cent INT NOT NULL DEFAULT 100 COMMENT '免费额度(分)',
@@ -164,6 +167,64 @@ CREATE TABLE IF NOT EXISTS gzh_payment_order (
     KEY idx_payment_user_created (user_id, created_at),
     CONSTRAINT fk_payment_user FOREIGN KEY (user_id) REFERENCES gzh_user(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='支付订单表';
+
+SET @gzh_user_display_name_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_user'
+      AND COLUMN_NAME = 'display_name'
+);
+SET @gzh_user_display_name_sql = IF(
+    @gzh_user_display_name_exists = 0,
+    'ALTER TABLE gzh_user ADD COLUMN display_name VARCHAR(64) NOT NULL DEFAULT '''' COMMENT ''显示名称'' AFTER phone',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_user_display_name_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_user_avatar_url_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_user'
+      AND COLUMN_NAME = 'avatar_url'
+);
+SET @gzh_user_avatar_url_sql = IF(
+    @gzh_user_avatar_url_exists = 0,
+    'ALTER TABLE gzh_user ADD COLUMN avatar_url VARCHAR(512) NULL COMMENT ''头像地址'' AFTER display_name',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_user_avatar_url_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_user_mp_account_name_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_user'
+      AND COLUMN_NAME = 'mp_account_name'
+);
+SET @gzh_user_mp_account_name_sql = IF(
+    @gzh_user_mp_account_name_exists = 0,
+    'ALTER TABLE gzh_user ADD COLUMN mp_account_name VARCHAR(128) NULL COMMENT ''公众号名称(来自插件同步)'' AFTER display_name',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_user_mp_account_name_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+UPDATE gzh_user
+SET display_name = CONCAT('公众号', RIGHT(phone, 4))
+WHERE (display_name IS NULL OR TRIM(display_name) = '');
+
+UPDATE gzh_user
+SET mp_account_name = display_name
+WHERE (mp_account_name IS NULL OR TRIM(mp_account_name) = '')
+  AND display_name IS NOT NULL
+  AND TRIM(display_name) <> '';
 
 SET @gzh_payment_order_channel_exists = (
     SELECT COUNT(*)

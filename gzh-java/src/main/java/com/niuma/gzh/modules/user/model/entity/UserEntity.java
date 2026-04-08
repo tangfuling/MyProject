@@ -14,6 +14,9 @@ public class UserEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String phone;
+    private String displayName;
+    private String mpAccountName;
+    private String avatarUrl;
     private String aiModel;
     private Integer balanceCent;
     private Integer freeQuotaCent;

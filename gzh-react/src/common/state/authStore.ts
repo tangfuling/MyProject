@@ -3,6 +3,9 @@ import { create } from 'zustand';
 export type AuthProfile = {
   id: number;
   phone: string;
+  displayName?: string;
+  mpAccountName?: string;
+  avatarUrl?: string;
   balance: number;
   freeQuota: number;
   aiModel: string;

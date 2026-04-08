@@ -2,6 +2,7 @@ package com.niuma.gzh.modules.article.model.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,9 @@ import lombok.Data;
 
 @Data
 public class SyncArticlesDTO {
+    @Size(max = 128, message = "accountName max length is 128")
+    private String accountName;
+
     @Valid
     @NotNull
     private List<ArticleItem> articles = new ArrayList<>();

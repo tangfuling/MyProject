@@ -16,11 +16,14 @@ import com.niuma.gzh.modules.user.model.entity.UserEntity;
 import com.niuma.gzh.modules.user.service.UserService;
 import java.time.Duration;
 import java.util.Random;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthServiceImpl extends BaseService implements AuthService {
+    private static final Pattern TECHNICAL_MP_ID_PATTERN = Pattern.compile("^(gh_|wxid_)[a-z0-9_]{4,}$", Pattern.CASE_INSENSITIVE);
+
     private final RedisClient redisClient;
     private final SmsClient smsClient;
     private final UserService userService;
@@ -73,10 +76,32 @@ public class AuthServiceImpl extends BaseService implements AuthService {
         LoginVO.UserInfoVO userVO = new LoginVO.UserInfoVO();
         userVO.setId(user.getId());
         userVO.setPhone(PhoneUtil.mask(user.getPhone()));
+        userVO.setDisplayName(resolveDisplayName(user));
+        userVO.setMpAccountName(resolveMpAccountName(user));
+        userVO.setAvatarUrl(user.getAvatarUrl());
         userVO.setBalance(user.getBalanceCent());
         userVO.setFreeQuota(user.getFreeQuotaCent());
         userVO.setAiModel(user.getAiModel());
         vo.setUser(userVO);
         return vo;
+    }
+
+    private String resolveDisplayName(UserEntity user) {
+        if (user != null && user.getDisplayName() != null && !user.getDisplayName().isBlank()) {
+            return user.getDisplayName().trim();
+        }
+        String phone = user == null || user.getPhone() == null ? "" : user.getPhone().trim();
+        String suffix = phone.length() <= 4 ? phone : phone.substring(phone.length() - 4);
+        return suffix.isBlank() ? "\u516c\u4f17\u53f7\u8d26\u53f7" : ("\u516c\u4f17\u53f7" + suffix);
+    }
+
+    private String resolveMpAccountName(UserEntity user) {
+        if (user != null && user.getMpAccountName() != null && !user.getMpAccountName().isBlank()) {
+            String normalized = user.getMpAccountName().trim();
+            if (!TECHNICAL_MP_ID_PATTERN.matcher(normalized).matches()) {
+                return normalized;
+            }
+        }
+        return "";
     }
 }

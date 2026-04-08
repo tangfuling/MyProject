@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
 import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import type { WorkspaceArticleCard } from '../../workspace/model/WorkspaceModels';
@@ -31,6 +31,18 @@ const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
   { value: 'top5', label: '只看Top5' },
   { value: 'low3', label: '低表现3篇' },
 ];
+
+const RANGE_LABEL_MAP: Record<RangeCode, string> = {
+  '7d': '7\u5929',
+  '30d': '30\u5929',
+  '90d': '90\u5929',
+  all: '\u5168\u90e8',
+};
+
+function parseRangeCode(raw: string | null): RangeCode {
+  if (raw === '7d' || raw === '30d' || raw === '90d' || raw === 'all') return raw;
+  return '30d';
+}
 
 function toPercentValue(v?: number | null) {
   const raw = v ?? 0;
@@ -570,7 +582,10 @@ function buildTrendChart(points: TrendPoint[]) {
 
 export default function GzhDetailPage() {
   const navigate = useNavigate();
-  const [range] = useState<RangeCode>('30d');
+  const [searchParams] = useSearchParams();
+  const range = parseRangeCode(searchParams.get('range'));
+  const rangeLabel = RANGE_LABEL_MAP[range];
+  const rangeText = range === 'all' ? rangeLabel : `\u8fd1${rangeLabel}`;
   const [sortKey, setSortKey] = useState<SortKey>('publish');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
@@ -707,8 +722,6 @@ export default function GzhDetailPage() {
     ? `已选文章：${selectedArticleName}`
     : `当前筛选样本：${shownArticles.length} 篇`;
 
-  const balanceText = `\u00A5${(((overview?.header.balanceCent ?? 0) + (overview?.header.freeQuotaCent ?? 0)) / 100).toFixed(2)}`;
-
   return (
     <div className="gzh-v2-root gzh-v2-detail">
       <div className="topbar">
@@ -716,28 +729,26 @@ export default function GzhDetailPage() {
           <div className="topbar-nav">
             <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'\u9996\u9875'}</button>
             <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>{'\u5de5\u4f5c\u53f0'}</button>
-            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>{'\u6587\u7ae0\u8be6\u60c5'}</button>
+            <button
+              className="topbar-nav-item active"
+              type="button"
+              onClick={() =>
+                navigate({
+                  pathname: RoutePath.GZH_DETAIL,
+                  search: `?range=${range}`,
+                })
+              }
+            >
+              {'\u6587\u7ae0\u8be6\u60c5'}
+            </button>
             <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>{'\u4e2a\u4eba\u4e2d\u5fc3'}</button>
           </div>
           <div className="topbar-account">{accountName}</div>
         </div>
         <div className="topbar-right">
-          <span className="sync-meta">统计近30天 · 同步 {fmtDateShort(overview?.header.lastSyncAt)}</span>
-          <button
-            className="btn btn-outline"
-            type="button"
-            style={{ height: '30px', fontSize: '11px', padding: '0 12px' }}
-            onClick={() => {
-              void overviewQuery.refetch();
-              void articlesQuery.refetch();
-            }}
-            disabled={overviewQuery.isFetching || articlesQuery.isFetching}
-          >
-            {(overviewQuery.isFetching || articlesQuery.isFetching) ? '同步中...' : '一键同步'}
-          </button>
-          <span className="chip chip-balance">{balanceText}</span>
-          <button className="avatar-btn" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>
-            T
+          <span className="sync-meta">{`\u7edf\u8ba1${rangeText} \u00b7 \u540c\u6b65 ${fmtDateShort(overview?.header.lastSyncAt)}`}</span>
+          <button className="btn btn-ghost" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>
+            {'返回工作台'}
           </button>
         </div>
       </div>
@@ -745,7 +756,7 @@ export default function GzhDetailPage() {
       <div className="detail-body">
         <aside className="art-list-panel">
           <div className="art-filter-bar">
-            <div className="art-filter-title">文章数据 · 近30天</div>
+            <div className="art-filter-title">{`\u6587\u7ae0\u6570\u636e \u00b7 ${rangeText}`}</div>
             <div className="art-filter-sub">
               共 {totalArticles} 篇 · 发布 {publishRange} · 同步时间 {fmtDateTime(overview?.header.lastSyncAt)}
             </div>

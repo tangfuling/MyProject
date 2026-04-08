@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { RoutePath } from '../../../common/router/RoutePath';
 import { useAuthStore } from '../../../common/state/authStore';
+import { HttpConfig } from '../../../common/network/HttpConfig';
 import SettingsApi from '../../settings/api/SettingsApi';
-import type { PaymentOrder, TokenLog } from '../../settings/model/SettingsModels';
+import type { PaymentOrder, TokenLog, UpdateUserProfilePayload } from '../../settings/model/SettingsModels';
 import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import './GzhPages.css';
 
 const MODEL_OPTIONS = [
-  { code: 'qwen', name: '千问', desc: '通义千问 · 国产性价比之选', price: '¥2 / 百万tokens' },
-  { code: 'doubao', name: '豆包', desc: '字节豆包 · 中文理解力强', price: '¥3 / 百万tokens' },
-  { code: 'claude', name: 'Claude', desc: 'Anthropic Claude · 分析能力出众', price: '¥15 / 百万tokens' },
-  { code: 'gpt', name: 'GPT', desc: 'OpenAI GPT-4o · 综合能力强', price: '¥10 / 百万tokens' },
+  { code: 'qwen', name: '千问', desc: '通义千问 · 国产性价比之选' },
+  { code: 'doubao', name: '豆包', desc: '字节豆包 · 中文理解力强' },
+  { code: 'claude', name: 'Claude', desc: 'Anthropic Claude · 分析能力出众' },
+  { code: 'gpt', name: 'GPT', desc: 'OpenAI GPT-4o · 综合能力强' },
 ];
 
 const RECHARGE_OPTIONS = [1000, 3000, 5000];
@@ -49,7 +50,7 @@ function formatDateTime(value?: string) {
 }
 
 function mapTokenType(type: string) {
-  if (type === 'analysis') return '生成分析（近30天）';
+  if (type === 'analysis') return '生成分析（按筛选时间）';
   if (type === 'chat') return '对话';
   if (type === 'sync') return '数据同步';
   return type || '--';
@@ -59,6 +60,16 @@ function mapChannel(channel: string) {
   if (channel === 'free_quota') return '免费额度（注册赠送）';
   if (channel.toLowerCase().includes('ali')) return '支付宝';
   return channel || '--';
+}
+
+function resolveAvatarUrl(rawUrl?: string) {
+  const url = (rawUrl || '').trim();
+  if (!url) return '';
+  if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) {
+    return url;
+  }
+  const base = HttpConfig.getBaseUrl().replace(/\/+$/, '');
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 export default function GzhProfilePage() {
@@ -71,6 +82,10 @@ export default function GzhProfilePage() {
   const [paymentPage, setPaymentPage] = useState(1);
   const [tokenLogs, setTokenLogs] = useState<TokenLog[]>([]);
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarFileRef = useRef<HTMLInputElement | null>(null);
 
   const profileQuery = useQuery({ queryKey: ['profile-main'], queryFn: SettingsApi.profile });
   const workspaceBriefQuery = useQuery({
@@ -90,7 +105,7 @@ export default function GzhProfilePage() {
   });
 
   useEffect(() => {
-    document.title = '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b \u00b7 \u4e2a\u4eba\u4e2d\u5fc3';
+    document.title = '公众号运营助手 · 个人中心';
   }, []);
 
   useEffect(() => {
@@ -105,10 +120,50 @@ export default function GzhProfilePage() {
     }
   }, [paymentPage, paymentQuery.data]);
 
+  useEffect(() => {
+    const profile = profileQuery.data;
+    if (!profile) return;
+    if (!editingName) {
+      setDisplayNameDraft(profile.displayName || '');
+    }
+  }, [editingName, profileQuery.data]);
+
+  useEffect(() => {
+    const profile = profileQuery.data;
+    if (!profile) return;
+    updateAuthProfile({
+      displayName: profile.displayName || undefined,
+      mpAccountName: profile.mpAccountName || undefined,
+      avatarUrl: profile.avatarUrl || undefined,
+      aiModel: profile.aiModel,
+    });
+  }, [profileQuery.data]);
+
   const updateModelMutation = useMutation({
     mutationFn: async (model: string) => SettingsApi.updateModel(model),
     onSuccess: (_res, model) => {
       updateAuthProfile({ aiModel: model });
+      void profileQuery.refetch();
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: UpdateUserProfilePayload) => SettingsApi.updateProfile(payload),
+    onSuccess: (_res, payload) => {
+      if (payload.displayName !== undefined) {
+        updateAuthProfile({ displayName: payload.displayName || undefined });
+      }
+      setEditingName(false);
+      void profileQuery.refetch();
+      void workspaceBriefQuery.refetch();
+    },
+  });
+
+  const uploadAvatarMutation = useMutation({
+    mutationFn: async (file: File) => SettingsApi.uploadAvatar(file),
+    onSuccess: (avatarUrl) => {
+      setAvatarPreview(null);
+      updateAuthProfile({ avatarUrl });
       void profileQuery.refetch();
     },
   });
@@ -122,37 +177,120 @@ export default function GzhProfilePage() {
     },
   });
 
+  const saveDisplayName = () => {
+    const value = displayNameDraft.trim();
+    if (!value) {
+      return;
+    }
+    updateProfileMutation.mutate({ displayName: value });
+  };
+
+  const handlePickAvatar = () => {
+    avatarFileRef.current?.click();
+  };
+
+  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatarPreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+    uploadAvatarMutation.mutate(file);
+  };
+
   const profile = profileQuery.data;
-  const accountName = workspaceBriefQuery.data?.header.accountName || '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b';
+  const accountName = profile?.mpAccountName?.trim() || workspaceBriefQuery.data?.header.accountName || '公众号账号';
+  const userName = profile?.displayName?.trim() || '创作者';
   const balanceAmount = ((profile?.balanceCent ?? 0) + (profile?.freeQuotaCent ?? 0)) / 100;
   const hasMoreToken = useMemo(() => tokenLogs.length < (tokenQuery.data?.total ?? 0), [tokenLogs.length, tokenQuery.data?.total]);
   const hasMorePayment = useMemo(() => paymentOrders.length < (paymentQuery.data?.total ?? 0), [paymentOrders.length, paymentQuery.data?.total]);
+  const avatarText = userName.slice(0, 1).toUpperCase() || '创';
+  const currentAvatarUrl = avatarPreview || resolveAvatarUrl(profile?.avatarUrl);
 
   return (
     <div className="gzh-v2-root gzh-v2-profile">
       <div className="topbar">
         <div className="topbar-left">
           <div className="topbar-nav">
-            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'\u9996\u9875'}</button>
-            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>{'\u5de5\u4f5c\u53f0'}</button>
-            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>{'\u6587\u7ae0\u8be6\u60c5'}</button>
-            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>{'\u4e2a\u4eba\u4e2d\u5fc3'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_HOME)}>{'首页'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>{'工作台'}</button>
+            <button className="topbar-nav-item" type="button" onClick={() => navigate(RoutePath.GZH_DETAIL)}>{'文章详情'}</button>
+            <button className="topbar-nav-item active" type="button" onClick={() => navigate(RoutePath.GZH_PROFILE)}>{'个人中心'}</button>
           </div>
           <div className="topbar-account">{accountName}</div>
         </div>
         <div className="topbar-right">
           <button className="btn btn-ghost" type="button" onClick={() => navigate(RoutePath.GZH_WORKSPACE)}>
-            ← 返回工作台
+            {'返回工作台'}
           </button>
         </div>
       </div>
 
       <div className="profile-body">
         <div className="profile-header-card">
-          <div className="prof-avatar">T</div>
+          <input
+            ref={avatarFileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarFileChange}
+          />
+          <button className="prof-avatar clickable" type="button" onClick={handlePickAvatar}>
+            {currentAvatarUrl ? <img src={currentAvatarUrl} alt={userName} /> : avatarText}
+            <span className="prof-avatar-edit">{uploadAvatarMutation.isPending ? '上传中...' : '更换'}</span>
+          </button>
           <div>
-            <div className="prof-info-name">{maskPhone(profile?.phone)}</div>
-            <div className="prof-info-sub">已同步 {profile?.articleCount ?? 0} 篇文章 · {accountName}</div>
+            <div className="prof-info-name-row">
+              {editingName ? (
+                <input
+                  className="profile-input prof-name-input"
+                  type="text"
+                  maxLength={64}
+                  value={displayNameDraft}
+                  onChange={(event) => setDisplayNameDraft(event.target.value)}
+                  placeholder="请输入用户名称"
+                />
+              ) : (
+                <div className="prof-info-name">{userName}</div>
+              )}
+              {editingName ? (
+                <div className="prof-name-actions">
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={saveDisplayName}
+                    disabled={updateProfileMutation.isPending || !displayNameDraft.trim()}
+                  >
+                    {updateProfileMutation.isPending ? '保存中...' : '保存'}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => {
+                      setEditingName(false);
+                      setDisplayNameDraft(profile?.displayName || '');
+                    }}
+                    disabled={updateProfileMutation.isPending}
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button className="btn btn-ghost prof-edit-btn" type="button" onClick={() => setEditingName(true)}>
+                  编辑
+                </button>
+              )}
+            </div>
+            <div className="prof-info-sub">公众号：{accountName} · 已同步 {profile?.articleCount ?? 0} 篇文章 · 绑定手机 {maskPhone(profile?.phone)}</div>
+            {updateProfileMutation.error ? <div className="error-tip">{(updateProfileMutation.error as Error).message}</div> : null}
+            {uploadAvatarMutation.error ? <div className="error-tip">{(uploadAvatarMutation.error as Error).message}</div> : null}
           </div>
         </div>
 
@@ -171,7 +309,6 @@ export default function GzhProfilePage() {
                   <div className="model-check">✓</div>
                   <div className="model-name">{model.name}</div>
                   <div className="model-desc">{model.desc}</div>
-                  <div className="model-price">{model.price}</div>
                 </button>
               ))}
             </div>
@@ -192,7 +329,6 @@ export default function GzhProfilePage() {
                   onClick={() => setAmountCent(amount)}
                 >
                   <div>¥{amount / 100}</div>
-                  <div className="recharge-opt-sub">≈ {(amount * 1100).toLocaleString('zh-CN')} tokens</div>
                 </button>
               ))}
             </div>

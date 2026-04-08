@@ -18,6 +18,8 @@ import com.niuma.gzh.modules.article.repository.ArticleRepository;
 import com.niuma.gzh.modules.article.repository.ArticleSnapshotRepository;
 import com.niuma.gzh.modules.article.repository.SyncIssueLogRepository;
 import com.niuma.gzh.modules.article.service.ArticleService;
+import com.niuma.gzh.modules.user.model.entity.UserEntity;
+import com.niuma.gzh.modules.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -33,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +53,8 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     private static final int MAX_SYNC_ISSUE_MESSAGE_LENGTH = 255;
     private static final int MAX_SYNC_DETAIL_KEY_LENGTH = 32;
     private static final int MAX_SYNC_DETAIL_VALUE_LENGTH = 120;
+    private static final int MAX_SYNC_ACCOUNT_NAME_LENGTH = 128;
+    private static final Pattern TECHNICAL_MP_ID_PATTERN = Pattern.compile("^(gh_|wxid_)[a-z0-9_]{4,}$", Pattern.CASE_INSENSITIVE);
     private static final String SOURCE_FRIEND = "\u670b\u53cb\u5708";
     private static final String SOURCE_MESSAGE = "\u516c\u4f17\u53f7\u6d88\u606f";
     private static final String SOURCE_RECOMMEND = "\u63a8\u8350";
@@ -81,15 +86,18 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     private final ArticleRepository articleRepository;
     private final ArticleSnapshotRepository snapshotRepository;
     private final SyncIssueLogRepository syncIssueLogRepository;
+    private final UserRepository userRepository;
     private final JsonUtil jsonUtil;
 
     public ArticleServiceImpl(ArticleRepository articleRepository,
                               ArticleSnapshotRepository snapshotRepository,
                               SyncIssueLogRepository syncIssueLogRepository,
+                              UserRepository userRepository,
                               JsonUtil jsonUtil) {
         this.articleRepository = articleRepository;
         this.snapshotRepository = snapshotRepository;
         this.syncIssueLogRepository = syncIssueLogRepository;
+        this.userRepository = userRepository;
         this.jsonUtil = jsonUtil;
     }
 
@@ -97,6 +105,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Transactional(rollbackFor = Exception.class)
     public SyncResultVO syncArticles(SyncArticlesDTO dto) {
         Long userId = AuthContext.requiredUserId();
+        updateUserMpAccountNameFromSync(userId, dto);
         int newCount = 0;
         int updatedCount = 0;
         int snapshotSaved = 0;
@@ -661,6 +670,37 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             return trimmed;
         }
         return trimmed.substring(0, maxLength);
+    }
+
+    private void updateUserMpAccountNameFromSync(Long userId, SyncArticlesDTO dto) {
+        if (dto == null) {
+            return;
+        }
+        String accountName = sanitizeMpAccountName(dto.getAccountName());
+        if (accountName.isEmpty()) {
+            return;
+        }
+        UserEntity user = userRepository.findById(userId);
+        if (user == null) {
+            return;
+        }
+        String current = trimToMax(user.getMpAccountName(), MAX_SYNC_ACCOUNT_NAME_LENGTH);
+        if (accountName.equals(current)) {
+            return;
+        }
+        user.setMpAccountName(accountName);
+        userRepository.save(user);
+    }
+
+    private String sanitizeMpAccountName(String rawName) {
+        String normalized = trimToMax(rawName, MAX_SYNC_ACCOUNT_NAME_LENGTH);
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        if (TECHNICAL_MP_ID_PATTERN.matcher(normalized).matches()) {
+            return "";
+        }
+        return normalized;
     }
 
     private Map<String, Object> compactIssueDetails(Map<String, Object> details) {

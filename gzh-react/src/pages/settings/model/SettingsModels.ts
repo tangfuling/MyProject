@@ -3,12 +3,20 @@ import type { PageResult } from '../../../common/network/ApiResponse';
 export type UserProfile = {
   id: number;
   phone: string;
+  displayName?: string;
+  mpAccountName?: string;
+  avatarUrl?: string;
   balanceCent: number;
   freeQuotaCent: number;
   aiModel: string;
   articleCount: number;
   lastSyncAt?: string;
   createdAt?: string;
+};
+
+export type UpdateUserProfilePayload = {
+  displayName?: string;
+  avatarUrl?: string;
 };
 
 export type TokenLog = {
