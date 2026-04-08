@@ -17,6 +17,10 @@ public class SyncArticlesDTO {
     @NotNull
     private List<SnapshotItem> snapshots = new ArrayList<>();
 
+    @Valid
+    @NotNull
+    private List<SyncIssueItem> syncIssues = new ArrayList<>();
+
     @Data
     public static class ArticleItem {
         @NotNull
@@ -44,5 +48,18 @@ public class SyncArticlesDTO {
         private Integer avgReadTimeSec;
         private Map<String, Integer> trafficSources;
         private Integer newFollowers;
+    }
+
+    @Data
+    public static class SyncIssueItem {
+        private String syncSessionId;
+        @NotNull
+        private String issueType;
+        private String stage;
+        private String wxArticleId;
+        private String issueCode;
+        private String issueMessage;
+        private Map<String, Object> details;
+        private String occurredAt;
     }
 }

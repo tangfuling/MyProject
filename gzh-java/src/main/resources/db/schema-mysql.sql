@@ -70,6 +70,26 @@ CREATE TABLE IF NOT EXISTS gzh_article_snapshot (
     CONSTRAINT fk_snapshot_article FOREIGN KEY (article_id) REFERENCES gzh_article(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章快照表';
 
+CREATE TABLE IF NOT EXISTS gzh_sync_issue_log (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    sync_session_id VARCHAR(64) NOT NULL DEFAULT '' COMMENT '同步会话ID',
+    issue_type VARCHAR(32) NOT NULL COMMENT '问题类型',
+    stage VARCHAR(32) NOT NULL DEFAULT '' COMMENT '阶段',
+    wx_article_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT '微信文章ID',
+    issue_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT '问题码',
+    issue_message VARCHAR(255) NOT NULL DEFAULT '' COMMENT '问题描述',
+    details_json TEXT NULL COMMENT '补充信息JSON',
+    event_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '事件发生时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
+    PRIMARY KEY (id),
+    KEY idx_sync_issue_user_time (user_id, event_time),
+    KEY idx_sync_issue_session (user_id, sync_session_id, created_at),
+    KEY idx_sync_issue_article (user_id, wx_article_id, created_at),
+    CONSTRAINT fk_sync_issue_user FOREIGN KEY (user_id) REFERENCES gzh_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='同步异常日志表';
+
 CREATE TABLE IF NOT EXISTS gzh_analysis_report (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
     user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',

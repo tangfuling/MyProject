@@ -45,6 +45,8 @@
   const LIST_PAGE_INTERVAL_MS = 2500;
   const LIST_PAGE_JITTER_MS = 900;
   const METRICS_LOOKBACK_DAYS = 45;
+  const MAX_SYNC_ISSUES_PER_RUN = 120;
+  const MAX_SYNC_ISSUES_PER_UPLOAD = 40;
   const DEFAULT_SYNC_RANGE_CODE = '30d';
   const SYNC_RANGE_OPTIONS = [
     { code: '30d', label: '最近30天', days: 30 },
@@ -62,10 +64,16 @@
   let lastAutoSyncAuthToken = '';
   let zeroMetricsLogCount = 0;
   let zeroTrafficSourceLogCount = 0;
+  let suspiciousTrafficSourceLogCount = 0;
   let metricsPayloadParseWarnCount = 0;
   let trafficProbeLogCount = 0;
   let publishListParseHintCount = 0;
   const articlePageCache = new Map();
+  const syncIssueState = {
+    sessionId: '',
+    queue: [],
+    dedupe: new Set(),
+  };
   const mpFreqHitTimes = [];
   let lastMpFetchAt = 0;
   let mpCooldownUntil = 0;
@@ -1217,6 +1225,113 @@
     safeLog('warn', message, payload);
   }
 
+  function safeTrimText(value, maxLen = 255) {
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return '';
+    }
+    if (!Number.isFinite(Number(maxLen)) || maxLen <= 0 || text.length <= maxLen) {
+      return text;
+    }
+    return text.slice(0, maxLen);
+  }
+
+  function buildSyncIssueSessionId() {
+    const timePart = Date.now().toString(36);
+    const randPart = Math.random().toString(36).slice(2, 8);
+    return `${timePart}${randPart}`;
+  }
+
+  function beginSyncIssueSession() {
+    syncIssueState.sessionId = buildSyncIssueSessionId();
+    syncIssueState.queue = [];
+    syncIssueState.dedupe = new Set();
+  }
+
+  function clearSyncIssueSession() {
+    syncIssueState.sessionId = '';
+    syncIssueState.queue = [];
+    syncIssueState.dedupe = new Set();
+  }
+
+  function takeSyncIssueBatch(limit = MAX_SYNC_ISSUES_PER_UPLOAD) {
+    const max = Math.max(0, Number(limit || 0));
+    if (max <= 0 || syncIssueState.queue.length <= 0) {
+      return [];
+    }
+    return syncIssueState.queue.splice(0, Math.min(max, syncIssueState.queue.length));
+  }
+
+  function pushSyncIssueBatchBack(items) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return;
+    }
+    syncIssueState.queue = [...items, ...syncIssueState.queue].slice(0, MAX_SYNC_ISSUES_PER_RUN);
+  }
+
+  function compactSyncIssueDetails(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+    const detail = {};
+    const putNumber = (key) => {
+      const num = Number(payload[key]);
+      if (Number.isFinite(num)) {
+        detail[key] = num;
+      }
+    };
+    const putText = (key, maxLen = 80) => {
+      const value = safeTrimText(payload[key], maxLen);
+      if (value) {
+        detail[key] = value;
+      }
+    };
+
+    putNumber('readCount');
+    putNumber('sendCount');
+    putNumber('trafficTotal');
+    putNumber('sceneItemCount');
+    putNumber('parseScore');
+    putNumber('status');
+    putNumber('ret');
+    putNumber('intervalMs');
+    putNumber('index');
+    putText('phase', 32);
+    putText('source', 32);
+
+    return Object.keys(detail).length > 0 ? detail : null;
+  }
+
+  function reportSyncIssue(issueType, stage, payload = null) {
+    if (!syncIssueState.sessionId || !issueType) {
+      return;
+    }
+    if (syncIssueState.queue.length >= MAX_SYNC_ISSUES_PER_RUN) {
+      return;
+    }
+    const type = safeTrimText(String(issueType || '').toLowerCase(), 32);
+    const safeStage = safeTrimText(stage || '', 32);
+    const wxArticleId = safeTrimText(payload?.wxArticleId || payload?.msgId || '', 128);
+    const issueCode = safeTrimText(payload?.code || payload?.ret || payload?.status || '', 64);
+    const issueMessage = safeTrimText(payload?.message || payload?.reason || '', 200);
+    const dedupeKey = `${type}|${safeStage}|${wxArticleId}|${issueCode}|${issueMessage}`;
+    if (syncIssueState.dedupe.has(dedupeKey)) {
+      return;
+    }
+    syncIssueState.dedupe.add(dedupeKey);
+
+    syncIssueState.queue.push({
+      syncSessionId: syncIssueState.sessionId,
+      issueType: type || 'unknown',
+      stage: safeStage,
+      wxArticleId,
+      issueCode,
+      issueMessage,
+      details: compactSyncIssueDetails(payload),
+      occurredAt: new Date().toISOString(),
+    });
+  }
+
   function buildSnapshotPayload(article, metrics) {
     if (!article || !metrics) {
       return null;
@@ -1269,7 +1384,7 @@
     return /40101|unauthorized|not logged|token/i.test(message);
   }
 
-  async function uploadSyncChunk(apiBase, authToken, articles, snapshots) {
+  async function uploadSyncChunk(apiBase, authToken, articles, snapshots, syncIssues = []) {
     const proxyResponse = await proxyFetchJson(`${apiBase}/sync/articles`, {
       method: 'POST',
       headers: {
@@ -1279,6 +1394,7 @@
       body: JSON.stringify({
         articles: Array.isArray(articles) ? articles : [],
         snapshots: Array.isArray(snapshots) ? snapshots : [],
+        syncIssues: Array.isArray(syncIssues) ? syncIssues : [],
       }),
     });
 
@@ -1325,6 +1441,33 @@
     }
     STATE.syncing = true;
     updateLauncherState();
+    let apiBase = API_BASE_URL;
+    let authToken = '';
+    const flushSyncIssuesBestEffort = async () => {
+      if (!authToken || syncIssueState.queue.length <= 0) {
+        return;
+      }
+      let guard = 0;
+      while (syncIssueState.queue.length > 0 && guard < 8) {
+        guard += 1;
+        const issueBatch = takeSyncIssueBatch(MAX_SYNC_ISSUES_PER_UPLOAD);
+        if (issueBatch.length === 0) {
+          return;
+        }
+        try {
+          await uploadSyncChunk(apiBase, authToken, [], [], issueBatch);
+        } catch (error) {
+          pushSyncIssueBatchBack(issueBatch);
+          if (guard <= 2) {
+            safeLog('warn', 'flush sync issues failed', {
+              reason: error?.message || String(error),
+              issueBatchSize: issueBatch.length,
+            });
+          }
+          return;
+        }
+      }
+    };
     try {
       const token = parseTokenFromUrl();
       if (!token) {
@@ -1337,8 +1480,8 @@
       }
 
       const storage = await getStorage(['gzhAuthToken', 'gzhSyncedArticleIds']);
-      const authToken = storage.gzhAuthToken;
-      const apiBase = API_BASE_URL;
+      authToken = storage.gzhAuthToken;
+      apiBase = API_BASE_URL;
       const syncedArticleIds = storage.gzhSyncedArticleIds || {};
 
       latestAuthToken = authToken || '';
@@ -1351,6 +1494,8 @@
         });
         return;
       }
+
+      beginSyncIssueSession();
 
       const syncRangeCode = normalizeSyncRangeCode(selectedSyncRangeCode);
       const syncRangeDays = syncRangeDaysByCode(syncRangeCode);
@@ -1429,7 +1574,8 @@
       };
 
       const flushPendingUploads = async (index, total) => {
-        if (pendingSyncItems.length === 0) {
+        const issueBatch = takeSyncIssueBatch(MAX_SYNC_ISSUES_PER_UPLOAD);
+        if (pendingSyncItems.length === 0 && issueBatch.length === 0) {
           return true;
         }
 
@@ -1446,7 +1592,8 @@
             apiBase,
             authToken,
             pendingSyncItems,
-            pendingSnapshots
+            pendingSnapshots,
+            issueBatch
           );
           newArticles += Number(uploadResult.newArticles || 0);
           updatedArticles += Number(uploadResult.updatedArticles || 0);
@@ -1471,14 +1618,23 @@
               failedUpload,
               metricsRequestIntervalMs,
               batchSize: pendingSyncItems.length,
+              issueBatchSize: issueBatch.length,
             });
           }
         } catch (error) {
+          pushSyncIssueBatchBack(issueBatch);
           const uploadReason = error?.message || String(error);
           if (!firstUploadError) {
             firstUploadError = uploadReason;
           }
           if (isUnauthorizedUploadError(error)) {
+            reportSyncIssue('upload_unauthorized', 'upload', {
+              wxArticleId: pendingArticleIds[0] || '',
+              code: error?.code || error?.status || '',
+              status: error?.status || 0,
+              message: uploadReason,
+              index,
+            });
             notifyState({
               stage: 'need_login_web',
               message: 'Web auth expired, please login again and retry sync.',
@@ -1495,6 +1651,13 @@
             });
             return false;
           }
+          reportSyncIssue('upload_failed', 'upload', {
+            wxArticleId: pendingArticleIds[0] || '',
+            code: error?.code || error?.status || '',
+            status: error?.status || 0,
+            message: uploadReason,
+            index,
+          });
           failedUpload += pendingSyncItems.length;
           if (failedUpload <= 10) {
             safeLog('warn', 'upload failed', {
@@ -1518,11 +1681,19 @@
       };
 
       const stopForFreqLimit = async () => {
+        reportSyncIssue('mp_freq_limit', 'fetch_detail', {
+          message: 'sync stopped by freq protection',
+          readCount: 0,
+          sendCount: 0,
+        });
         if (pendingSyncItems.length > 0) {
           const flushed = await flushPendingUploads(processedArticles, articles.length);
           if (!flushed) {
             return;
           }
+        }
+        if (syncIssueState.queue.length > 0) {
+          await flushPendingUploads(processedArticles, articles.length);
         }
         const nowMs = Date.now();
         const cooldownMs = Math.max(0, mpCooldownUntil - nowMs);
@@ -1633,6 +1804,12 @@
               return;
             }
             failedMetrics += 1;
+            reportSyncIssue('metrics_fetch_failed', 'fetch_detail', {
+              wxArticleId: article?.wxArticleId ?? '',
+              message: metricsError?.message || String(metricsError),
+              intervalMs: metricsRequestIntervalMs,
+              index,
+            });
             if (failedMetrics <= 5) {
               safeLog('warn', 'metrics fetch failed', {
                 index,
@@ -1653,6 +1830,11 @@
           if (!contentResult.ok) {
             const error = contentResult.error;
             failedContent += 1;
+            reportSyncIssue('content_fetch_failed', 'fetch_detail', {
+              wxArticleId: article?.wxArticleId ?? '',
+              message: error?.message || String(error),
+              index,
+            });
             if (failedContent <= 5) {
               safeLog('warn', 'content fetch failed', {
                 index,
@@ -1694,6 +1876,15 @@
           if (!continueSync) {
             return;
           }
+        }
+      }
+
+      let issueFlushGuard = 0;
+      while (syncIssueState.queue.length > 0 && issueFlushGuard < 8) {
+        issueFlushGuard += 1;
+        const continueSync = await flushPendingUploads(processedArticles, articles.length);
+        if (!continueSync) {
+          return;
         }
       }
 
@@ -1760,6 +1951,10 @@
       });
     } catch (error) {
       if (error?.isFreqLimited) {
+        reportSyncIssue('mp_freq_limit', 'sync_run', {
+          message: error.message || '频控触发',
+        });
+        await flushSyncIssuesBestEffort();
         const cooldownMs = Math.max(0, mpCooldownUntil - Date.now());
         const cooldownMinutes = Math.max(1, Math.ceil(cooldownMs / (60 * 1000)));
         notifyState({
@@ -1768,9 +1963,14 @@
           progress: 0,
         });
       } else {
+        reportSyncIssue('sync_unhandled_error', 'sync_run', {
+          message: error?.message || String(error),
+        });
+        await flushSyncIssuesBestEffort();
         notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
       }
     } finally {
+      clearSyncIssueSession();
       STATE.syncing = false;
       updateLauncherState();
     }
@@ -1811,6 +2011,11 @@
           status: response.status,
           bodyHead: String(text).slice(0, 180),
         });
+        reportSyncIssue('list_parse_error', 'fetch_list', {
+          status: response.status,
+          message: 'appmsgpublish response not json',
+          index: begin,
+        });
         throw new Error('读取文章列表失败：接口返回格式异常');
       }
 
@@ -1819,12 +2024,27 @@
       if (ret !== 0) {
         safeLog('warn', 'appmsgpublish returned non-zero ret', { ret, errMsg, begin });
         if (isFreqControlReason(errMsg)) {
+          reportSyncIssue('list_freq_limited', 'fetch_list', {
+            ret,
+            message: errMsg || 'list freq control',
+            index: begin,
+          });
           noteMpFreqHit(`publish-list-ret:${ret}`);
           throw createFreqLimitedError('读取文章列表触发频控，请稍后重试');
         }
         if (ret === 200013 || /invalid|expired|登录|token/i.test(errMsg)) {
+          reportSyncIssue('list_login_expired', 'fetch_list', {
+            ret,
+            message: errMsg || 'login expired',
+            index: begin,
+          });
           throw new Error('微信后台登录已过期，请刷新页面重新登录后再同步');
         }
+        reportSyncIssue('list_api_error', 'fetch_list', {
+          ret,
+          message: errMsg || 'list api error',
+          index: begin,
+        });
         throw new Error(`读取文章列表失败(${ret})：${errMsg || '未知错误'}`);
       }
 
@@ -2965,41 +3185,43 @@
     return result;
   }
 
-  function applyTrafficSourceByLabel(target, rawLabel, rawCount) {
-    const count = Number(rawCount || 0);
+  function sourceKeyByLabel(rawLabel) {
     const label = String(rawLabel || '').trim();
-    if (!label || !Number.isFinite(count) || count <= 0 || !target) {
-      return false;
+    if (!label) {
+      return '';
     }
     if (label.includes('朋友圈')) {
-      target.朋友圈 += count;
-      return true;
+      return '朋友圈';
     }
     if (label.includes('公众号消息') || label.includes('公众号通知') || label.includes('订阅')) {
-      target.公众号消息 += count;
-      return true;
+      return '公众号消息';
     }
     if (label.includes('推荐') || label.includes('看一看')) {
-      target.推荐 += count;
-      return true;
+      return '推荐';
     }
-    if (label.includes('公众号主页') || label.includes('主页') || label.includes('资料页')) {
-      target.公众号主页 += count;
-      return true;
+    if (label.includes('公众号主页') || label.includes('主页') || label.includes('资料页') || label.includes('历史消息')) {
+      return '公众号主页';
     }
-    if (label.includes('聊天') || label.includes('会话') || label.includes('好友转发')) {
-      target.聊天会话 += count;
-      return true;
+    if (label.includes('聊天') || label.includes('会话') || label.includes('好友转发') || label.includes('私聊')) {
+      return '聊天会话';
     }
-    if (label.includes('搜')) {
-      target.搜一搜 += count;
-      return true;
+    if (label.includes('搜') || label.includes('搜索')) {
+      return '搜一搜';
     }
     if (label.includes('其它') || label.includes('其他')) {
-      target.其它 += count;
-      return true;
+      return '其它';
     }
-    return false;
+    return '';
+  }
+
+  function applyTrafficSourceByLabel(target, rawLabel, rawCount) {
+    const count = Number(rawCount || 0);
+    const sourceKey = sourceKeyByLabel(rawLabel);
+    if (!sourceKey || !Number.isFinite(count) || count <= 0 || !target) {
+      return false;
+    }
+    target[sourceKey] = Number(target[sourceKey] || 0) + count;
+    return true;
   }
 
   function createEmptyTrafficSources() {
@@ -3012,110 +3234,6 @@
       搜一搜: 0,
       其它: 0,
     };
-  }
-
-  function extractSceneMetricCount(item) {
-    if (!item || typeof item !== 'object') {
-      return 0;
-    }
-    const strong = findMaxNumberByKeys(item, [
-      'int_page_read_user',
-      'read_uv',
-      'read_num',
-      'read_count',
-      'int_page_read_count',
-      'user_count',
-      'userCount',
-      'source_read_user',
-      'source_read_uv',
-      'source_read_num',
-      'scene_read_uv',
-      'scene_read_num',
-      'scene_read_count',
-      'from_read_user',
-      'from_read_uv',
-      'from_read_num',
-      'uv',
-      'pv',
-      'int_page_read_count',
-      'int_page_read_num',
-    ]);
-    if (Number.isFinite(strong) && strong > 0) {
-      return strong;
-    }
-
-    let best = 0;
-    const queue = [item];
-    const visited = new Set();
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || typeof current !== 'object') {
-        continue;
-      }
-      if (visited.has(current)) {
-        continue;
-      }
-      visited.add(current);
-      if (Array.isArray(current)) {
-        current.forEach((one) => queue.push(one));
-        continue;
-      }
-      Object.entries(current).forEach(([key, value]) => {
-        if (value && typeof value === 'object') {
-          queue.push(value);
-        }
-        const lower = String(key || '').toLowerCase();
-        if (!/(read|user|uv|pv|count|cnt|num|value)/.test(lower)) {
-          return;
-        }
-        if (/(scene|desc|name|id|idx|index|rank|ratio|percent|rate|time|date|day|hour|min|week|month|year|title|type|tag|share|like|comment|fav|save|follow|send)/.test(lower)) {
-          return;
-        }
-        const num = toLooseNumber(value);
-        if (!Number.isFinite(num) || num <= 0) {
-          return;
-        }
-        if (num > best) {
-          best = num;
-        }
-      });
-    }
-    if (best > 0) {
-      return best;
-    }
-
-    const weak = findFirstNumberByKeys(item, ['count', 'value', 'num']);
-    return Number.isFinite(weak) && weak > 0 ? weak : 0;
-  }
-
-  function buildTrafficSourcesFromSceneItems(sceneItems) {
-    const sourceMap = createEmptyTrafficSources();
-    if (!Array.isArray(sceneItems) || sceneItems.length === 0) {
-      return sourceMap;
-    }
-
-    sceneItems.forEach((item) => {
-      const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
-      const sceneDesc = String(
-        item.scene_desc
-          ?? item.sceneDesc
-          ?? item.scene_name
-          ?? item.sceneName
-          ?? item.source_name
-          ?? item.sourceName
-          ?? ''
-      ).trim();
-      const count = extractSceneMetricCount(item);
-      if (!Number.isFinite(count) || count <= 0) {
-        return;
-      }
-      if (applyTrafficSourceByLabel(sourceMap, sceneDesc, count)) {
-        return;
-      }
-      addTrafficSourceByScene(sourceMap, scene, count);
-    });
-
-    return sourceMap;
   }
 
   function sourceKeyByScene(scene) {
@@ -3141,7 +3259,248 @@
     if (sceneId === 7) {
       return '搜一搜';
     }
-    return '其它';
+    if (sceneId === 5) {
+      return '其它';
+    }
+    return '';
+  }
+
+  function normalizeAliasKey(key) {
+    return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function buildAliasSet(keys) {
+    const set = new Set();
+    (keys || []).forEach((key) => {
+      const lower = String(key || '').toLowerCase();
+      set.add(lower);
+      set.add(normalizeAliasKey(lower));
+    });
+    return set;
+  }
+
+  const SCENE_COUNT_STRONG_ALIAS_SET = buildAliasSet([
+    'int_page_read_user',
+    'intPageReadUser',
+    'read_uv',
+    'readUv',
+    'read_num',
+    'readNum',
+    'read_count',
+    'readCount',
+    'int_page_read_count',
+    'intPageReadCount',
+    'int_page_read_num',
+    'intPageReadNum',
+    'source_read_user',
+    'sourceReadUser',
+    'source_read_uv',
+    'sourceReadUv',
+    'source_read_num',
+    'sourceReadNum',
+    'scene_read_uv',
+    'sceneReadUv',
+    'scene_read_num',
+    'sceneReadNum',
+    'scene_read_count',
+    'sceneReadCount',
+    'from_read_user',
+    'fromReadUser',
+    'from_read_uv',
+    'fromReadUv',
+    'from_read_num',
+    'fromReadNum',
+    'readuser',
+    'readuv',
+    'readcount',
+  ]);
+
+  const SCENE_COUNT_WEAK_ALIAS_SET = buildAliasSet([
+    'user_count',
+    'userCount',
+    'uv',
+    'pv',
+    'count',
+  ]);
+
+  const SCENE_RATIO_ALIAS_SET = buildAliasSet([
+    'ratio',
+    'read_ratio',
+    'readRatio',
+    'scene_ratio',
+    'sceneRatio',
+    'rate',
+    'read_rate',
+    'readRate',
+    'percent',
+    'percentage',
+    'read_percent',
+    'readPercent',
+    'read_percentage',
+    'readPercentage',
+    'pct',
+  ]);
+
+  const SCENE_METRIC_CONTAINER_KEYS = new Set([
+    'data',
+    'detail',
+    'detaildata',
+    'ext',
+    'info',
+    'item',
+    'metric',
+    'metrics',
+    'source',
+    'stat',
+    'stats',
+    'summary',
+  ]);
+
+  function maxNumberByAliasShallow(target, aliasSet) {
+    if (!target || typeof target !== 'object' || !aliasSet || aliasSet.size === 0) {
+      return 0;
+    }
+    let maxValue = 0;
+    Object.entries(target).forEach(([key, value]) => {
+      if (value && typeof value === 'object') {
+        return;
+      }
+      const lower = String(key || '').toLowerCase();
+      if (!aliasSet.has(lower) && !aliasSet.has(normalizeAliasKey(lower))) {
+        return;
+      }
+      const num = toLooseNumber(value);
+      if (!Number.isFinite(num) || num <= 0) {
+        return;
+      }
+      maxValue = Math.max(maxValue, num);
+    });
+    return Number(maxValue || 0);
+  }
+
+  function collectSceneMetricContainers(item) {
+    if (!item || typeof item !== 'object') {
+      return [];
+    }
+    const containers = [item];
+    Object.entries(item).forEach(([key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return;
+      }
+      if (!SCENE_METRIC_CONTAINER_KEYS.has(normalizeAliasKey(key))) {
+        return;
+      }
+      containers.push(value);
+    });
+    return containers;
+  }
+
+  function extractSceneMetricCount(item) {
+    if (!item || typeof item !== 'object') {
+      return 0;
+    }
+    const containers = collectSceneMetricContainers(item);
+    let strongMax = 0;
+    containers.forEach((one) => {
+      strongMax = Math.max(strongMax, maxNumberByAliasShallow(one, SCENE_COUNT_STRONG_ALIAS_SET));
+    });
+    if (strongMax > 0) {
+      return strongMax;
+    }
+
+    let weakMax = 0;
+    containers.forEach((one) => {
+      weakMax = Math.max(weakMax, maxNumberByAliasShallow(one, SCENE_COUNT_WEAK_ALIAS_SET));
+    });
+    if (weakMax > 1) {
+      return weakMax;
+    }
+    return 0;
+  }
+
+  function extractSceneMetricRatio(item) {
+    if (!item || typeof item !== 'object') {
+      return 0;
+    }
+    const containers = collectSceneMetricContainers(item);
+    let rawRatio = 0;
+    containers.forEach((one) => {
+      rawRatio = Math.max(rawRatio, maxNumberByAliasShallow(one, SCENE_RATIO_ALIAS_SET));
+    });
+    if (!Number.isFinite(rawRatio) || rawRatio <= 0) {
+      return 0;
+    }
+    if (rawRatio > 1 && rawRatio <= 100) {
+      return rawRatio / 100;
+    }
+    if (rawRatio > 100 && rawRatio <= 10000) {
+      return rawRatio / 10000;
+    }
+    if (rawRatio > 10000) {
+      return 0;
+    }
+    return rawRatio;
+  }
+
+  function buildTrafficSourcesFromSceneItems(sceneItems, totalRead = 0) {
+    const sourceMap = createEmptyTrafficSources();
+    const sourceRatio = createEmptyTrafficSources();
+    if (!Array.isArray(sceneItems) || sceneItems.length === 0) {
+      return sourceMap;
+    }
+
+    sceneItems.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        return;
+      }
+      const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
+      const sceneDesc = String(
+        item.scene_desc
+          ?? item.sceneDesc
+          ?? item.scene_name
+          ?? item.sceneName
+          ?? item.source_name
+          ?? item.sourceName
+          ?? ''
+      ).trim();
+      const sourceKey = sourceKeyByLabel(sceneDesc) || sourceKeyByScene(scene);
+      if (!sourceKey) {
+        return;
+      }
+
+      const count = extractSceneMetricCount(item);
+      if (Number.isFinite(count) && count > 0) {
+        sourceMap[sourceKey] = Number(sourceMap[sourceKey] || 0) + count;
+        return;
+      }
+
+      const ratio = extractSceneMetricRatio(item);
+      if (!Number.isFinite(ratio) || ratio <= 0) {
+        return;
+      }
+      sourceRatio[sourceKey] = Math.max(Number(sourceRatio[sourceKey] || 0), ratio);
+    });
+
+    if (trafficSourcesTotal(sourceMap) > 0) {
+      return sourceMap;
+    }
+
+    const ratioTotal = Object.values(sourceRatio).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    if (ratioTotal > 0 && Number(totalRead || 0) > 0) {
+      const normalizedRatioTotal = ratioTotal > 1.2 ? ratioTotal : 1;
+      Object.entries(sourceRatio).forEach(([key, value]) => {
+        const ratio = Number(value || 0);
+        if (!Number.isFinite(ratio) || ratio <= 0) {
+          return;
+        }
+        const estimate = Math.round((Number(totalRead || 0) * ratio) / normalizedRatioTotal);
+        if (estimate > 0) {
+          sourceMap[key] = estimate;
+        }
+      });
+    }
+
+    return sourceMap;
   }
 
   function addTrafficSourceByScene(target, scene, rawCount) {
@@ -3167,6 +3526,48 @@
     }, 0);
   }
 
+  function trafficSourceNonZeroCount(sourceMap) {
+    if (!sourceMap || typeof sourceMap !== 'object') {
+      return 0;
+    }
+    return Object.values(sourceMap).reduce((count, value) => {
+      const one = toLooseNumber(value);
+      if (!Number.isFinite(one) || one <= 0) {
+        return count;
+      }
+      return count + 1;
+    }, 0);
+  }
+
+  function isSuspiciousTrafficDistribution(sourceMap, readCount, sceneItemCount = 0) {
+    const total = trafficSourcesTotal(sourceMap);
+    if (total <= 0) {
+      return false;
+    }
+    const nonZeroCount = trafficSourceNonZeroCount(sourceMap);
+    if (nonZeroCount <= 0) {
+      return true;
+    }
+
+    const read = Number(readCount || 0);
+    if (read <= 0) {
+      return false;
+    }
+
+    if (nonZeroCount <= 1) {
+      if (sceneItemCount >= 6 && read >= 20) {
+        return true;
+      }
+      if (read >= 20 && total <= Math.max(2, Math.round(read * 0.2))) {
+        return true;
+      }
+      if (read >= 20 && total >= Math.round(read * 1.8)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function buildTrafficDebug(root) {
     const sceneItems = collectSceneItems(root);
     return {
@@ -3175,35 +3576,65 @@
         scene: Number(item.scene ?? item.scene_id ?? item.source_scene),
         label: String(item.scene_desc ?? item.sceneDesc ?? item.scene_name ?? item.sceneName ?? item.source_name ?? item.sourceName ?? '').trim(),
         readNum: extractSceneMetricCount(item),
+        readRatio: extractSceneMetricRatio(item),
+        sourceKey: sourceKeyByLabel(
+          String(item.scene_desc ?? item.sceneDesc ?? item.scene_name ?? item.sceneName ?? item.source_name ?? item.sourceName ?? '').trim()
+        ) || sourceKeyByScene(Number(item.scene ?? item.scene_id ?? item.source_scene)),
         keys: safeObjectKeys(item).slice(0, 8),
       })),
     };
   }
 
-  function buildTrafficSources(root) {
-    const summaryItems = collectSceneItems(root?.articleSummaryData);
-    const bySummary = buildTrafficSourcesFromSceneItems(summaryItems);
-    if (trafficSourcesTotal(bySummary) > 0) {
-      return bySummary;
-    }
-
-    const direct = {
-      朋友圈: findFirstNumberByKeys(root, ['fromfeed', 'from_feed', 'from_friend', 'from_feed_read_user', 'from_feed_uv']),
-      公众号消息: findFirstNumberByKeys(root, ['frommsg', 'from_msg', 'from_subscription', 'from_msg_read_user', 'frommsg_read_user', 'from_msg_uv']),
-      推荐: findFirstNumberByKeys(root, ['fromrecommend', 'from_recommend', 'from_kandian', 'from_recommend_read_user', 'from_recommend_uv']),
-      公众号主页: findFirstNumberByKeys(root, ['fromhome', 'from_home', 'fromprofile', 'from_profile', 'from_home_read_user', 'from_profile_read_user']),
-      聊天会话: findFirstNumberByKeys(root, ['fromsession', 'from_session', 'fromchat', 'from_chat', 'from_session_read_user', 'from_chat_read_user']),
-      搜一搜: findFirstNumberByKeys(root, ['fromsogou', 'from_search', 'from_sogou', 'from_search_read_user']),
-      其它: findFirstNumberByKeys(root, ['fromother', 'from_other', 'from_other_read_user']),
+  function buildDirectTrafficSources(root) {
+    return {
+      朋友圈: findMaxNumberByKeys(root, ['fromfeed', 'from_feed', 'from_friend', 'from_feed_read_user', 'from_feed_uv']),
+      公众号消息: findMaxNumberByKeys(root, ['frommsg', 'from_msg', 'from_subscription', 'from_msg_read_user', 'frommsg_read_user', 'from_msg_uv']),
+      推荐: findMaxNumberByKeys(root, ['fromrecommend', 'from_recommend', 'from_kandian', 'from_recommend_read_user', 'from_recommend_uv']),
+      公众号主页: findMaxNumberByKeys(root, ['fromhome', 'from_home', 'fromprofile', 'from_profile', 'from_home_read_user', 'from_profile_read_user']),
+      聊天会话: findMaxNumberByKeys(root, ['fromsession', 'from_session', 'fromchat', 'from_chat', 'from_session_read_user', 'from_chat_read_user']),
+      搜一搜: findMaxNumberByKeys(root, ['fromsogou', 'from_search', 'from_sogou', 'from_search_read_user']),
+      其它: findMaxNumberByKeys(root, ['fromother', 'from_other', 'from_other_read_user']),
     };
+  }
 
-    const byScene = buildTrafficSourcesFromSceneItems(collectSceneItems(root));
-    const bySceneTotal = trafficSourcesTotal(byScene);
-    if (bySceneTotal > 0) {
-      return byScene;
+  function buildTrafficSources(root, totalRead = 0) {
+    const summaryItems = collectSceneItems(root?.articleSummaryData);
+    const detailItems = collectSceneItems(root?.detailData);
+    const allItems = collectSceneItems(root);
+    const direct = buildDirectTrafficSources(root);
+    const candidates = [
+      { kind: 'summary', sceneItemCount: summaryItems.length, map: buildTrafficSourcesFromSceneItems(summaryItems, totalRead) },
+      { kind: 'detail', sceneItemCount: detailItems.length, map: buildTrafficSourcesFromSceneItems(detailItems, totalRead) },
+      { kind: 'scene', sceneItemCount: allItems.length, map: buildTrafficSourcesFromSceneItems(allItems, totalRead) },
+      { kind: 'direct', sceneItemCount: 0, map: direct },
+    ];
+
+    let best = null;
+    candidates.forEach((candidate) => {
+      const total = trafficSourcesTotal(candidate.map);
+      if (total <= 0) {
+        return;
+      }
+      if (!best || total > best.total) {
+        best = { ...candidate, total };
+      }
+    });
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
+      const total = trafficSourcesTotal(candidate.map);
+      if (total <= 0) {
+        continue;
+      }
+      if (!isSuspiciousTrafficDistribution(candidate.map, totalRead, candidate.sceneItemCount)) {
+        return candidate.map;
+      }
     }
 
-    return trafficSourcesTotal(direct) > 0 ? direct : createEmptyTrafficSources();
+    if (best && Number(totalRead || 0) <= 0) {
+      return best.map;
+    }
+    return createEmptyTrafficSources();
   }
   function extractMetricsFromPayload(payload) {
     const articleData = parseStructuredData(payload.articleData) || {};
@@ -3221,22 +3652,31 @@
     ) || {};
 
     const root = { json: payload, articleData, articleDataNew, articleSummaryData, detailData, subsTransform };
+    const readCount = findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']);
+    const sendCount = findFirstNumberByKeys(root, ['send_uv']);
+    const shareCount = findFirstNumberByKeys(root, ['share_user', 'share_count', 'share_uv']);
+    const likeCount = findFirstNumberByKeys(root, ['like_num', 'like_cnt']);
+    const wowCount = findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']);
+    const commentCount = findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']);
+    const saveCount = findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']);
+    const newFollowers = findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']);
     const completionRateRaw = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
     const avgReadTimeRaw = findFirstNumberByKeys(root, ['avg_article_read_time', 'avg_read_time', 'avg_read_duration', 'read_time_avg']);
+    const trafficDebug = buildTrafficDebug(root);
     return {
-      readCount: findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']),
-      sendCount: findFirstNumberByKeys(root, ['send_uv']),
-      shareCount: findFirstNumberByKeys(root, ['share_user', 'share_count', 'share_uv']),
-      likeCount: findFirstNumberByKeys(root, ['like_num', 'like_cnt']),
-      wowCount: findFirstNumberByKeys(root, ['old_like_num', 'wow_num', 'zaikan_cnt']),
-      commentCount: findFirstNumberByKeys(root, ['comment_id_count', 'comment_cnt']),
-      saveCount: findFirstNumberByKeys(root, ['fav_num', 'save_count', 'collection_uv']),
+      readCount,
+      sendCount,
+      shareCount,
+      likeCount,
+      wowCount,
+      commentCount,
+      saveCount,
       completionRate: normalizeCompletionRate(completionRateRaw),
       avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeRaw),
-      newFollowers: findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']),
-      trafficSources: buildTrafficSources(root),
+      newFollowers,
+      trafficSources: buildTrafficSources(root, readCount),
       topKeys: safeObjectKeys(payload),
-      trafficDebug: buildTrafficDebug(root),
+      trafficDebug,
       parseScore: payloadQualityScore(payload),
     };
   }
@@ -3249,6 +3689,43 @@
       && metrics.wowCount === 0
       && metrics.commentCount === 0
       && metrics.saveCount === 0;
+  }
+
+  function sanitizeMetricsTraffic(metrics, probeContext = null) {
+    if (!metrics || typeof metrics !== 'object') {
+      return metrics;
+    }
+    const trafficSources = metrics.trafficSources || createEmptyTrafficSources();
+    const readCount = Number(metrics.readCount || 0);
+    const sceneItemCount = Number(metrics?.trafficDebug?.sceneItemCount || 0);
+    if (!isSuspiciousTrafficDistribution(trafficSources, readCount, sceneItemCount)) {
+      return metrics;
+    }
+    if (suspiciousTrafficSourceLogCount < 12) {
+      suspiciousTrafficSourceLogCount += 1;
+      safeLog('warn', 'traffic sources suspicious, reset to empty', {
+        ...(probeContext && typeof probeContext === 'object' ? probeContext : {}),
+        readCount,
+        sceneItemCount,
+        trafficTotal: trafficSourcesTotal(trafficSources),
+        nonZeroCount: trafficSourceNonZeroCount(trafficSources),
+        trafficSources,
+      });
+    }
+    reportSyncIssue('traffic_suspicious', 'metrics_parse', {
+      wxArticleId: probeContext?.wxArticleId || '',
+      message: 'traffic sources suspicious, reset to empty',
+      readCount,
+      sendCount: Number(metrics.sendCount || 0),
+      sceneItemCount,
+      trafficTotal: trafficSourcesTotal(trafficSources),
+      parseScore: Number(metrics.parseScore || 0),
+      phase: probeContext?.phase || '',
+    });
+    return {
+      ...metrics,
+      trafficSources: createEmptyTrafficSources(),
+    };
   }
 
   function parseArticleMetaFromHtml(html, fallbackUrl) {
@@ -3332,30 +3809,32 @@
     if (requestResult.ret !== 0) {
       const errMsg = responseErrMsg(requestResult.json);
       if (isFreqControlReason(errMsg)) {
+        reportSyncIssue('metrics_freq_limited', 'fetch_detail', {
+          wxArticleId: article?.wxArticleId ?? '',
+          ret: requestResult.ret,
+          message: errMsg || 'metrics freq control',
+        });
         noteMpFreqHit(`metrics-ret:${requestResult.ret}`);
         throw createFreqLimitedError('读取文章指标触发频控，请稍后重试');
       }
+      reportSyncIssue('metrics_api_error', 'fetch_detail', {
+        wxArticleId: article?.wxArticleId ?? '',
+        ret: requestResult.ret,
+        message: errMsg || 'metrics api error',
+      });
       throw new Error(`文章指标接口异常(${requestResult.ret})${errMsg ? `: ${errMsg}` : ''}`);
     }
     let metrics = extractMetricsFromPayload(requestResult.json);
     const metricsFromRaw = extractMetricsFromRawHtml(requestResult.raw);
     metrics = mergeMetricsByPositiveValue(metrics, metricsFromRaw);
-    if (trafficProbeLogCount < 30) {
-      safeWarnProbe('traffic probe parsed result', {
-        wxArticleId: article?.wxArticleId ?? '',
-        title: article?.title ?? '',
-        msgIdBase: currentMsgIdBase,
-        msgIndex,
-        usedPublishDate,
-        readCount: Number(metrics.readCount || 0),
-        sendCount: Number(metrics.sendCount || 0),
-        trafficTotal: trafficSourcesTotal(metrics.trafficSources),
-        trafficSources: metrics.trafficSources,
-        parseScore: Number(metrics.parseScore || 0),
-        topKeys: Array.isArray(metrics.topKeys) ? metrics.topKeys.slice(0, 12) : [],
-        trafficDebug: metrics.trafficDebug || null,
-      });
-    }
+    metrics = sanitizeMetricsTraffic(metrics, {
+      wxArticleId: article?.wxArticleId ?? '',
+      title: article?.title ?? '',
+      msgIdBase: currentMsgIdBase,
+      msgIndex,
+      usedPublishDate,
+      phase: 'initial',
+    });
 
     if (isCoreMetricsZero(metrics) && !resolvedFromArticlePage && article?.contentUrl) {
       const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
@@ -3363,10 +3842,17 @@
       if (resolved?.msgIdBase && resolved.publishDate) {
         const resolvedResult = await requestMetricsWithFallback(token, resolved.msgIdBase, msgIndex, resolved.publishDate).catch(() => null);
         if (resolvedResult && resolvedResult.ret === 0) {
-          const resolvedMetrics = mergeMetricsByPositiveValue(
+          const resolvedMetrics = sanitizeMetricsTraffic(mergeMetricsByPositiveValue(
             extractMetricsFromPayload(resolvedResult.json),
             extractMetricsFromRawHtml(resolvedResult.raw)
-          );
+          ), {
+            wxArticleId: article?.wxArticleId ?? '',
+            title: article?.title ?? '',
+            msgIdBase: resolved.msgIdBase || currentMsgIdBase,
+            msgIndex,
+            usedPublishDate: resolved.publishDate,
+            phase: 'resolve-article-page',
+          });
           if (!isCoreMetricsZero(resolvedMetrics)) {
             metrics = resolvedMetrics;
             currentMsgIdBase = resolved.msgIdBase;
@@ -3387,10 +3873,17 @@
         if (!oneResult || oneResult.ret !== 0) {
           continue;
         }
-        const oneMetrics = mergeMetricsByPositiveValue(
+        const oneMetrics = sanitizeMetricsTraffic(mergeMetricsByPositiveValue(
           extractMetricsFromPayload(oneResult.json),
           extractMetricsFromRawHtml(oneResult.raw)
-        );
+        ), {
+          wxArticleId: article?.wxArticleId ?? '',
+          title: article?.title ?? '',
+          msgIdBase,
+          msgIndex,
+          usedPublishDate: oneDate,
+          phase: 'publish-date-retry',
+        });
         if (!isCoreMetricsZero(oneMetrics)) {
           metrics = oneMetrics;
           usedPublishDate = oneDate;
@@ -3405,6 +3898,31 @@
       }
     }
 
+    metrics = sanitizeMetricsTraffic(metrics, {
+      wxArticleId: article?.wxArticleId ?? '',
+      title: article?.title ?? '',
+      msgIdBase: currentMsgIdBase,
+      msgIndex,
+      usedPublishDate,
+      phase: 'final',
+    });
+    if (trafficProbeLogCount < 30) {
+      safeWarnProbe('traffic probe parsed result', {
+        wxArticleId: article?.wxArticleId ?? '',
+        title: article?.title ?? '',
+        msgIdBase: currentMsgIdBase,
+        msgIndex,
+        usedPublishDate,
+        readCount: Number(metrics.readCount || 0),
+        sendCount: Number(metrics.sendCount || 0),
+        trafficTotal: trafficSourcesTotal(metrics.trafficSources),
+        trafficSources: metrics.trafficSources,
+        parseScore: Number(metrics.parseScore || 0),
+        topKeys: Array.isArray(metrics.topKeys) ? metrics.topKeys.slice(0, 12) : [],
+        trafficDebug: metrics.trafficDebug || null,
+      });
+    }
+
     if (zeroMetricsLogCount < 5 && isCoreMetricsZero(metrics)) {
       zeroMetricsLogCount += 1;
       safeLog('warn', 'metrics all zero', {
@@ -3416,6 +3934,15 @@
         usedPublishDate,
         resolvedFromArticlePage,
         topKeys: metrics.topKeys,
+      });
+    }
+    if (isCoreMetricsZero(metrics)) {
+      reportSyncIssue('metrics_all_zero', 'metrics_parse', {
+        wxArticleId: article?.wxArticleId ?? '',
+        message: 'all core metrics are zero',
+        readCount: Number(metrics.readCount || 0),
+        sendCount: Number(metrics.sendCount || 0),
+        parseScore: Number(metrics.parseScore || 0),
       });
     }
     if (zeroTrafficSourceLogCount < 8
@@ -3434,6 +3961,18 @@
         parseScore: metrics.parseScore,
         topKeys: metrics.topKeys,
         trafficDebug: metrics.trafficDebug,
+      });
+    }
+    if (!isCoreMetricsZero(metrics)
+      && Number(metrics.readCount || 0) > 0
+      && trafficSourcesTotal(metrics.trafficSources) <= 0) {
+      reportSyncIssue('traffic_all_zero_with_read', 'metrics_parse', {
+        wxArticleId: article?.wxArticleId ?? '',
+        message: 'traffic sources all zero with positive read',
+        readCount: Number(metrics.readCount || 0),
+        sendCount: Number(metrics.sendCount || 0),
+        sceneItemCount: Number(metrics?.trafficDebug?.sceneItemCount || 0),
+        parseScore: Number(metrics.parseScore || 0),
       });
     }
 

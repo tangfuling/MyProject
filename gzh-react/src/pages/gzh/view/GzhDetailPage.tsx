@@ -203,6 +203,7 @@ function recommendRateFromSummary(summary: Record<string, number>) {
   if (total <= 0) return 0;
   return ((normalized[SOURCE_RECOMMEND] || 0) * 100) / total;
 }
+
 function sampleTrendPoints(list: TrendPoint[], count = 6) {
   if (list.length === 0) {
     return [
@@ -420,7 +421,7 @@ export default function GzhDetailPage() {
           <div className="art-list-inner">
             {shownArticles.map((article, index) => {
               const recommendPercent = recommendRateByArticle(article);
-              const sources = buildSourceSegments(article.trafficSources, 3);
+              const sources = buildSourceSegments(article.trafficSources, SOURCE_ORDER.length);
               return (
                 <article key={article.id} className="art-card">
                   <div className="art-card-top">
@@ -436,24 +437,26 @@ export default function GzhDetailPage() {
                     <div className="stat-badge">分享 {fmtNum(article.shareCount)}</div>
                   </div>
 
-                  <div className="src-bar">
-                    {sources.map((source, sourceIndex) => (
-                      <div
-                        key={`${article.id}-seg-${sourceIndex}`}
-                        className="src-bar-seg"
-                        style={{ width: `${Math.max(4, source.percent)}%`, background: source.color }}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className="src-bar">
+                      {sources.map((source, sourceIndex) => (
+                        <div
+                          key={`${article.id}-seg-${sourceIndex}`}
+                          className="src-bar-seg"
+                          style={{ width: `${source.percent}%`, background: source.color }}
+                        />
+                      ))}
+                    </div>
 
-                  <div className="src-labels">
-                    {sources.map((source, sourceIndex) => (
-                      <div key={`${article.id}-label-${sourceIndex}`} className="src-label">
-                        <span className="src-dot" style={{ background: source.color }} />
-                        {source.label} {source.percent.toFixed(0)}%
-                      </div>
-                    ))}
-                  </div>
+                    <div className="src-labels">
+                      {sources.map((source, sourceIndex) => (
+                        <div key={`${article.id}-label-${sourceIndex}`} className="src-label">
+                          <span className="src-dot" style={{ background: source.color }} />
+                          {source.label} {source.percent.toFixed(1)}%
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 </article>
               );
             })}
@@ -623,29 +626,31 @@ export default function GzhDetailPage() {
 
           <div className="traffic-card">
             <div className="traffic-title">流量来源</div>
-            <div className="stacked-bar">
-              {trafficSegments.map((item, index) => (
-                <div
-                  key={`${item.key}-${index}`}
-                  className="stacked-seg"
-                  style={{
-                    width: `${item.percent}%`,
-                    background: item.color,
-                    color: item.color === '#D5DEEB' ? '#64748b' : '#fff',
-                  }}
-                >
-                  {item.percent.toFixed(0)}%
-                </div>
-              ))}
-            </div>
-            <div className="traffic-labels">
-              {trafficSegments.map((item, index) => (
-                <div key={`${item.label}-${index}`} className="traffic-label-item">
-                  <span className="traffic-dot" style={{ background: item.color }} />
-                  {item.label} {item.percent.toFixed(0)}%
-                </div>
-              ))}
-            </div>
+            <>
+              <div className="stacked-bar">
+                {trafficSegments.map((item, index) => (
+                  <div
+                    key={`${item.key}-${index}`}
+                    className="stacked-seg"
+                    style={{
+                      width: `${item.percent}%`,
+                      background: item.color,
+                      color: item.color === '#D5DEEB' ? '#64748b' : '#fff',
+                    }}
+                  >
+                    {item.percent.toFixed(1)}%
+                  </div>
+                ))}
+              </div>
+              <div className="traffic-labels">
+                {trafficSegments.map((item, index) => (
+                  <div key={`${item.label}-${index}`} className="traffic-label-item">
+                    <span className="traffic-dot" style={{ background: item.color }} />
+                    {item.label} {item.percent.toFixed(1)}%
+                  </div>
+                ))}
+              </div>
+            </>
           </div>
         </section>
       </div>

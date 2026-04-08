@@ -9,12 +9,14 @@ import com.niuma.gzh.common.util.RangeUtil;
 import com.niuma.gzh.modules.article.model.dto.SyncArticlesDTO;
 import com.niuma.gzh.modules.article.model.entity.ArticleEntity;
 import com.niuma.gzh.modules.article.model.entity.ArticleSnapshotEntity;
+import com.niuma.gzh.modules.article.model.entity.SyncIssueLogEntity;
 import com.niuma.gzh.modules.article.model.query.ArticleListQuery;
 import com.niuma.gzh.modules.article.model.vo.ArticleVO;
 import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.model.vo.SyncResultVO;
 import com.niuma.gzh.modules.article.repository.ArticleRepository;
 import com.niuma.gzh.modules.article.repository.ArticleSnapshotRepository;
+import com.niuma.gzh.modules.article.repository.SyncIssueLogRepository;
 import com.niuma.gzh.modules.article.service.ArticleService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -38,6 +40,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 public class ArticleServiceImpl extends BaseService implements ArticleService {
+    private static final int MAX_SYNC_ISSUES_PER_REQUEST = 120;
+    private static final int MAX_SYNC_ISSUE_DETAIL_KEYS = 8;
+    private static final int MAX_SYNC_SESSION_ID_LENGTH = 64;
+    private static final int MAX_SYNC_ISSUE_TYPE_LENGTH = 32;
+    private static final int MAX_SYNC_STAGE_LENGTH = 32;
+    private static final int MAX_SYNC_WX_ARTICLE_ID_LENGTH = 128;
+    private static final int MAX_SYNC_ISSUE_CODE_LENGTH = 64;
+    private static final int MAX_SYNC_ISSUE_MESSAGE_LENGTH = 255;
+    private static final int MAX_SYNC_DETAIL_KEY_LENGTH = 32;
+    private static final int MAX_SYNC_DETAIL_VALUE_LENGTH = 120;
     private static final String SOURCE_FRIEND = "\u670b\u53cb\u5708";
     private static final String SOURCE_MESSAGE = "\u516c\u4f17\u53f7\u6d88\u606f";
     private static final String SOURCE_RECOMMEND = "\u63a8\u8350";
@@ -68,13 +80,16 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
     private final ArticleRepository articleRepository;
     private final ArticleSnapshotRepository snapshotRepository;
+    private final SyncIssueLogRepository syncIssueLogRepository;
     private final JsonUtil jsonUtil;
 
     public ArticleServiceImpl(ArticleRepository articleRepository,
                               ArticleSnapshotRepository snapshotRepository,
+                              SyncIssueLogRepository syncIssueLogRepository,
                               JsonUtil jsonUtil) {
         this.articleRepository = articleRepository;
         this.snapshotRepository = snapshotRepository;
+        this.syncIssueLogRepository = syncIssueLogRepository;
         this.jsonUtil = jsonUtil;
     }
 
@@ -94,6 +109,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         long snapshotLikeTotal = 0;
         long snapshotFollowTotal = 0;
         int skippedDeletedArticle = 0;
+        int syncIssueSaved = 0;
 
         for (SyncArticlesDTO.ArticleItem item : dto.getArticles()) {
             if (shouldSkipArticle(item.getTitle())) {
@@ -191,10 +207,42 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             }
         }
 
+        List<SyncArticlesDTO.SyncIssueItem> syncIssues = dto.getSyncIssues() == null ? List.of() : dto.getSyncIssues();
+        int syncIssueLimit = Math.min(syncIssues.size(), MAX_SYNC_ISSUES_PER_REQUEST);
+        for (int i = 0; i < syncIssueLimit; i++) {
+            SyncArticlesDTO.SyncIssueItem issueItem = syncIssues.get(i);
+            if (issueItem == null || issueItem.getIssueType() == null || issueItem.getIssueType().isBlank()) {
+                continue;
+            }
+            SyncIssueLogEntity issueLog = new SyncIssueLogEntity();
+            issueLog.setUserId(userId);
+            issueLog.setSyncSessionId(trimToMax(issueItem.getSyncSessionId(), MAX_SYNC_SESSION_ID_LENGTH));
+            issueLog.setIssueType(trimToMax(issueItem.getIssueType(), MAX_SYNC_ISSUE_TYPE_LENGTH));
+            issueLog.setStage(trimToMax(issueItem.getStage(), MAX_SYNC_STAGE_LENGTH));
+            issueLog.setWxArticleId(trimToMax(issueItem.getWxArticleId(), MAX_SYNC_WX_ARTICLE_ID_LENGTH));
+            issueLog.setIssueCode(trimToMax(issueItem.getIssueCode(), MAX_SYNC_ISSUE_CODE_LENGTH));
+            issueLog.setIssueMessage(trimToMax(issueItem.getIssueMessage(), MAX_SYNC_ISSUE_MESSAGE_LENGTH));
+            Map<String, Object> compactDetails = compactIssueDetails(issueItem.getDetails());
+            issueLog.setDetailsJson(compactDetails.isEmpty() ? null : jsonUtil.toJson(compactDetails));
+            LocalDateTime eventTime = parseDateTime(issueItem.getOccurredAt());
+            issueLog.setEventTime(eventTime == null ? LocalDateTime.now() : eventTime);
+            syncIssueLogRepository.save(issueLog);
+            syncIssueSaved++;
+        }
+
         if (snapshotTrafficAllZeroWithRead > 0) {
             log.warn(
                 "[tfling] sync/articles traffic source anomaly summary userId={}, snapshotSaved={}, snapshotTrafficAllZeroWithRead={}, snapshotAllZero={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}, skippedDeletedArticle={}, snapshotMissedArticle={}",
                 userId, snapshotSaved, snapshotTrafficAllZeroWithRead, snapshotAllZero, snapshotReadTotal, snapshotSendTotal, snapshotShareTotal, snapshotLikeTotal, snapshotFollowTotal, skippedDeletedArticle, snapshotMissedArticle
+            );
+        }
+        if (syncIssueSaved > 0 || syncIssues.size() > MAX_SYNC_ISSUES_PER_REQUEST) {
+            log.warn(
+                "[tfling] sync/articles issue log summary userId={}, issueSaved={}, issueReceived={}, issueDropped={}",
+                userId,
+                syncIssueSaved,
+                syncIssues.size(),
+                Math.max(0, syncIssues.size() - MAX_SYNC_ISSUES_PER_REQUEST)
             );
         }
 
@@ -502,6 +550,53 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private String trimToMax(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (maxLength <= 0 || trimmed.length() <= maxLength) {
+            return trimmed;
+        }
+        return trimmed.substring(0, maxLength);
+    }
+
+    private Map<String, Object> compactIssueDetails(Map<String, Object> details) {
+        if (details == null || details.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> compact = new LinkedHashMap<>();
+        int kept = 0;
+        for (Map.Entry<String, Object> entry : details.entrySet()) {
+            if (kept >= MAX_SYNC_ISSUE_DETAIL_KEYS) {
+                break;
+            }
+            String key = trimToMax(entry.getKey(), MAX_SYNC_DETAIL_KEY_LENGTH);
+            if (key.isEmpty()) {
+                continue;
+            }
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            if (value instanceof Number || value instanceof Boolean) {
+                compact.put(key, value);
+                kept++;
+                continue;
+            }
+            String textValue = trimToMax(String.valueOf(value), MAX_SYNC_DETAIL_VALUE_LENGTH);
+            if (textValue.isEmpty()) {
+                continue;
+            }
+            compact.put(key, textValue);
+            kept++;
+        }
+        return compact;
     }
 
     private double pctValue(double numerator, double denominator) {
