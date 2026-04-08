@@ -199,17 +199,70 @@ print(send_uv)
 | scene | 含义 | 统计归类 |
 |-------|------|----------|
 | 0 | 公众号消息 | 公众号消息 |
-| 1 | 聊天会话 | 好友转发 |
+| 1 | 聊天会话/转发 | 聊天会话 |
 | 2 | 朋友圈 | 朋友圈 |
-| 4 | 公众号主页 | 其他（合并） |
-| 5 | 其它 | 其他（合并） |
-| 6 | 推荐 | 推荐 |
-| 7 | 搜一搜 | 其他（合并） |
+| 4 | 公众号主页 | 公众号主页 |
+| 5 | 其它 | 其它 |
+| 6 | 推荐/看一看 | 推荐 |
+| 7 | 搜一搜 | 搜一搜 |
 | 9999 | 全部/当日总计 | 跳过 |
 
-> 合并规则：其他 = scene 4 + scene 5 + scene 7
+> 推荐人数 = scene6 的人数（或 `scene_desc` 包含“推荐/看一看”的人数）
 > 推荐占比 = scene6 / 所有scene总量（不含9999）
 > 朋友圈占比 = scene2 / 所有scene总量（不含9999）
+
+### 基于 detailpage curl 提取“推荐渠道”实操
+
+你提供的这类请求就是正确入口：
+
+```bash
+curl 'https://mp.weixin.qq.com/misc/appmsganalysis?action=detailpage&msgid={mid}_1&publish_date={YYYY-MM-DD}&type=int&pageVersion=1&token={token}&lang=zh_CN' \
+  -b '{cookie}' \
+  -H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+  -o analysis_detail.html
+```
+
+> 注意：`token`、`cookie` 属于敏感凭据，不要写入仓库或日志。
+
+提取推荐渠道（scene=6）示例（Python）：
+
+```python
+import json
+import re
+
+raw = open("analysis_detail.html", "r", encoding="utf-8").read()
+
+# 兼容 articleSummaryData: [...] 或 articleSummaryData = [...]
+m = re.search(r'articleSummaryData["\']?\s*[:=]\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*(?:,\s*detailData|,\s*base_resp|,\s*ret|;)', raw)
+if not m:
+    print({"recommend_count": 0, "reason": "articleSummaryData_not_found"})
+    raise SystemExit(0)
+
+summary = json.loads(m.group(1))
+if isinstance(summary, dict):
+    summary = summary.get("list") or summary.get("data") or []
+
+recommend_count = 0
+for item in (summary if isinstance(summary, list) else []):
+    scene = int(item.get("scene") or item.get("scene_id") or item.get("source_scene") or 0)
+    scene_desc = str(item.get("scene_desc") or item.get("sceneDesc") or "").strip()
+    count = int(
+        item.get("int_page_read_user")
+        or item.get("read_uv")
+        or item.get("read_num")
+        or item.get("user_count")
+        or item.get("count")
+        or 0
+    )
+    if scene == 6 or ("推荐" in scene_desc) or ("看一看" in scene_desc):
+        recommend_count += max(0, count)
+
+print({"recommend_count": recommend_count})
+```
+
+数据库落库建议（与现有口径一致）：
+- `traffic_sources_json` 中键 `推荐`
+- 独立列 `source_recommend_count`
 
 ### detailData — 用户画像
 

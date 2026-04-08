@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS gzh_article_snapshot (
     avg_read_time_sec INT NOT NULL DEFAULT 0 COMMENT '平均阅读时长(秒)',
     new_followers INT NOT NULL DEFAULT 0 COMMENT '新增关注',
     traffic_sources_json TEXT NULL COMMENT '流量来源JSON',
+    source_friend_count INT NOT NULL DEFAULT 0 COMMENT '来源-朋友圈',
+    source_message_count INT NOT NULL DEFAULT 0 COMMENT '来源-公众号消息',
+    source_recommend_count INT NOT NULL DEFAULT 0 COMMENT '来源-推荐',
+    source_home_count INT NOT NULL DEFAULT 0 COMMENT '来源-公众号主页',
+    source_chat_count INT NOT NULL DEFAULT 0 COMMENT '来源-聊天会话',
+    source_search_count INT NOT NULL DEFAULT 0 COMMENT '来源-搜一搜',
+    source_other_count INT NOT NULL DEFAULT 0 COMMENT '来源-其它',
     snapshot_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
@@ -184,5 +191,172 @@ SET @gzh_snapshot_avg_read_time_sql = IF(
 PREPARE gzh_stmt FROM @gzh_snapshot_avg_read_time_sql;
 EXECUTE gzh_stmt;
 DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_friend_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_friend_count'
+);
+SET @gzh_snapshot_source_friend_sql = IF(
+    @gzh_snapshot_source_friend_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_friend_count INT NOT NULL DEFAULT 0 COMMENT ''来源-朋友圈'' AFTER traffic_sources_json',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_friend_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_message_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_message_count'
+);
+SET @gzh_snapshot_source_message_sql = IF(
+    @gzh_snapshot_source_message_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_message_count INT NOT NULL DEFAULT 0 COMMENT ''来源-公众号消息'' AFTER source_friend_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_message_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_recommend_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_recommend_count'
+);
+SET @gzh_snapshot_source_recommend_sql = IF(
+    @gzh_snapshot_source_recommend_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_recommend_count INT NOT NULL DEFAULT 0 COMMENT ''来源-推荐'' AFTER source_message_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_recommend_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_home_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_home_count'
+);
+SET @gzh_snapshot_source_home_sql = IF(
+    @gzh_snapshot_source_home_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_home_count INT NOT NULL DEFAULT 0 COMMENT ''来源-公众号主页'' AFTER source_recommend_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_home_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_chat_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_chat_count'
+);
+SET @gzh_snapshot_source_chat_sql = IF(
+    @gzh_snapshot_source_chat_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_chat_count INT NOT NULL DEFAULT 0 COMMENT ''来源-聊天会话'' AFTER source_home_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_chat_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_search_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_search_count'
+);
+SET @gzh_snapshot_source_search_sql = IF(
+    @gzh_snapshot_source_search_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_search_count INT NOT NULL DEFAULT 0 COMMENT ''来源-搜一搜'' AFTER source_chat_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_search_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_source_other_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'source_other_count'
+);
+SET @gzh_snapshot_source_other_sql = IF(
+    @gzh_snapshot_source_other_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN source_other_count INT NOT NULL DEFAULT 0 COMMENT ''来源-其它'' AFTER source_search_count',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_source_other_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+-- 合并 optimize.sql：补齐空值并统一历史流量来源口径
+UPDATE gzh_article_snapshot
+SET traffic_sources_json = '{}'
+WHERE traffic_sources_json IS NULL
+   OR TRIM(traffic_sources_json) = '';
+
+UPDATE gzh_article_snapshot
+SET traffic_sources_json = JSON_OBJECT(
+    '朋友圈',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"朋友圈\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"friend\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"fromfeed\"')) AS UNSIGNED), 0),
+    '公众号消息',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"公众号消息\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"message\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"subscription\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"frommsg\"')) AS UNSIGNED), 0),
+    '推荐',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"推荐\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"recommend\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"fromrecommend\"')) AS UNSIGNED), 0),
+    '公众号主页',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"公众号主页\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"主页\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"home\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"profile\"')) AS UNSIGNED), 0),
+    '聊天会话',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"聊天会话\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"聊天\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"chat\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"session\"')) AS UNSIGNED), 0),
+    '搜一搜',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"搜一搜\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"搜\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"search\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"fromsogou\"')) AS UNSIGNED), 0),
+    '其它',
+      COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"其它\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"其他\"')) AS UNSIGNED), 0)
+    + COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"other\"')) AS UNSIGNED), 0)
+)
+WHERE deleted = 0
+  AND JSON_VALID(traffic_sources_json) = 1;
+
+UPDATE gzh_article_snapshot
+SET source_friend_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"朋友圈\"')) AS UNSIGNED), 0),
+    source_message_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"公众号消息\"')) AS UNSIGNED), 0),
+    source_recommend_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"推荐\"')) AS UNSIGNED), 0),
+    source_home_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"公众号主页\"')) AS UNSIGNED), 0),
+    source_chat_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"聊天会话\"')) AS UNSIGNED), 0),
+    source_search_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"搜一搜\"')) AS UNSIGNED), 0),
+    source_other_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"其它\"')) AS UNSIGNED), 0)
+WHERE deleted = 0
+  AND JSON_VALID(traffic_sources_json) = 1;
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -28,6 +28,13 @@ public class ArticleSnapshotEntity {
     private Integer avgReadTimeSec;
     private Integer newFollowers;
     private String trafficSourcesJson;
+    private Integer sourceFriendCount;
+    private Integer sourceMessageCount;
+    private Integer sourceRecommendCount;
+    private Integer sourceHomeCount;
+    private Integer sourceChatCount;
+    private Integer sourceSearchCount;
+    private Integer sourceOtherCount;
     private LocalDateTime snapshotTime;
     private LocalDateTime createdAt;
     @TableLogic

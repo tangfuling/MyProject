@@ -30,13 +30,29 @@
   const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
   const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
   const LOG_PREFIX = '[tfling]';
-  const METRICS_BASE_INTERVAL_MS = 140;
-  const METRICS_MIN_INTERVAL_MS = 90;
-  const METRICS_MAX_INTERVAL_MS = 1400;
-  const METRICS_FREQ_RETRY_MIN_MS = 700;
-  const METRICS_FREQ_RETRY_JITTER_MS = 350;
-  const CONTENT_FETCH_CONCURRENCY = 4;
-  const CONTENT_PREFETCH_WINDOW = 12;
+  const MP_FETCH_BASE_INTERVAL_MS = 1800;
+  const MP_FETCH_JITTER_MS = 1200;
+  const MP_FREQ_HIT_WINDOW_MS = 3 * 60 * 1000;
+  const MP_FREQ_HIT_THRESHOLD = 3;
+  const MP_FREQ_COOLDOWN_MS = 30 * 60 * 1000;
+  const METRICS_BASE_INTERVAL_MS = 6200;
+  const METRICS_MIN_INTERVAL_MS = 4200;
+  const METRICS_MAX_INTERVAL_MS = 18000;
+  const METRICS_FREQ_RETRY_MIN_MS = 9000;
+  const METRICS_FREQ_RETRY_JITTER_MS = 3000;
+  const CONTENT_FETCH_CONCURRENCY = 1;
+  const CONTENT_PREFETCH_WINDOW = 2;
+  const LIST_PAGE_INTERVAL_MS = 2500;
+  const LIST_PAGE_JITTER_MS = 900;
+  const METRICS_LOOKBACK_DAYS = 45;
+  const DEFAULT_SYNC_RANGE_CODE = '30d';
+  const SYNC_RANGE_OPTIONS = [
+    { code: '30d', label: '最近30天', days: 30 },
+    { code: '60d', label: '最近60天', days: 60 },
+    { code: '90d', label: '最近90天', days: 90 },
+    { code: 'all', label: '全部', days: 0 },
+  ];
+  const MAX_ARTICLES_PER_RUN = 300;
   const ARTICLE_PAGE_CACHE_MAX = 320;
   const ARTICLE_CONTENT_MAX_LENGTH = 20000;
   const UPLOAD_BATCH_SIZE = 10;
@@ -45,8 +61,15 @@
   let latestLastSync = null;
   let lastAutoSyncAuthToken = '';
   let zeroMetricsLogCount = 0;
+  let zeroTrafficSourceLogCount = 0;
+  let metricsPayloadParseWarnCount = 0;
+  let trafficProbeLogCount = 0;
   let publishListParseHintCount = 0;
   const articlePageCache = new Map();
+  const mpFreqHitTimes = [];
+  let lastMpFetchAt = 0;
+  let mpCooldownUntil = 0;
+  let selectedSyncRangeCode = DEFAULT_SYNC_RANGE_CODE;
   let panelState = {
     stage: 'idle',
     message: '等待同步',
@@ -214,11 +237,38 @@
       stage: 'ready',
       message: latestLastSync
         ? `上次同步：${formatTime(latestLastSync.updatedAt)}`
-        : '已登录，可开始同步',
+        : `已登录，可开始同步（${syncRangeLabelByCode(selectedSyncRangeCode)}）`,
       progress: 0,
       synced: 0,
       total: latestLastSync?.total || 0,
     };
+  }
+
+  function normalizeSyncRangeCode(rawCode) {
+    const code = String(rawCode || '').trim().toLowerCase();
+    if (SYNC_RANGE_OPTIONS.some((item) => item.code === code)) {
+      return code;
+    }
+    return DEFAULT_SYNC_RANGE_CODE;
+  }
+
+  function syncRangeOptionByCode(rawCode) {
+    const code = normalizeSyncRangeCode(rawCode);
+    return SYNC_RANGE_OPTIONS.find((item) => item.code === code) || SYNC_RANGE_OPTIONS[0];
+  }
+
+  function syncRangeDaysByCode(rawCode) {
+    return Number(syncRangeOptionByCode(rawCode).days || 0);
+  }
+
+  function syncRangeLabelByCode(rawCode) {
+    return syncRangeOptionByCode(rawCode).label;
+  }
+
+  function buildSyncRangeOptionsHtml() {
+    return SYNC_RANGE_OPTIONS
+      .map((item) => `<option value="${item.code}">${item.label}</option>`)
+      .join('');
   }
 
   function injectStyle() {
@@ -348,6 +398,32 @@
         color: #94a3b8;
         font-size: 11px;
         line-height: 1.5;
+      }
+      .gzh-sync-range-line {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .gzh-sync-range-label {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .gzh-sync-range-select {
+        min-width: 120px;
+        height: 30px;
+        border: 1px solid #dbe7f7;
+        border-radius: 8px;
+        color: #334155;
+        background: #fff;
+        padding: 0 8px;
+        font-size: 12px;
+      }
+      .gzh-sync-range-select:disabled {
+        color: #94a3b8;
+        background: #f8fafc;
       }
       .gzh-sync-actions {
         margin-top: 10px;
@@ -501,6 +577,7 @@
     const countEl = document.getElementById('gzh-sync-count');
     const stepsEl = document.getElementById('gzh-sync-steps');
     const summaryEl = document.getElementById('gzh-sync-summary');
+    const rangeSelect = document.getElementById('gzh-sync-range');
     const primaryBtn = document.getElementById('gzh-sync-primary');
     const secondaryBtn = document.getElementById('gzh-sync-secondary');
     if (!stageEl || !progressTextEl || !messageEl || !barEl || !countEl || !stepsEl || !summaryEl || !primaryBtn || !secondaryBtn) {
@@ -584,6 +661,11 @@
 
     secondaryBtn.textContent = secondaryText;
     secondaryBtn.dataset.action = secondaryAction;
+
+    if (rangeSelect instanceof HTMLSelectElement) {
+      rangeSelect.value = normalizeSyncRangeCode(selectedSyncRangeCode);
+      rangeSelect.disabled = STATE.syncing || RUNNING_STAGES.has(state.stage);
+    }
   }
 
   async function handlePanelAction(action) {
@@ -635,6 +717,7 @@
     const titleIcon = iconUrl
       ? `<img class="gzh-sync-title-icon" src="${iconUrl}" alt="公众号数据运营助手" />`
       : '<span class="gzh-sync-title-icon" aria-hidden="true"></span>';
+    const rangeOptionsHtml = buildSyncRangeOptionsHtml();
     panel.innerHTML = `
       <div class="gzh-sync-head">
         <div class="gzh-sync-title-wrap">
@@ -653,6 +736,10 @@
         <div class="gzh-sync-count" id="gzh-sync-count"></div>
         <div class="gzh-sync-steps" id="gzh-sync-steps"></div>
         <div class="gzh-sync-summary" id="gzh-sync-summary"></div>
+        <div class="gzh-sync-range-line">
+          <span class="gzh-sync-range-label">同步范围</span>
+          <select id="gzh-sync-range" class="gzh-sync-range-select">${rangeOptionsHtml}</select>
+        </div>
         <div class="gzh-sync-actions">
           <button type="button" class="gzh-sync-btn primary" id="gzh-sync-primary" data-action="start">同步到运营助手</button>
           <button type="button" class="gzh-sync-btn" id="gzh-sync-secondary" data-action="close">关闭</button>
@@ -665,6 +752,7 @@
     const closeBtn = document.getElementById('gzh-sync-close');
     const primaryBtn = document.getElementById('gzh-sync-primary');
     const secondaryBtn = document.getElementById('gzh-sync-secondary');
+    const rangeSelect = document.getElementById('gzh-sync-range');
 
     if (closeBtn) {
       closeBtn.addEventListener('click', closePanel);
@@ -677,6 +765,15 @@
     if (secondaryBtn) {
       secondaryBtn.addEventListener('click', () => {
         void handlePanelAction(secondaryBtn.dataset.action || 'close');
+      });
+    }
+    if (rangeSelect instanceof HTMLSelectElement) {
+      rangeSelect.value = normalizeSyncRangeCode(selectedSyncRangeCode);
+      rangeSelect.addEventListener('change', () => {
+        const nextCode = normalizeSyncRangeCode(rangeSelect.value);
+        selectedSyncRangeCode = nextCode;
+        void setStorage({ gzhSyncRangeCode: nextCode });
+        renderPanel(panelState);
       });
     }
 
@@ -699,9 +796,6 @@
     launcher.addEventListener('click', () => {
       createPanel();
       openPanel();
-      if (!STATE.syncing) {
-        void startSync();
-      }
     });
 
     document.body.appendChild(launcher);
@@ -941,6 +1035,78 @@
     });
   }
 
+  function createFreqLimitedError(message, extra) {
+    const error = new Error(message || '触发频控，请稍后重试');
+    error.isFreqLimited = true;
+    if (extra && typeof extra === 'object') {
+      Object.assign(error, extra);
+    }
+    return error;
+  }
+
+  function compactMpFreqHits(nowMs) {
+    while (mpFreqHitTimes.length > 0 && (nowMs - mpFreqHitTimes[0]) > MP_FREQ_HIT_WINDOW_MS) {
+      mpFreqHitTimes.shift();
+    }
+  }
+
+  function noteMpFreqHit(source) {
+    const nowMs = Date.now();
+    mpFreqHitTimes.push(nowMs);
+    compactMpFreqHits(nowMs);
+    if (mpFreqHitTimes.length >= MP_FREQ_HIT_THRESHOLD) {
+      mpCooldownUntil = Math.max(mpCooldownUntil, nowMs + MP_FREQ_COOLDOWN_MS);
+      safeLog('warn', 'mp freq hit threshold reached, enter cooldown', {
+        source,
+        hits: mpFreqHitTimes.length,
+        cooldownUntil: new Date(mpCooldownUntil).toISOString(),
+      });
+    }
+  }
+
+  async function waitForMpFetchSlot() {
+    let nowMs = Date.now();
+    if (mpCooldownUntil > nowMs) {
+      await sleep(mpCooldownUntil - nowMs);
+      nowMs = Date.now();
+    }
+    const targetGap = MP_FETCH_BASE_INTERVAL_MS + Math.floor(Math.random() * MP_FETCH_JITTER_MS);
+    const elapsed = nowMs - lastMpFetchAt;
+    if (elapsed < targetGap) {
+      await sleep(targetGap - elapsed);
+    }
+    lastMpFetchAt = Date.now();
+  }
+
+  async function guardedMpFetchText(url, init, options) {
+    const opts = options || {};
+    await waitForMpFetchSlot();
+    const response = await fetch(url, init);
+    const text = await response.text();
+    if (response.status === 429) {
+      noteMpFreqHit(opts.source || url);
+      throw createFreqLimitedError('请求频率过高，已进入冷却');
+    }
+    const shouldCheckBodyFreq = opts.detectFreqInBody !== false;
+    if (shouldCheckBodyFreq && isFreqControlReason(text)) {
+      noteMpFreqHit(opts.source || url);
+      throw createFreqLimitedError('微信侧触发频控，已自动降速并停止当前流程');
+    }
+    return { response, text };
+  }
+
+  function isWithinLookbackDays(article, days) {
+    const value = String(article?.publishTime || '').trim();
+    if (!value) {
+      return true;
+    }
+    const ts = Date.parse(value);
+    if (!Number.isFinite(ts)) {
+      return true;
+    }
+    return (Date.now() - ts) <= (Math.max(1, days) * 24 * 60 * 60 * 1000);
+  }
+
   function createTaskLimiter(maxConcurrent) {
     const limit = Math.max(1, toPositiveInt(maxConcurrent, 1));
     let running = 0;
@@ -973,8 +1139,11 @@
   }
 
   async function fetchArticlePageData(secureUrl) {
-    const response = await fetch(secureUrl, { credentials: 'include' });
-    const html = await response.text();
+    const { text: html } = await guardedMpFetchText(
+      secureUrl,
+      { credentials: 'include' },
+      { source: 'article-page', detectFreqInBody: false }
+    );
     return {
       contentText: extractArticleTextFromHtml(html),
       meta: parseArticleMetaFromHtml(html, secureUrl),
@@ -1025,6 +1194,9 @@
 
   function safeLog(level, message, payload) {
     try {
+      if (String(level || '').toLowerCase() === 'info') {
+        return;
+      }
       const fn = typeof console?.[level] === 'function' ? console[level] : console.log;
       const text = `${LOG_PREFIX} ${message}`;
       if (payload === undefined) {
@@ -1035,6 +1207,14 @@
     } catch {
       // ignore log failures in extension context
     }
+  }
+
+  function safeWarnProbe(message, payload, force = false) {
+    if (!force && trafficProbeLogCount >= 30) {
+      return;
+    }
+    trafficProbeLogCount += 1;
+    safeLog('warn', message, payload);
   }
 
   function buildSnapshotPayload(article, metrics) {
@@ -1172,14 +1352,19 @@
         return;
       }
 
-      notifyState({ stage: 'fetch_list', message: '正在读取文章列表...', progress: 5 });
-      const articles = await fetchAllArticles(token);
+      const syncRangeCode = normalizeSyncRangeCode(selectedSyncRangeCode);
+      const syncRangeDays = syncRangeDaysByCode(syncRangeCode);
+      const syncRangeLabel = syncRangeLabelByCode(syncRangeCode);
+      notifyState({ stage: 'fetch_list', message: `正在读取文章列表（${syncRangeLabel}）...`, progress: 5 });
+      const articles = await fetchAllArticles(token, { syncRangeDays });
 
       if (articles.length === 0) {
         const lastSync = {
           updatedAt: new Date().toISOString(),
           total: 0,
           synced: 0,
+          syncRangeCode,
+          syncRangeLabel,
           newArticles: 0,
           updatedArticles: 0,
           failedMetrics: 0,
@@ -1332,6 +1517,56 @@
         return true;
       };
 
+      const stopForFreqLimit = async () => {
+        if (pendingSyncItems.length > 0) {
+          const flushed = await flushPendingUploads(processedArticles, articles.length);
+          if (!flushed) {
+            return;
+          }
+        }
+        const nowMs = Date.now();
+        const cooldownMs = Math.max(0, mpCooldownUntil - nowMs);
+        const cooldownMinutes = Math.max(1, Math.ceil(cooldownMs / (60 * 1000)));
+        safeLog('warn', 'sync stopped by freq protection', {
+          processedArticles,
+          total: articles.length,
+          uploadedArticles,
+          uploadedSnapshots,
+          uploadedSnapshotsWithMetrics,
+          cooldownUntil: mpCooldownUntil ? new Date(mpCooldownUntil).toISOString() : '',
+        });
+
+        const lastSync = {
+          updatedAt: new Date().toISOString(),
+          total: articles.length,
+          synced: uploadedArticles,
+          syncRangeCode,
+          syncRangeLabel,
+          newArticles,
+          updatedArticles,
+          failedMetrics,
+          failedContent,
+          failedUpload,
+          uploadedSnapshots,
+          uploadedSnapshotsWithMetrics,
+        };
+        await setStorage({ gzhSyncedArticleIds: mergedIds, gzhLastSync: lastSync });
+        notifyState({
+          stage: 'partial_failed',
+          message: `检测到频控，已自动停止，建议约 ${cooldownMinutes} 分钟后重试`,
+          progress: 100,
+          total: articles.length,
+          synced: uploadedArticles,
+          newArticles,
+          updatedArticles,
+          failedMetrics,
+          failedContent,
+          failedUpload,
+          uploadedSnapshots,
+          uploadedSnapshotsWithMetrics,
+        });
+      };
+
       for (let index = 0; index < articles.length; index += 1) {
         const article = articles[index];
         const isNew = !mergedIds[article.wxArticleId];
@@ -1348,53 +1583,65 @@
           synced: processedArticles,
         });
 
+        const shouldFetchMetrics = isNew || isWithinLookbackDays(article, METRICS_LOOKBACK_DAYS);
+        if (!isNew && !shouldFetchMetrics) {
+          processedArticles = index + 1;
+          continue;
+        }
+
         const contentPromise = isNew
           ? ensureContentFetchTask(article)
           : null;
 
         let metrics = null;
-        const elapsedMs = Date.now() - lastMetricsRequestedAt;
-        const waitMs = metricsRequestIntervalMs - elapsedMs;
-        if (waitMs > 0) {
-          await sleep(waitMs + Math.floor(Math.random() * 40));
-        }
-        lastMetricsRequestedAt = Date.now();
-        let metricsError = await fetchArticleMetrics(token, article)
-          .then((result) => {
-            metrics = result;
-            return null;
-          })
-          .catch((error) => error);
-        if (metricsError && isFreqControlReason(metricsError?.message || String(metricsError))) {
-          metricsRequestIntervalMs = Math.min(
-            METRICS_MAX_INTERVAL_MS,
-            Math.max(metricsRequestIntervalMs + 220, METRICS_BASE_INTERVAL_MS + 120)
-          );
-          await sleep(METRICS_FREQ_RETRY_MIN_MS + Math.floor(Math.random() * METRICS_FREQ_RETRY_JITTER_MS));
+        if (shouldFetchMetrics) {
+          const elapsedMs = Date.now() - lastMetricsRequestedAt;
+          const waitMs = metricsRequestIntervalMs - elapsedMs;
+          if (waitMs > 0) {
+            await sleep(waitMs + Math.floor(Math.random() * 200));
+          }
           lastMetricsRequestedAt = Date.now();
-          metricsError = await fetchArticleMetrics(token, article)
+          let metricsError = await fetchArticleMetrics(token, article)
             .then((result) => {
               metrics = result;
               return null;
             })
             .catch((error) => error);
-        }
-        if (!metricsError) {
-          metricsRequestIntervalMs = Math.max(
-            METRICS_MIN_INTERVAL_MS,
-            Math.floor(metricsRequestIntervalMs * 0.95)
-          );
-        }
-        if (metricsError) {
-          failedMetrics += 1;
-          if (failedMetrics <= 5) {
-            safeLog('warn', 'metrics fetch failed', {
-              index,
-              wxArticleId: article?.wxArticleId ?? '',
-              title: article?.title ?? '',
-              reason: metricsError?.message || String(metricsError),
-              intervalMs: metricsRequestIntervalMs,
-            });
+          if (metricsError && isFreqControlReason(metricsError?.message || String(metricsError))) {
+            metricsRequestIntervalMs = Math.min(
+              METRICS_MAX_INTERVAL_MS,
+              Math.max(metricsRequestIntervalMs + 1500, METRICS_BASE_INTERVAL_MS + 800)
+            );
+            await sleep(METRICS_FREQ_RETRY_MIN_MS + Math.floor(Math.random() * METRICS_FREQ_RETRY_JITTER_MS));
+            lastMetricsRequestedAt = Date.now();
+            metricsError = await fetchArticleMetrics(token, article)
+              .then((result) => {
+                metrics = result;
+                return null;
+              })
+              .catch((error) => error);
+          }
+          if (!metricsError) {
+            metricsRequestIntervalMs = Math.max(
+              METRICS_MIN_INTERVAL_MS,
+              Math.floor(metricsRequestIntervalMs * 0.92)
+            );
+          }
+          if (metricsError) {
+            if (metricsError?.isFreqLimited || isFreqControlReason(metricsError?.message || String(metricsError))) {
+              await stopForFreqLimit();
+              return;
+            }
+            failedMetrics += 1;
+            if (failedMetrics <= 5) {
+              safeLog('warn', 'metrics fetch failed', {
+                index,
+                wxArticleId: article?.wxArticleId ?? '',
+                title: article?.title ?? '',
+                reason: metricsError?.message || String(metricsError),
+                intervalMs: metricsRequestIntervalMs,
+              });
+            }
           }
         }
 
@@ -1468,6 +1715,8 @@
         updatedAt: new Date().toISOString(),
         total: articles.length,
         synced: uploadedArticles,
+        syncRangeCode,
+        syncRangeLabel,
         newArticles,
         updatedArticles,
         failedMetrics,
@@ -1510,28 +1759,42 @@
         uploadedSnapshotsWithMetrics,
       });
     } catch (error) {
-      notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
+      if (error?.isFreqLimited) {
+        const cooldownMs = Math.max(0, mpCooldownUntil - Date.now());
+        const cooldownMinutes = Math.max(1, Math.ceil(cooldownMs / (60 * 1000)));
+        notifyState({
+          stage: 'partial_failed',
+          message: `${error.message || '检测到频控'}，建议约 ${cooldownMinutes} 分钟后重试`,
+          progress: 0,
+        });
+      } else {
+        notifyState({ stage: 'error', message: error.message || '同步失败', progress: 0 });
+      }
     } finally {
       STATE.syncing = false;
       updateLauncherState();
     }
   }
 
-  async function fetchAllArticles(token) {
+  async function fetchAllArticles(token, options = {}) {
+    const syncRangeDays = Math.max(0, Number(options.syncRangeDays || 0));
     const all = [];
     let begin = 0;
     const pageSize = 10;
 
     while (begin < 1000) {
       const url = `/cgi-bin/appmsgpublish?sub=list&begin=${begin}&count=${pageSize}&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
-      const response = await fetch(url, {
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json, text/plain, */*',
-          'X-Requested-With': 'XMLHttpRequest',
+      const { response, text } = await guardedMpFetchText(
+        url,
+        {
+          credentials: 'include',
+          headers: {
+            Accept: 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
         },
-      });
-      const text = await response.text();
+        { source: 'publish-list' }
+      );
       let json = parseMaybeJson(text);
       if (!json || typeof json !== 'object') {
         const htmlPublishPage = parsePublishPageFromHtml(text);
@@ -1555,6 +1818,10 @@
       const errMsg = String(json.base_resp?.err_msg || json.err_msg || '');
       if (ret !== 0) {
         safeLog('warn', 'appmsgpublish returned non-zero ret', { ret, errMsg, begin });
+        if (isFreqControlReason(errMsg)) {
+          noteMpFreqHit(`publish-list-ret:${ret}`);
+          throw createFreqLimitedError('读取文章列表触发频控，请稍后重试');
+        }
         if (ret === 200013 || /invalid|expired|登录|token/i.test(errMsg)) {
           throw new Error('微信后台登录已过期，请刷新页面重新登录后再同步');
         }
@@ -1590,18 +1857,44 @@
       }
 
       all.push(...parsed);
+      if (all.length >= MAX_ARTICLES_PER_RUN) {
+        break;
+      }
+
+      if (syncRangeDays > 0 && parsed.length > 0) {
+        const parsedWithPublishTime = parsed.filter((article) => {
+          const text = String(article?.publishTime || '').trim();
+          if (!text) {
+            return false;
+          }
+          return Number.isFinite(Date.parse(text));
+        });
+        if (parsedWithPublishTime.length > 0) {
+          const hasRecentInPage = parsedWithPublishTime.some((article) => isWithinLookbackDays(article, syncRangeDays));
+          if (!hasRecentInPage) {
+            break;
+          }
+        }
+      }
+
       begin += pageSize;
       if (publishList.length < pageSize) {
         break;
       }
+      await sleep(LIST_PAGE_INTERVAL_MS + Math.floor(Math.random() * LIST_PAGE_JITTER_MS));
     }
 
-    const deduped = dedupeById(all);
+    const deduped = dedupeById(all).slice(0, MAX_ARTICLES_PER_RUN);
+    const filtered = syncRangeDays > 0
+      ? deduped.filter((article) => isWithinLookbackDays(article, syncRangeDays))
+      : deduped;
     safeLog('info', 'appmsgpublish done', {
+      syncRangeDays,
       rawCount: all.length,
       dedupedCount: deduped.length,
+      filteredCount: filtered.length,
     });
-    return deduped;
+    return filtered;
   }
 
   function parseArticlesFromPublishItem(item, itemIndex) {
@@ -1826,7 +2119,7 @@
       return '';
     }
     const open = text[startIndex];
-    const close = open === '{' ? '}' : (open === '[' ? ']' : '');
+    const close = open === '{' ? '}' : (open === '[' ? ']' : (open === '(' ? ')' : ''));
     if (!close) {
       return '';
     }
@@ -1867,6 +2160,105 @@
     return '';
   }
 
+  function extractValueFromPosition(raw, startPos) {
+    if (typeof raw !== 'string' || !Number.isFinite(startPos)) {
+      return '';
+    }
+    let pos = Math.max(0, Math.floor(startPos));
+    while (pos < raw.length && /\s/.test(raw[pos])) {
+      pos += 1;
+    }
+    if (pos >= raw.length) {
+      return '';
+    }
+    const ch = raw[pos];
+    if (ch === '{' || ch === '[') {
+      return extractBalancedBlock(raw, pos);
+    }
+    const jsonParseMatched = raw.slice(pos).match(/^JSON\.parse\s*\(/i);
+    if (jsonParseMatched) {
+      const openPos = pos + jsonParseMatched[0].length - 1;
+      const jsonParseExpr = extractBalancedBlock(raw, openPos);
+      if (jsonParseExpr) {
+        return raw.slice(pos, openPos) + jsonParseExpr;
+      }
+    }
+    if (ch === '"' || ch === '\'') {
+      const start = pos;
+      let escaped = false;
+      for (let i = pos + 1; i < raw.length; i += 1) {
+        const one = raw[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (one === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (one === ch) {
+          return raw.slice(start, i + 1);
+        }
+      }
+    }
+
+    let quote = '';
+    let escaped = false;
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let parenDepth = 0;
+    let end = pos;
+    for (; end < raw.length; end += 1) {
+      const one = raw[end];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (one === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (one === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (one === '"' || one === '\'' || one === '`') {
+        quote = one;
+        continue;
+      }
+      if (one === '{') {
+        braceDepth += 1;
+        continue;
+      }
+      if (one === '}') {
+        braceDepth = Math.max(0, braceDepth - 1);
+        continue;
+      }
+      if (one === '[') {
+        bracketDepth += 1;
+        continue;
+      }
+      if (one === ']') {
+        bracketDepth = Math.max(0, bracketDepth - 1);
+        continue;
+      }
+      if (one === '(') {
+        parenDepth += 1;
+        continue;
+      }
+      if (one === ')') {
+        parenDepth = Math.max(0, parenDepth - 1);
+        continue;
+      }
+      if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 && /[,\n;\r]/.test(one)) {
+        break;
+      }
+    }
+    return raw.slice(pos, end).trim();
+  }
+
   function parseLooseJsonObject(raw) {
     if (!raw || typeof raw !== 'string') {
       return null;
@@ -1894,90 +2286,93 @@
     if (index < 0) {
       return '';
     }
-    let pos = index + token.length;
-    while (pos < raw.length && /\s/.test(raw[pos])) {
-      pos += 1;
-    }
-    if (pos >= raw.length) {
+    return extractValueFromPosition(raw, index + token.length);
+  }
+
+  function extractValueByKey(raw, key) {
+    if (typeof raw !== 'string' || !key) {
       return '';
     }
-    const ch = raw[pos];
-    if (ch === '{' || ch === '[') {
-      return extractBalancedBlock(raw, pos);
-    }
-    if (ch === '"' || ch === '\'') {
-      const start = pos;
-      let escaped = false;
-      for (let i = pos + 1; i < raw.length; i += 1) {
-        const one = raw[i];
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (one === '\\') {
-          escaped = true;
-          continue;
-        }
-        if (one === ch) {
-          return raw.slice(start, i + 1);
-        }
+    const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+      new RegExp(`["']${escapedKey}["']\\s*[:=]`, 'i'),
+      new RegExp(`\\b${escapedKey}\\b\\s*[:=]`, 'i'),
+    ];
+    for (const one of patterns) {
+      const matched = one.exec(raw);
+      if (!matched || matched.index == null) {
+        continue;
+      }
+      const value = extractValueFromPosition(raw, matched.index + matched[0].length);
+      if (value) {
+        return value;
       }
     }
-    let end = pos;
-    while (end < raw.length && !/[,\n;\r]/.test(raw[end])) {
-      end += 1;
-    }
-    return raw.slice(pos, end).trim();
+    return '';
   }
 
   function parseMetricsPayloadFromHtml(raw) {
     if (!raw || typeof raw !== 'string') {
       return null;
     }
-    const cgiDataRaw = extractValueByToken(raw, 'window.wx.cgiData=')
-      || extractValueByToken(raw, 'window.wx.cgiData =')
-      || extractValueByToken(raw, 'wx.cgiData=')
-      || extractValueByToken(raw, 'wx.cgiData =');
-    const cgiData = parseLooseJsonObject(cgiDataRaw);
-    if (cgiData && typeof cgiData === 'object') {
-      return cgiData;
-    }
+    const cgiDataRaw = extractValueByKey(raw, 'window.wx.cgiData')
+      || extractValueByKey(raw, 'wx.cgiData')
+      || extractValueByKey(raw, 'cgiData');
+    const cgiData = parseStructuredData(parseLooseJsonObject(cgiDataRaw) ?? cgiDataRaw);
 
-    const articleDataRaw = extractValueByToken(raw, 'articleData:')
-      || extractValueByToken(raw, 'articleData =');
-    const articleSummaryDataRaw = extractValueByToken(raw, 'articleSummaryData:')
-      || extractValueByToken(raw, 'articleSummaryData =');
-    const subsTransformRaw = extractValueByToken(raw, 'subs_transform:')
-      || extractValueByToken(raw, 'subs_transform =');
-    const baseRespRaw = extractValueByToken(raw, 'base_resp:')
-      || extractValueByToken(raw, 'base_resp =');
-    const retRaw = extractValueByToken(raw, 'ret:')
-      || extractValueByToken(raw, 'ret =');
-    const errMsgRaw = extractValueByToken(raw, 'err_msg:')
-      || extractValueByToken(raw, 'err_msg =');
+    const articleDataRaw = extractValueByKey(raw, 'articleData')
+      || extractValueByKey(raw, 'article_data');
+    const articleSummaryDataRaw = extractValueByKey(raw, 'articleSummaryData')
+      || extractValueByKey(raw, 'article_summary_data')
+      || extractValueByKey(raw, 'summaryData')
+      || extractValueByKey(raw, 'sourceData');
+    const detailDataRaw = extractValueByKey(raw, 'detailData')
+      || extractValueByKey(raw, 'detail_data');
+    const subsTransformRaw = extractValueByKey(raw, 'subs_transform')
+      || extractValueByKey(raw, 'subsTransform');
+    const baseRespRaw = extractValueByKey(raw, 'base_resp')
+      || extractValueByKey(raw, 'baseResp');
+    const retRaw = extractValueByKey(raw, 'ret');
+    const errMsgRaw = extractValueByKey(raw, 'err_msg')
+      || extractValueByKey(raw, 'errMsg');
 
     const payload = {};
-    let articleData = parseLooseJsonObject(articleDataRaw);
-    let articleSummaryData = parseLooseJsonObject(articleSummaryDataRaw);
-    let subsTransform = parseLooseJsonObject(subsTransformRaw);
-    const baseResp = parseLooseJsonObject(baseRespRaw);
+    if (cgiData && typeof cgiData === 'object') {
+      if (Array.isArray(cgiData)) {
+        payload.cgiData = cgiData;
+      } else {
+        Object.assign(payload, cgiData);
+      }
+    }
+
+    let articleData = parseStructuredData(parseLooseJsonObject(articleDataRaw) ?? articleDataRaw);
+    let articleSummaryData = parseStructuredData(parseLooseJsonObject(articleSummaryDataRaw) ?? articleSummaryDataRaw);
+    let detailData = parseStructuredData(parseLooseJsonObject(detailDataRaw) ?? detailDataRaw);
+    let subsTransform = parseStructuredData(parseLooseJsonObject(subsTransformRaw) ?? subsTransformRaw);
+    const baseResp = parseStructuredData(parseLooseJsonObject(baseRespRaw) ?? baseRespRaw);
     const ret = toLooseNumber(retRaw);
     const errMsg = String(errMsgRaw || '').replace(/^['"]|['"]$/g, '').trim();
 
     if (!articleData) {
-      const articleDataMatch = raw.match(/articleData\s*:\s*(\{[\s\S]*?\})\s*,\s*articleSummaryData\s*:/i);
+      const articleDataMatch = raw.match(/articleData["']?\s*[:=]\s*(\{[\s\S]*?\})\s*,\s*articleSummaryData["']?\s*[:=]/i);
       if (articleDataMatch?.[1]) {
-        articleData = parseLooseJsonObject(articleDataMatch[1]);
+        articleData = parseStructuredData(articleDataMatch[1]);
       }
     }
     if (!articleSummaryData) {
-      const summaryMatch = raw.match(/articleSummaryData\s*:\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*,\s*detailData\s*:/i);
+      const summaryMatch = raw.match(/articleSummaryData["']?\s*[:=]\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*(?:,\s*detailData["']?\s*[:=]|,\s*base_resp["']?\s*[:=]|,\s*ret["']?\s*[:=])/i);
       if (summaryMatch?.[1]) {
-        articleSummaryData = parseLooseJsonObject(summaryMatch[1]);
+        articleSummaryData = parseStructuredData(summaryMatch[1]);
+      }
+    }
+    if (!detailData) {
+      const detailMatch = raw.match(/detailData["']?\s*[:=]\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*(?:,\s*(?:base_resp|ret|err_msg|baseResp|errMsg)["']?\s*[:=]|\}\s*;)/i);
+      if (detailMatch?.[1]) {
+        detailData = parseStructuredData(detailMatch[1]);
       }
     }
     if (!subsTransform && articleData && typeof articleData === 'object') {
-      subsTransform = parseLooseJsonObject(articleData.subs_transform);
+      subsTransform = parseStructuredData(articleData.subs_transform ?? articleData.subsTransform);
     }
 
     if (articleData && typeof articleData === 'object') {
@@ -1985,6 +2380,9 @@
     }
     if (articleSummaryData) {
       payload.articleSummaryData = articleSummaryData;
+    }
+    if (detailData) {
+      payload.detailData = detailData;
     }
     if (subsTransform && typeof subsTransform === 'object') {
       payload.subs_transform = subsTransform;
@@ -2004,12 +2402,90 @@
     return payload;
   }
 
+  function payloadQualityScore(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return 0;
+    }
+    let score = 0;
+    const keys = safeObjectKeys(payload);
+    score += Math.min(8, keys.length);
+    if (Array.isArray(payload)) {
+      score += payload.length > 0 ? 1 : 0;
+    }
+
+    const root = { json: payload };
+    const read = findFirstNumberByKeys(root, ['int_page_read_user', 'read_num', 'read_uv']);
+    const send = findFirstNumberByKeys(root, ['send_uv']);
+    const sceneCount = collectSceneItems(root).length;
+    if (read > 0) {
+      score += 8;
+    }
+    if (send > 0) {
+      score += 5;
+    }
+    if (sceneCount > 0) {
+      score += Math.min(10, sceneCount);
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'articleData')
+      || Object.prototype.hasOwnProperty.call(payload, 'article_data_new')) {
+      score += 4;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'articleSummaryData')
+      || Object.prototype.hasOwnProperty.call(payload, 'article_summary_data')) {
+      score += 8;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'detailData')
+      || Object.prototype.hasOwnProperty.call(payload, 'detail_data')) {
+      score += 3;
+    }
+    return score;
+  }
+
+  function buildTrafficRawProbe(raw) {
+    const text = String(raw || '');
+    const summaryIndex = text.search(/articleSummaryData["']?\s*[:=]/i);
+    const summaryHead = summaryIndex >= 0
+      ? text.slice(summaryIndex, summaryIndex + 220).replace(/\s+/g, ' ')
+      : '';
+    const countHit = (pattern) => {
+      if (!(pattern instanceof RegExp)) {
+        return 0;
+      }
+      const matched = text.match(pattern);
+      return matched ? matched.length : 0;
+    };
+    return {
+      textLength: text.length,
+      hasArticleSummaryData: /articleSummaryData["']?\s*[:=]/i.test(text),
+      hasSceneField: /["']?(?:scene|scene_id|source_scene)["']?\s*[:=]/i.test(text),
+      hasSceneDesc: /["']?(?:scene_desc|sceneDesc|scene_name|sceneName|source_name|sourceName)["']?\s*[:=]/i.test(text),
+      sourceMarkerHits: {
+        fromRecommend: countHit(/fromrecommend|from_recommend|recommend|kandian/gi),
+        fromFeed: countHit(/fromfeed|from_feed|friend_circle|friend/gi),
+        fromMsg: countHit(/frommsg|from_msg|subscription|message/gi),
+        fromHome: countHit(/fromhome|from_home|fromprofile|from_profile|profile/gi),
+        fromSession: countHit(/fromsession|from_session|fromchat|from_chat|session|chat/gi),
+        fromSearch: countHit(/fromsogou|from_search|search|sogou/gi),
+      },
+      summaryHead,
+    };
+  }
+
+  function chooseBestMetricsPayload(primary, fallback) {
+    const primaryScore = payloadQualityScore(primary);
+    const fallbackScore = payloadQualityScore(fallback);
+    if (fallbackScore > primaryScore) {
+      return fallback;
+    }
+    return primary ?? fallback ?? null;
+  }
+
   function extractMetricNumberFromRaw(raw, key) {
     if (typeof raw !== 'string' || !raw || !key) {
       return 0;
     }
     const escapedKey = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const reg = new RegExp(`["']${escapedKey}["']\\s*:\\s*["']?(-?\\d+(?:\\.\\d+)?)`, 'i');
+    const reg = new RegExp(`(?:["']${escapedKey}["']|\\b${escapedKey}\\b)\\s*[:=]\\s*["']?(-?\\d+(?:\\.\\d+)?)`, 'i');
     const matched = raw.match(reg);
     if (!matched?.[1]) {
       return 0;
@@ -2042,10 +2518,114 @@
     return Math.max(0, Math.round(seconds));
   }
 
+  function pickRawMetricNumber(raw, keys) {
+    if (!raw || typeof raw !== 'string' || !Array.isArray(keys)) {
+      return 0;
+    }
+    return keys.reduce((max, key) => {
+      const one = extractMetricNumberFromRaw(raw, key);
+      if (!Number.isFinite(one) || one <= 0) {
+        return max;
+      }
+      return Math.max(max, one);
+    }, 0);
+  }
+
+  function extractTrafficSourcesFromRawText(raw) {
+    const direct = createEmptyTrafficSources();
+    direct.朋友圈 = pickRawMetricNumber(raw, ['fromfeed', 'from_feed', 'from_friend', 'from_feed_read_user', 'from_feed_uv']);
+    direct.公众号消息 = pickRawMetricNumber(raw, ['frommsg', 'from_msg', 'from_subscription', 'from_msg_read_user', 'frommsg_read_user', 'from_msg_uv']);
+    direct.推荐 = pickRawMetricNumber(raw, ['fromrecommend', 'from_recommend', 'from_kandian', 'from_recommend_read_user', 'from_recommend_uv']);
+    direct.公众号主页 = pickRawMetricNumber(raw, ['fromhome', 'from_home', 'fromprofile', 'from_profile', 'from_home_read_user', 'from_profile_read_user']);
+    direct.聊天会话 = pickRawMetricNumber(raw, ['fromsession', 'from_session', 'fromchat', 'from_chat', 'from_session_read_user', 'from_chat_read_user']);
+    direct.搜一搜 = pickRawMetricNumber(raw, ['fromsogou', 'from_search', 'from_sogou', 'from_search_read_user']);
+    direct.其它 = pickRawMetricNumber(raw, ['fromother', 'from_other', 'from_other_read_user']);
+    if (trafficSourcesTotal(direct) > 0) {
+      return {
+        trafficSources: direct,
+        trafficDebug: { sceneItemCount: 0, sceneSamples: [] },
+        parseScore: 6,
+      };
+    }
+
+    const byScene = createEmptyTrafficSources();
+    const sceneSamples = [];
+    let sceneItemCount = 0;
+
+    const pushSceneSample = (scene, label, count, source) => {
+      if (sceneSamples.length >= 3) {
+        return;
+      }
+      sceneSamples.push({
+        scene: Number.isFinite(Number(scene)) ? Number(scene) : 0,
+        label: String(label || ''),
+        readNum: Number(count || 0),
+        source,
+      });
+    };
+
+    const parseWithScenePattern = (pattern, sceneGroupIndex, countGroupIndex, spanGroupIndex) => {
+      if (!(pattern instanceof RegExp)) {
+        return;
+      }
+      let matched;
+      while ((matched = pattern.exec(raw)) !== null) {
+        const scene = toLooseNumber(matched?.[sceneGroupIndex]);
+        const count = toLooseNumber(matched?.[countGroupIndex]);
+        if (!Number.isFinite(scene) || !Number.isFinite(count) || count <= 0) {
+          continue;
+        }
+        const around = String(matched?.[spanGroupIndex] || '');
+        const labelMatched = around.match(/["']?(?:scene_desc|sceneDesc|scene_name|sceneName|source_name|sourceName)["']?\s*[:=]\s*["']([^"']{1,28})["']/i);
+        const label = String(labelMatched?.[1] || '').trim();
+        const doneByLabel = label ? applyTrafficSourceByLabel(byScene, label, count) : false;
+        if (!doneByLabel) {
+          addTrafficSourceByScene(byScene, scene, count);
+        }
+        sceneItemCount += 1;
+        pushSceneSample(scene, label, count, 'raw-scene');
+      }
+    };
+
+    const sceneFirstPattern = /["']?(?:scene|scene_id|source_scene)["']?\s*[:=]\s*["']?(-?\d{1,5})["']?([\s\S]{0,260}?)["']?(?:int_page_read_user|read_uv|read_num|read_count|int_page_read_count|user_count|count|uv|pv)["']?\s*[:=]\s*["']?(-?\d+(?:\.\d+)?)["']?/gi;
+    parseWithScenePattern(sceneFirstPattern, 1, 3, 2);
+    if (sceneItemCount === 0) {
+      const countFirstPattern = /["']?(?:int_page_read_user|read_uv|read_num|read_count|int_page_read_count|user_count|count|uv|pv)["']?\s*[:=]\s*["']?(-?\d+(?:\.\d+)?)["']?([\s\S]{0,260}?)["']?(?:scene|scene_id|source_scene)["']?\s*[:=]\s*["']?(-?\d{1,5})["']?/gi;
+      parseWithScenePattern(countFirstPattern, 3, 1, 2);
+    }
+
+    if (sceneItemCount === 0) {
+      const labelFirstPattern = /["']?(?:scene_desc|sceneDesc|scene_name|sceneName|source_name|sourceName)["']?\s*[:=]\s*["']([^"']{1,28})["']([\s\S]{0,220}?)["']?(?:int_page_read_user|read_uv|read_num|read_count|int_page_read_count|user_count|count|uv|pv)["']?\s*[:=]\s*["']?(-?\d+(?:\.\d+)?)["']?/gi;
+      let labelMatched;
+      while ((labelMatched = labelFirstPattern.exec(raw)) !== null) {
+        const label = String(labelMatched?.[1] || '').trim();
+        const count = toLooseNumber(labelMatched?.[3]);
+        if (!label || !Number.isFinite(count) || count <= 0) {
+          continue;
+        }
+        if (applyTrafficSourceByLabel(byScene, label, count)) {
+          sceneItemCount += 1;
+          pushSceneSample(0, label, count, 'raw-label');
+        }
+      }
+    }
+
+    return {
+      trafficSources: byScene,
+      trafficDebug: { sceneItemCount, sceneSamples },
+      parseScore: sceneItemCount > 0 ? Math.min(8, 3 + sceneItemCount) : 0,
+    };
+  }
+
   function extractMetricsFromRawHtml(raw) {
     if (!raw || typeof raw !== 'string') {
       return null;
     }
+    const parsedPayload = parseMetricsPayloadFromHtml(raw);
+    const parsedMetrics = parsedPayload && typeof parsedPayload === 'object'
+      ? extractMetricsFromPayload(parsedPayload)
+      : null;
+    const rawTraffic = extractTrafficSourcesFromRawText(raw);
     const readCount = extractMetricNumberFromRaw(raw, 'read_uv')
       || extractMetricNumberFromRaw(raw, 'read_num')
       || extractMetricNumberFromRaw(raw, 'int_page_read_user');
@@ -2070,6 +2650,17 @@
       || extractMetricNumberFromRaw(raw, 'avg_read_duration');
     const newFollowers = extractMetricNumberFromRaw(raw, 'follow_after_read_uv')
       || extractMetricNumberFromRaw(raw, 'new_fans');
+    const parsedTrafficSources = parsedMetrics?.trafficSources || {};
+    const trafficSources = trafficSourcesTotal(parsedTrafficSources) > 0
+      ? parsedTrafficSources
+      : (rawTraffic.trafficSources || createEmptyTrafficSources());
+    const trafficDebug = (parsedMetrics?.trafficDebug && parsedMetrics.trafficDebug.sceneItemCount > 0)
+      ? parsedMetrics.trafficDebug
+      : (rawTraffic.trafficDebug || { sceneItemCount: 0, sceneSamples: [] });
+    const parseScore = Math.max(
+      Number(parsedMetrics?.parseScore || 0),
+      Number(rawTraffic?.parseScore || 0)
+    );
 
     return {
       readCount,
@@ -2082,6 +2673,10 @@
       completionRate: normalizeCompletionRate(completionRate),
       avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeSec),
       newFollowers,
+      trafficSources,
+      trafficDebug,
+      topKeys: parsedMetrics?.topKeys || [],
+      parseScore,
     };
   }
 
@@ -2108,6 +2703,27 @@
         merged[key] = fallbackValue;
       }
     });
+    const mergedTrafficTotal = trafficSourcesTotal(merged.trafficSources);
+    const fallbackTrafficTotal = trafficSourcesTotal(fallback.trafficSources);
+    const mergedParseScore = Number(merged.parseScore || 0);
+    const fallbackParseScore = Number(fallback.parseScore || 0);
+    const fallbackTrafficLooksBetter = fallbackTrafficTotal > 0 && (
+      mergedTrafficTotal <= 0
+      || (fallbackParseScore > mergedParseScore && fallbackTrafficTotal >= mergedTrafficTotal)
+      || fallbackTrafficTotal >= Math.max(5, mergedTrafficTotal * 3)
+    );
+    if (fallbackTrafficLooksBetter) {
+      merged.trafficSources = fallback.trafficSources;
+    }
+    if ((!merged.trafficDebug || merged.trafficDebug.sceneItemCount <= 0) && fallback.trafficDebug) {
+      merged.trafficDebug = fallback.trafficDebug;
+    }
+    if ((!Array.isArray(merged.topKeys) || merged.topKeys.length === 0) && Array.isArray(fallback.topKeys)) {
+      merged.topKeys = fallback.topKeys;
+    }
+    if (Number(merged.parseScore || 0) < Number(fallback.parseScore || 0)) {
+      merged.parseScore = Number(fallback.parseScore || 0);
+    }
     return merged;
   }
 
@@ -2139,16 +2755,47 @@
 
   async function requestMetricsPayload(token, msgId, publishDate) {
     const url = `/misc/appmsganalysis?action=detailpage&msgid=${encodeURIComponent(msgId)}&publish_date=${publishDate}&type=int&pageVersion=1&token=${encodeURIComponent(token)}&lang=zh_CN`;
-    const response = await fetch(url, {
-      credentials: 'include',
-      headers: {
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    const { response, text } = await guardedMpFetchText(
+      url,
+      {
+        credentials: 'include',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
       },
-    });
-    const text = await response.text();
-    const json = parseMaybeJson(text) || parseMetricsPayloadFromHtml(text);
+      { source: 'metrics-detail' }
+    );
+    const fromJson = parseMaybeJson(text);
+    const fromHtml = parseMetricsPayloadFromHtml(text);
+    const json = chooseBestMetricsPayload(fromJson, fromHtml);
     if (!json || typeof json !== 'object') {
       throw new Error(`文章指标接口返回格式异常(status=${response.status})`);
+    }
+    if (trafficProbeLogCount < 12) {
+      safeWarnProbe('traffic probe raw markers', {
+        msgId,
+        publishDate,
+        status: response.status,
+        parseScore: payloadQualityScore(json),
+        fromJsonType: fromJson == null ? 'null' : (Array.isArray(fromJson) ? 'array' : typeof fromJson),
+        fromHtmlType: fromHtml == null ? 'null' : (Array.isArray(fromHtml) ? 'array' : typeof fromHtml),
+        fromJsonKeys: safeObjectKeys(fromJson).slice(0, 10),
+        fromHtmlKeys: safeObjectKeys(fromHtml).slice(0, 10),
+        rawProbe: buildTrafficRawProbe(text),
+      });
+    }
+    if (metricsPayloadParseWarnCount < 6 && payloadQualityScore(json) <= 1) {
+      metricsPayloadParseWarnCount += 1;
+      safeLog('warn', 'metrics payload parse weak', {
+        msgId,
+        publishDate,
+        status: response.status,
+        textLength: String(text || '').length,
+        fromJsonType: fromJson == null ? 'null' : (Array.isArray(fromJson) ? 'array' : typeof fromJson),
+        fromJsonKeys: safeObjectKeys(fromJson).slice(0, 10),
+        fromHtmlType: fromHtml == null ? 'null' : (Array.isArray(fromHtml) ? 'array' : typeof fromHtml),
+        fromHtmlKeys: safeObjectKeys(fromHtml).slice(0, 10),
+      });
     }
     return { json, raw: text };
   }
@@ -2233,6 +2880,48 @@
     return Number(fallback ?? 0);
   }
 
+  function findMaxNumberByKeys(root, keys) {
+    if (!root || !keys?.length) {
+      return 0;
+    }
+    const keySet = new Set(keys.map((k) => String(k).toLowerCase()));
+    const queue = [root];
+    const visited = new Set();
+    let maxValue = 0;
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') {
+        continue;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      if (Array.isArray(current)) {
+        current.forEach((item) => queue.push(item));
+        continue;
+      }
+
+      Object.entries(current).forEach(([key, value]) => {
+        if (value && typeof value === 'object') {
+          queue.push(value);
+        }
+        if (!keySet.has(key.toLowerCase())) {
+          return;
+        }
+        const num = toLooseNumber(value);
+        if (!Number.isFinite(num) || num <= 0) {
+          return;
+        }
+        if (num > maxValue) {
+          maxValue = num;
+        }
+      });
+    }
+    return Number(maxValue || 0);
+  }
+
   function collectSceneItems(root) {
     const result = [];
     const queue = [root];
@@ -2252,7 +2941,13 @@
           if (item && typeof item === 'object') {
             if (Object.prototype.hasOwnProperty.call(item, 'scene')
               || Object.prototype.hasOwnProperty.call(item, 'scene_id')
-              || Object.prototype.hasOwnProperty.call(item, 'source_scene')) {
+              || Object.prototype.hasOwnProperty.call(item, 'source_scene')
+              || Object.prototype.hasOwnProperty.call(item, 'scene_desc')
+              || Object.prototype.hasOwnProperty.call(item, 'sceneDesc')
+              || Object.prototype.hasOwnProperty.call(item, 'scene_name')
+              || Object.prototype.hasOwnProperty.call(item, 'sceneName')
+              || Object.prototype.hasOwnProperty.call(item, 'source_name')
+              || Object.prototype.hasOwnProperty.call(item, 'sourceName')) {
               result.push(item);
             }
             queue.push(item);
@@ -2270,70 +2965,262 @@
     return result;
   }
 
-  function buildTrafficSources(root) {
-    const direct = {
-      '\u670b\u53cb\u5708': findFirstNumberByKeys(root, ['fromfeed', 'friend', 'friend_circle']),
-      '\u516c\u4f17\u53f7\u6d88\u606f': findFirstNumberByKeys(root, ['frommsg', 'message', 'subscription']),
-      '\u63a8\u8350': findFirstNumberByKeys(root, ['fromrecommend', 'recommend']),
-      '\u516c\u4f17\u53f7\u4e3b\u9875': findFirstNumberByKeys(root, ['fromhome', 'fromprofile', 'home', 'profile']),
-      '\u804a\u5929\u4f1a\u8bdd': findFirstNumberByKeys(root, ['fromsession', 'fromchat', 'chat', 'session']),
-      '\u641c\u4e00\u641c': findFirstNumberByKeys(root, ['fromsogou', 'search', 'sogou']),
-      '\u5176\u5b83': findFirstNumberByKeys(root, ['fromother', 'other']),
-    };
+  function applyTrafficSourceByLabel(target, rawLabel, rawCount) {
+    const count = Number(rawCount || 0);
+    const label = String(rawLabel || '').trim();
+    if (!label || !Number.isFinite(count) || count <= 0 || !target) {
+      return false;
+    }
+    if (label.includes('朋友圈')) {
+      target.朋友圈 += count;
+      return true;
+    }
+    if (label.includes('公众号消息') || label.includes('公众号通知') || label.includes('订阅')) {
+      target.公众号消息 += count;
+      return true;
+    }
+    if (label.includes('推荐') || label.includes('看一看')) {
+      target.推荐 += count;
+      return true;
+    }
+    if (label.includes('公众号主页') || label.includes('主页') || label.includes('资料页')) {
+      target.公众号主页 += count;
+      return true;
+    }
+    if (label.includes('聊天') || label.includes('会话') || label.includes('好友转发')) {
+      target.聊天会话 += count;
+      return true;
+    }
+    if (label.includes('搜')) {
+      target.搜一搜 += count;
+      return true;
+    }
+    if (label.includes('其它') || label.includes('其他')) {
+      target.其它 += count;
+      return true;
+    }
+    return false;
+  }
 
-    if (Object.values(direct).some((v) => Number(v) > 0)) {
-      return direct;
+  function createEmptyTrafficSources() {
+    return {
+      朋友圈: 0,
+      公众号消息: 0,
+      推荐: 0,
+      公众号主页: 0,
+      聊天会话: 0,
+      搜一搜: 0,
+      其它: 0,
+    };
+  }
+
+  function extractSceneMetricCount(item) {
+    if (!item || typeof item !== 'object') {
+      return 0;
+    }
+    const strong = findMaxNumberByKeys(item, [
+      'int_page_read_user',
+      'read_uv',
+      'read_num',
+      'read_count',
+      'int_page_read_count',
+      'user_count',
+      'userCount',
+      'source_read_user',
+      'source_read_uv',
+      'source_read_num',
+      'scene_read_uv',
+      'scene_read_num',
+      'scene_read_count',
+      'from_read_user',
+      'from_read_uv',
+      'from_read_num',
+      'uv',
+      'pv',
+      'int_page_read_count',
+      'int_page_read_num',
+    ]);
+    if (Number.isFinite(strong) && strong > 0) {
+      return strong;
     }
 
-    const byScene = {
-      '\u670b\u53cb\u5708': 0,
-      '\u516c\u4f17\u53f7\u6d88\u606f': 0,
-      '\u63a8\u8350': 0,
-      '\u516c\u4f17\u53f7\u4e3b\u9875': 0,
-      '\u804a\u5929\u4f1a\u8bdd': 0,
-      '\u641c\u4e00\u641c': 0,
-      '\u5176\u5b83': 0,
-    };
+    let best = 0;
+    const queue = [item];
+    const visited = new Set();
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') {
+        continue;
+      }
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+      if (Array.isArray(current)) {
+        current.forEach((one) => queue.push(one));
+        continue;
+      }
+      Object.entries(current).forEach(([key, value]) => {
+        if (value && typeof value === 'object') {
+          queue.push(value);
+        }
+        const lower = String(key || '').toLowerCase();
+        if (!/(read|user|uv|pv|count|cnt|num|value)/.test(lower)) {
+          return;
+        }
+        if (/(scene|desc|name|id|idx|index|rank|ratio|percent|rate|time|date|day|hour|min|week|month|year|title|type|tag|share|like|comment|fav|save|follow|send)/.test(lower)) {
+          return;
+        }
+        const num = toLooseNumber(value);
+        if (!Number.isFinite(num) || num <= 0) {
+          return;
+        }
+        if (num > best) {
+          best = num;
+        }
+      });
+    }
+    if (best > 0) {
+      return best;
+    }
 
-    const sceneItems = collectSceneItems(root);
+    const weak = findFirstNumberByKeys(item, ['count', 'value', 'num']);
+    return Number.isFinite(weak) && weak > 0 ? weak : 0;
+  }
+
+  function buildTrafficSourcesFromSceneItems(sceneItems) {
+    const sourceMap = createEmptyTrafficSources();
+    if (!Array.isArray(sceneItems) || sceneItems.length === 0) {
+      return sourceMap;
+    }
+
     sceneItems.forEach((item) => {
       const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
-      const count = findFirstNumberByKeys(item, ['int_page_read_user', 'read_num', 'read_uv', 'read_count', 'value', 'count']);
-      if (!Number.isFinite(scene) || !Number.isFinite(count) || count <= 0) {
+      const sceneDesc = String(
+        item.scene_desc
+          ?? item.sceneDesc
+          ?? item.scene_name
+          ?? item.sceneName
+          ?? item.source_name
+          ?? item.sourceName
+          ?? ''
+      ).trim();
+      const count = extractSceneMetricCount(item);
+      if (!Number.isFinite(count) || count <= 0) {
         return;
       }
-
-      if (scene === 0) {
-        byScene['\u516c\u4f17\u53f7\u6d88\u606f'] += count;
-      } else if (scene === 1) {
-        byScene['\u516c\u4f17\u53f7\u4e3b\u9875'] += count;
-      } else if (scene === 2) {
-        byScene['\u670b\u53cb\u5708'] += count;
-      } else if (scene === 5) {
-        byScene['\u804a\u5929\u4f1a\u8bdd'] += count;
-      } else if (scene === 6) {
-        byScene['\u63a8\u8350'] += count;
-      } else if (scene === 7) {
-        byScene['\u641c\u4e00\u641c'] += count;
-      } else {
-        byScene['\u5176\u5b83'] += count;
+      if (applyTrafficSourceByLabel(sourceMap, sceneDesc, count)) {
+        return;
       }
+      addTrafficSourceByScene(sourceMap, scene, count);
     });
 
-    return byScene;
+    return sourceMap;
+  }
+
+  function sourceKeyByScene(scene) {
+    const sceneId = Number(scene);
+    if (!Number.isFinite(sceneId) || sceneId === 9999) {
+      return '';
+    }
+    if (sceneId === 0) {
+      return '公众号消息';
+    }
+    if (sceneId === 1) {
+      return '聊天会话';
+    }
+    if (sceneId === 2) {
+      return '朋友圈';
+    }
+    if (sceneId === 4) {
+      return '公众号主页';
+    }
+    if (sceneId === 6) {
+      return '推荐';
+    }
+    if (sceneId === 7) {
+      return '搜一搜';
+    }
+    return '其它';
+  }
+
+  function addTrafficSourceByScene(target, scene, rawCount) {
+    const sourceKey = sourceKeyByScene(scene);
+    const count = Number(rawCount || 0);
+    if (!sourceKey || !target || !Number.isFinite(count) || count <= 0) {
+      return false;
+    }
+    target[sourceKey] = Number(target[sourceKey] || 0) + count;
+    return true;
+  }
+
+  function trafficSourcesTotal(sourceMap) {
+    if (!sourceMap || typeof sourceMap !== 'object') {
+      return 0;
+    }
+    return Object.values(sourceMap).reduce((sum, value) => {
+      const one = toLooseNumber(value);
+      if (!Number.isFinite(one) || one <= 0) {
+        return sum;
+      }
+      return sum + one;
+    }, 0);
+  }
+
+  function buildTrafficDebug(root) {
+    const sceneItems = collectSceneItems(root);
+    return {
+      sceneItemCount: sceneItems.length,
+      sceneSamples: sceneItems.slice(0, 3).map((item) => ({
+        scene: Number(item.scene ?? item.scene_id ?? item.source_scene),
+        label: String(item.scene_desc ?? item.sceneDesc ?? item.scene_name ?? item.sceneName ?? item.source_name ?? item.sourceName ?? '').trim(),
+        readNum: extractSceneMetricCount(item),
+        keys: safeObjectKeys(item).slice(0, 8),
+      })),
+    };
+  }
+
+  function buildTrafficSources(root) {
+    const summaryItems = collectSceneItems(root?.articleSummaryData);
+    const bySummary = buildTrafficSourcesFromSceneItems(summaryItems);
+    if (trafficSourcesTotal(bySummary) > 0) {
+      return bySummary;
+    }
+
+    const direct = {
+      朋友圈: findFirstNumberByKeys(root, ['fromfeed', 'from_feed', 'from_friend', 'from_feed_read_user', 'from_feed_uv']),
+      公众号消息: findFirstNumberByKeys(root, ['frommsg', 'from_msg', 'from_subscription', 'from_msg_read_user', 'frommsg_read_user', 'from_msg_uv']),
+      推荐: findFirstNumberByKeys(root, ['fromrecommend', 'from_recommend', 'from_kandian', 'from_recommend_read_user', 'from_recommend_uv']),
+      公众号主页: findFirstNumberByKeys(root, ['fromhome', 'from_home', 'fromprofile', 'from_profile', 'from_home_read_user', 'from_profile_read_user']),
+      聊天会话: findFirstNumberByKeys(root, ['fromsession', 'from_session', 'fromchat', 'from_chat', 'from_session_read_user', 'from_chat_read_user']),
+      搜一搜: findFirstNumberByKeys(root, ['fromsogou', 'from_search', 'from_sogou', 'from_search_read_user']),
+      其它: findFirstNumberByKeys(root, ['fromother', 'from_other', 'from_other_read_user']),
+    };
+
+    const byScene = buildTrafficSourcesFromSceneItems(collectSceneItems(root));
+    const bySceneTotal = trafficSourcesTotal(byScene);
+    if (bySceneTotal > 0) {
+      return byScene;
+    }
+
+    return trafficSourcesTotal(direct) > 0 ? direct : createEmptyTrafficSources();
   }
   function extractMetricsFromPayload(payload) {
-    const articleData = parseMaybeJson(payload.articleData) || payload.articleData || {};
-    const articleDataNew = parseMaybeJson(articleData.article_data_new || payload.article_data_new)
-      || articleData.article_data_new
-      || payload.article_data_new
-      || {};
-    const subsTransform = parseMaybeJson(articleData.subs_transform || payload.subs_transform)
-      || articleData.subs_transform
-      || payload.subs_transform
-      || {};
+    const articleData = parseStructuredData(payload.articleData) || {};
+    const articleDataNew = parseStructuredData(
+      articleData.article_data_new ?? articleData.articleDataNew ?? payload.article_data_new ?? payload.articleDataNew
+    ) || {};
+    const articleSummaryData = parseStructuredData(
+      payload.articleSummaryData ?? payload.article_summary_data ?? articleData.articleSummaryData ?? articleData.article_summary_data
+    ) || [];
+    const detailData = parseStructuredData(
+      payload.detailData ?? payload.detail_data ?? articleData.detailData ?? articleData.detail_data
+    ) || {};
+    const subsTransform = parseStructuredData(
+      articleData.subs_transform ?? articleData.subsTransform ?? payload.subs_transform ?? payload.subsTransform
+    ) || {};
 
-    const root = { json: payload, articleData, articleDataNew, subsTransform };
+    const root = { json: payload, articleData, articleDataNew, articleSummaryData, detailData, subsTransform };
     const completionRateRaw = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
     const avgReadTimeRaw = findFirstNumberByKeys(root, ['avg_article_read_time', 'avg_read_time', 'avg_read_duration', 'read_time_avg']);
     return {
@@ -2349,6 +3236,8 @@
       newFollowers: findFirstNumberByKeys(root, ['new_fans', 'follow_after_read_uv']),
       trafficSources: buildTrafficSources(root),
       topKeys: safeObjectKeys(payload),
+      trafficDebug: buildTrafficDebug(root),
+      parseScore: payloadQualityScore(payload),
     };
   }
 
@@ -2442,11 +3331,31 @@
     }
     if (requestResult.ret !== 0) {
       const errMsg = responseErrMsg(requestResult.json);
+      if (isFreqControlReason(errMsg)) {
+        noteMpFreqHit(`metrics-ret:${requestResult.ret}`);
+        throw createFreqLimitedError('读取文章指标触发频控，请稍后重试');
+      }
       throw new Error(`文章指标接口异常(${requestResult.ret})${errMsg ? `: ${errMsg}` : ''}`);
     }
     let metrics = extractMetricsFromPayload(requestResult.json);
     const metricsFromRaw = extractMetricsFromRawHtml(requestResult.raw);
     metrics = mergeMetricsByPositiveValue(metrics, metricsFromRaw);
+    if (trafficProbeLogCount < 30) {
+      safeWarnProbe('traffic probe parsed result', {
+        wxArticleId: article?.wxArticleId ?? '',
+        title: article?.title ?? '',
+        msgIdBase: currentMsgIdBase,
+        msgIndex,
+        usedPublishDate,
+        readCount: Number(metrics.readCount || 0),
+        sendCount: Number(metrics.sendCount || 0),
+        trafficTotal: trafficSourcesTotal(metrics.trafficSources),
+        trafficSources: metrics.trafficSources,
+        parseScore: Number(metrics.parseScore || 0),
+        topKeys: Array.isArray(metrics.topKeys) ? metrics.topKeys.slice(0, 12) : [],
+        trafficDebug: metrics.trafficDebug || null,
+      });
+    }
 
     if (isCoreMetricsZero(metrics) && !resolvedFromArticlePage && article?.contentUrl) {
       const resolved = await resolveMetricParamsFromArticlePage(article).catch(() => null);
@@ -2509,6 +3418,24 @@
         topKeys: metrics.topKeys,
       });
     }
+    if (zeroTrafficSourceLogCount < 8
+      && !isCoreMetricsZero(metrics)
+      && Number(metrics.readCount || 0) > 0
+      && trafficSourcesTotal(metrics.trafficSources) <= 0) {
+      zeroTrafficSourceLogCount += 1;
+      safeLog('warn', 'traffic sources all zero with positive read', {
+        wxArticleId: article?.wxArticleId ?? '',
+        title: article?.title ?? '',
+        msgIdBase: currentMsgIdBase,
+        msgIndex,
+        usedPublishDate,
+        readCount: metrics.readCount,
+        sendCount: metrics.sendCount,
+        parseScore: metrics.parseScore,
+        topKeys: metrics.topKeys,
+        trafficDebug: metrics.trafficDebug,
+      });
+    }
 
     return {
       readCount: metrics.readCount,
@@ -2558,6 +3485,27 @@
       }
     }
     return null;
+  }
+
+  function parseStructuredData(value) {
+    if (value == null) {
+      return null;
+    }
+    let current = value;
+    for (let i = 0; i < 4; i += 1) {
+      if (current && typeof current === 'object') {
+        return current;
+      }
+      const parsed = parseMaybeJson(current);
+      if (parsed == null) {
+        return null;
+      }
+      if (parsed === current) {
+        break;
+      }
+      current = parsed;
+    }
+    return current && typeof current === 'object' ? current : null;
   }
 
   function safeObjectKeys(value) {
@@ -2669,6 +3617,10 @@
         latestLastSync = changes.gzhLastSync?.newValue || null;
         shouldRender = true;
       }
+      if (Object.prototype.hasOwnProperty.call(changes, 'gzhSyncRangeCode')) {
+        selectedSyncRangeCode = normalizeSyncRangeCode(changes.gzhSyncRangeCode?.newValue);
+        shouldRender = true;
+      }
 
       if (shouldRender) {
         renderPanel(panelState);
@@ -2689,9 +3641,10 @@
   async function refreshFromStorage(allowAutoSync = true) {
     try {
       const prevAuthToken = latestAuthToken;
-      const storage = await getStorage(['gzhAuthToken', 'gzhLastSync']);
+      const storage = await getStorage(['gzhAuthToken', 'gzhLastSync', 'gzhSyncRangeCode']);
       latestAuthToken = storage.gzhAuthToken || '';
       latestLastSync = storage.gzhLastSync || null;
+      selectedSyncRangeCode = normalizeSyncRangeCode(storage.gzhSyncRangeCode);
       renderPanel(panelState);
       if (allowAutoSync) {
         maybeAutoStartSyncOnAuthReady(prevAuthToken, latestAuthToken, 'refreshFromStorage');

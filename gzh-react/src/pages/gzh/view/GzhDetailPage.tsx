@@ -99,7 +99,7 @@ function normalizeSourceKey(key: string) {
   if (raw.includes('\u6d88\u606f') || (raw.includes('\u516c\u4f17\u53f7') && !raw.includes('\u4e3b\u9875')) || lower.includes('message') || lower.includes('subscription') || lower.includes('frommsg')) return SOURCE_MESSAGE;
   if (raw.includes('\u63a8\u8350') || lower.includes('recommend')) return SOURCE_RECOMMEND;
   if (raw.includes('\u4e3b\u9875') || lower.includes('home') || lower.includes('profile')) return SOURCE_HOME;
-  if (raw.includes('\u804a\u5929') || raw.includes('\u4f1a\u8bdd') || lower.includes('chat') || lower.includes('session')) return SOURCE_CHAT;
+  if (raw.includes('\u804a\u5929') || raw.includes('\u4f1a\u8bdd') || raw.includes('\u8f6c\u53d1') || lower.includes('chat') || lower.includes('session')) return SOURCE_CHAT;
   if (raw.includes('\u641c') || lower.includes('search') || lower.includes('sogou')) return SOURCE_SEARCH;
   if (raw.includes('\u5176\u4ed6') || raw.includes('\u5176\u5b83') || lower.includes('other')) return SOURCE_OTHER;
   return SOURCE_OTHER;

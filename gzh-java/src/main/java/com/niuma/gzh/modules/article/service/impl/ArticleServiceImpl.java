@@ -31,7 +31,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,22 +82,12 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Transactional(rollbackFor = Exception.class)
     public SyncResultVO syncArticles(SyncArticlesDTO dto) {
         Long userId = AuthContext.requiredUserId();
-        int articleInputSize = dto.getArticles() == null ? 0 : dto.getArticles().size();
-        int snapshotInputSize = dto.getSnapshots() == null ? 0 : dto.getSnapshots().size();
-        log.info("[tfling] sync/articles start userId={}, articleInputSize={}, snapshotInputSize={}", userId, articleInputSize, snapshotInputSize);
-        if (articleInputSize > 0) {
-            String sample = dto.getArticles().stream()
-                .limit(5)
-                .map(SyncArticlesDTO.ArticleItem::getWxArticleId)
-                .collect(Collectors.joining(","));
-            log.info("[tfling] sync/articles article sample wxArticleIds={}", sample);
-        }
-
         int newCount = 0;
         int updatedCount = 0;
         int snapshotSaved = 0;
         int snapshotMissedArticle = 0;
         int snapshotAllZero = 0;
+        int snapshotTrafficAllZeroWithRead = 0;
         long snapshotReadTotal = 0;
         long snapshotSendTotal = 0;
         long snapshotShareTotal = 0;
@@ -159,6 +148,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setNewFollowers(defaultInt(snapshotItem.getNewFollowers()));
             Map<String, Integer> normalizedTrafficSources = normalizeTrafficSources(snapshotItem.getTrafficSources());
             snapshot.setTrafficSourcesJson(jsonUtil.toJson(normalizedTrafficSources));
+            snapshot.setSourceFriendCount(sourceCount(normalizedTrafficSources, SOURCE_FRIEND));
+            snapshot.setSourceMessageCount(sourceCount(normalizedTrafficSources, SOURCE_MESSAGE));
+            snapshot.setSourceRecommendCount(sourceCount(normalizedTrafficSources, SOURCE_RECOMMEND));
+            snapshot.setSourceHomeCount(sourceCount(normalizedTrafficSources, SOURCE_HOME));
+            snapshot.setSourceChatCount(sourceCount(normalizedTrafficSources, SOURCE_CHAT));
+            snapshot.setSourceSearchCount(sourceCount(normalizedTrafficSources, SOURCE_SEARCH));
+            snapshot.setSourceOtherCount(sourceCount(normalizedTrafficSources, SOURCE_OTHER));
             snapshot.setSnapshotTime(LocalDateTime.now());
             snapshotRepository.save(snapshot);
             snapshotSaved++;
@@ -168,6 +164,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             int shareCount = defaultInt(snapshotItem.getShareCount());
             int likeCount = defaultInt(snapshotItem.getLikeCount()) + defaultInt(snapshotItem.getWowCount());
             int followCount = defaultInt(snapshotItem.getNewFollowers());
+            int trafficSourceTotal = totalTrafficSources(normalizedTrafficSources);
 
             snapshotReadTotal += readCount;
             snapshotSendTotal += sendCount;
@@ -178,12 +175,28 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             if (readCount == 0 && sendCount == 0 && shareCount == 0 && likeCount == 0 && followCount == 0) {
                 snapshotAllZero++;
             }
+            if (readCount > 0 && trafficSourceTotal <= 0) {
+                snapshotTrafficAllZeroWithRead++;
+                if (snapshotTrafficAllZeroWithRead <= 8) {
+                    log.warn(
+                        "[tfling] snapshot traffic source empty userId={}, wxArticleId={}, readCount={}, sendCount={}, rawTrafficKeys={}, rawTraffic={}",
+                        userId,
+                        snapshotItem.getWxArticleId(),
+                        readCount,
+                        sendCount,
+                        snapshotItem.getTrafficSources() == null ? 0 : snapshotItem.getTrafficSources().size(),
+                        snapshotItem.getTrafficSources()
+                    );
+                }
+            }
         }
 
-        log.info(
-            "[tfling] sync/articles done userId={}, newArticles={}, updatedArticles={}, snapshotSaved={}, snapshotMissedArticle={}, snapshotAllZero={}, skippedDeletedArticle={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}",
-            userId, newCount, updatedCount, snapshotSaved, snapshotMissedArticle, snapshotAllZero, skippedDeletedArticle, snapshotReadTotal, snapshotSendTotal, snapshotShareTotal, snapshotLikeTotal, snapshotFollowTotal
-        );
+        if (snapshotTrafficAllZeroWithRead > 0) {
+            log.warn(
+                "[tfling] sync/articles traffic source anomaly summary userId={}, snapshotSaved={}, snapshotTrafficAllZeroWithRead={}, snapshotAllZero={}, readTotal={}, sendTotal={}, shareTotal={}, likeTotal={}, followTotal={}, skippedDeletedArticle={}, snapshotMissedArticle={}",
+                userId, snapshotSaved, snapshotTrafficAllZeroWithRead, snapshotAllZero, snapshotReadTotal, snapshotSendTotal, snapshotShareTotal, snapshotLikeTotal, snapshotFollowTotal, skippedDeletedArticle, snapshotMissedArticle
+            );
+        }
 
         SyncResultVO vo = new SyncResultVO();
         vo.setNewArticles(newCount);
@@ -293,7 +306,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             vo.setNewFollowers(latest.getNewFollowers());
             vo.setAvgReadTimeSec(latest.getAvgReadTimeSec());
             vo.setCompletionRate(normalizeCompletionRate(latest.getCompletionRate()));
-            vo.setTrafficSources(normalizeTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson())));
+            vo.setTrafficSources(mergeTrafficSourcesWithColumns(latest, jsonUtil.toIntMap(latest.getTrafficSourcesJson())));
         }
         return vo;
     }
@@ -337,7 +350,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 completionCount++;
             }
 
-            Map<String, Integer> oneMap = normalizeTrafficSources(jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
+            Map<String, Integer> oneMap = mergeTrafficSourcesWithColumns(latest, jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
             oneMap.forEach((k, v) -> trafficCount.put(k, trafficCount.getOrDefault(k, 0) + defaultInt(v)));
         }
 
@@ -400,6 +413,48 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         return normalized;
     }
 
+    private Map<String, Integer> mergeTrafficSourcesWithColumns(ArticleSnapshotEntity snapshot, Map<String, Integer> raw) {
+        Map<String, Integer> merged = normalizeTrafficSources(raw);
+        if (snapshot == null) {
+            return merged;
+        }
+
+        merged.put(SOURCE_FRIEND, pickTrafficValue(merged.get(SOURCE_FRIEND), snapshot.getSourceFriendCount()));
+        merged.put(SOURCE_MESSAGE, pickTrafficValue(merged.get(SOURCE_MESSAGE), snapshot.getSourceMessageCount()));
+        merged.put(SOURCE_RECOMMEND, pickTrafficValue(merged.get(SOURCE_RECOMMEND), snapshot.getSourceRecommendCount()));
+        merged.put(SOURCE_HOME, pickTrafficValue(merged.get(SOURCE_HOME), snapshot.getSourceHomeCount()));
+        merged.put(SOURCE_CHAT, pickTrafficValue(merged.get(SOURCE_CHAT), snapshot.getSourceChatCount()));
+        merged.put(SOURCE_SEARCH, pickTrafficValue(merged.get(SOURCE_SEARCH), snapshot.getSourceSearchCount()));
+        merged.put(SOURCE_OTHER, pickTrafficValue(merged.get(SOURCE_OTHER), snapshot.getSourceOtherCount()));
+        return merged;
+    }
+
+    private int pickTrafficValue(Integer fromJson, Integer fromColumn) {
+        int columnValue = defaultInt(fromColumn);
+        if (columnValue > 0) {
+            return columnValue;
+        }
+        return defaultInt(fromJson);
+    }
+
+    private int sourceCount(Map<String, Integer> sourceMap, String sourceKey) {
+        if (sourceMap == null || sourceMap.isEmpty()) {
+            return 0;
+        }
+        return Math.max(0, defaultInt(sourceMap.get(sourceKey)));
+    }
+
+    private int totalTrafficSources(Map<String, Integer> sourceMap) {
+        if (sourceMap == null || sourceMap.isEmpty()) {
+            return 0;
+        }
+        int sum = 0;
+        for (Integer value : sourceMap.values()) {
+            sum += Math.max(0, defaultInt(value));
+        }
+        return sum;
+    }
+
     private String normalizeTrafficSourceKey(String rawKey) {
         String key = rawKey == null ? "" : rawKey.trim();
         String lower = key.toLowerCase(Locale.ROOT);
@@ -422,6 +477,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         }
         if (key.contains("\u804a\u5929")
             || key.contains("\u4f1a\u8bdd")
+            || key.contains("\u8f6c\u53d1")
             || lower.contains("chat")
             || lower.contains("session")) {
             return SOURCE_CHAT;

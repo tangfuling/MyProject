@@ -10,6 +10,9 @@ const ALLOWED_PROXY_PREFIX = `${API_BASE_URL}/`;
 const LOG_PREFIX = '[tfling]';
 
 function bgLog(level, message, payload) {
+  if (String(level || '').toLowerCase() === 'info') {
+    return;
+  }
   const fn = typeof console?.[level] === 'function' ? console[level] : console.log;
   if (payload === undefined) {
     fn(`${LOG_PREFIX} ${message}`);
