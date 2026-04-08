@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS gzh_article_snapshot (
     avg_read_time_sec INT NOT NULL DEFAULT 0 COMMENT '平均阅读时长(秒)',
     new_followers INT NOT NULL DEFAULT 0 COMMENT '新增关注',
     traffic_sources_json TEXT NULL COMMENT '流量来源JSON',
+    traffic_source_rates_json TEXT NULL COMMENT '流量来源占比JSON',
     source_friend_count INT NOT NULL DEFAULT 0 COMMENT '来源-朋友圈',
     source_message_count INT NOT NULL DEFAULT 0 COMMENT '来源-公众号消息',
     source_recommend_count INT NOT NULL DEFAULT 0 COMMENT '来源-推荐',
@@ -209,6 +210,22 @@ SET @gzh_snapshot_avg_read_time_sql = IF(
     'SELECT 1'
 );
 PREPARE gzh_stmt FROM @gzh_snapshot_avg_read_time_sql;
+EXECUTE gzh_stmt;
+DEALLOCATE PREPARE gzh_stmt;
+
+SET @gzh_snapshot_traffic_source_rates_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'gzh_article_snapshot'
+      AND COLUMN_NAME = 'traffic_source_rates_json'
+);
+SET @gzh_snapshot_traffic_source_rates_sql = IF(
+    @gzh_snapshot_traffic_source_rates_exists = 0,
+    'ALTER TABLE gzh_article_snapshot ADD COLUMN traffic_source_rates_json TEXT NULL COMMENT ''流量来源占比JSON'' AFTER traffic_sources_json',
+    'SELECT 1'
+);
+PREPARE gzh_stmt FROM @gzh_snapshot_traffic_source_rates_sql;
 EXECUTE gzh_stmt;
 DEALLOCATE PREPARE gzh_stmt;
 

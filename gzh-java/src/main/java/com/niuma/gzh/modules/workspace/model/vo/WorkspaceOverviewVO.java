@@ -100,5 +100,6 @@ public class WorkspaceOverviewVO {
         private Integer newFollowers;
         private BigDecimal completionRate;
         private Map<String, Integer> trafficSources;
+        private Map<String, Double> trafficSourceRates;
     }
 }

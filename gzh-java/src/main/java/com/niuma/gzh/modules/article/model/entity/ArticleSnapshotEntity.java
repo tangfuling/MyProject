@@ -28,6 +28,7 @@ public class ArticleSnapshotEntity {
     private Integer avgReadTimeSec;
     private Integer newFollowers;
     private String trafficSourcesJson;
+    private String trafficSourceRatesJson;
     private Integer sourceFriendCount;
     private Integer sourceMessageCount;
     private Integer sourceRecommendCount;

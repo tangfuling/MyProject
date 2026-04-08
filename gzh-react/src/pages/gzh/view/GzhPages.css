@@ -1339,12 +1339,19 @@
   border-radius: 12px;
   padding: 12px;
   margin-top: 8px;
+  cursor: pointer;
   transition: all 0.15s;
 }
 
 .gzh-v2-detail .art-card:hover {
   border-color: var(--blue);
   box-shadow: var(--shadow-sm);
+}
+
+.gzh-v2-detail .art-card.active {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(80, 137, 255, 0.15);
+  background: #f6fbff;
 }
 
 .gzh-v2-detail .art-card-top {

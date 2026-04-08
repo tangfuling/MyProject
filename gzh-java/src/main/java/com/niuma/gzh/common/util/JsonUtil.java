@@ -43,4 +43,15 @@ public class JsonUtil {
             return Collections.emptyMap();
         }
     }
+
+    public Map<String, Double> toDoubleMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Double>>() {});
+        } catch (JsonProcessingException e) {
+            return Collections.emptyMap();
+        }
+    }
 }

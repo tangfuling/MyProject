@@ -81,6 +81,7 @@ export type WorkspaceArticleCard = {
   newFollowers: number;
   completionRate?: number;
   trafficSources: Record<string, number>;
+  trafficSourceRates?: Record<string, number>;
 };
 
 export type WorkspaceArticlePage = PageResult<WorkspaceArticleCard>;

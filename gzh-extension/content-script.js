@@ -1103,16 +1103,83 @@
     return { response, text };
   }
 
-  function isWithinLookbackDays(article, days) {
-    const value = String(article?.publishTime || '').trim();
-    if (!value) {
-      return true;
+  function toUnixMsFromEpochLike(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) {
+      return NaN;
     }
-    const ts = Date.parse(value);
+    if (num >= 1000000000000 && num <= 5000000000000) {
+      return Math.floor(num);
+    }
+    if (num >= 946684800 && num <= 5000000000) {
+      return Math.floor(num * 1000);
+    }
+    return NaN;
+  }
+
+  function parseYmdToChinaMs(value) {
+    const text = String(value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return NaN;
+    }
+    return Date.parse(`${text}T00:00:00+08:00`);
+  }
+
+  function resolveArticlePublishTimestampMs(article) {
+    if (!article || typeof article !== 'object') {
+      return NaN;
+    }
+    const epochLikeKeys = [
+      'publishTimestamp',
+      'publish_time',
+      'publishTimeSec',
+      'create_time',
+      'createTime',
+      'send_time',
+      'sent_time',
+      'update_time',
+      'ct',
+    ];
+    for (const key of epochLikeKeys) {
+      const ts = toUnixMsFromEpochLike(article[key]);
+      if (Number.isFinite(ts)) {
+        return ts;
+      }
+    }
+
+    const publishTimeText = String(article.publishTime || '').trim();
+    if (publishTimeText) {
+      const isoTs = Date.parse(publishTimeText);
+      if (Number.isFinite(isoTs)) {
+        return isoTs;
+      }
+      const epochTs = toUnixMsFromEpochLike(publishTimeText);
+      if (Number.isFinite(epochTs)) {
+        return epochTs;
+      }
+    }
+
+    const publishDateText = String(article.publishDate || article.publish_date || '').trim();
+    const chinaTs = parseYmdToChinaMs(publishDateText);
+    if (Number.isFinite(chinaTs)) {
+      return chinaTs;
+    }
+    if (publishDateText) {
+      const genericTs = Date.parse(publishDateText);
+      if (Number.isFinite(genericTs)) {
+        return genericTs;
+      }
+    }
+    return NaN;
+  }
+
+  function isWithinLookbackDays(article, days, options = {}) {
+    const allowUnknownPublishTime = options.allowUnknownPublishTime !== false;
+    const ts = resolveArticlePublishTimestampMs(article);
     if (!Number.isFinite(ts)) {
-      return true;
+      return allowUnknownPublishTime;
     }
-    return (Date.now() - ts) <= (Math.max(1, days) * 24 * 60 * 60 * 1000);
+    return (Date.now() - ts) <= (Math.max(1, Number(days) || 1) * 24 * 60 * 60 * 1000);
   }
 
   function createTaskLimiter(maxConcurrent) {
@@ -1348,6 +1415,7 @@
       completionRate: metrics.completionRate || 0,
       avgReadTimeSec: metrics.avgReadTimeSec || 0,
       trafficSources: metrics.trafficSources || {},
+      trafficSourceRates: metrics.trafficSourceRates || {},
       newFollowers: metrics.newFollowers || 0,
     };
   }
@@ -2105,16 +2173,230 @@
     }
 
     const deduped = dedupeById(all).slice(0, MAX_ARTICLES_PER_RUN);
+    let noPublishTimeCount = 0;
+    let outOfRangeCount = 0;
     const filtered = syncRangeDays > 0
-      ? deduped.filter((article) => isWithinLookbackDays(article, syncRangeDays))
+      ? deduped.filter((article) => {
+        const publishTs = resolveArticlePublishTimestampMs(article);
+        if (!Number.isFinite(publishTs)) {
+          noPublishTimeCount += 1;
+          return false;
+        }
+        const matched = isWithinLookbackDays(article, syncRangeDays, { allowUnknownPublishTime: false });
+        if (!matched) {
+          outOfRangeCount += 1;
+        }
+        return matched;
+      })
       : deduped;
     safeLog('info', 'appmsgpublish done', {
       syncRangeDays,
       rawCount: all.length,
       dedupedCount: deduped.length,
       filteredCount: filtered.length,
+      noPublishTimeCount,
+      outOfRangeCount,
     });
     return filtered;
+  }
+
+  function normalizePublishTimestampSeconds(value) {
+    const raw = value;
+    if (raw == null || raw === '') {
+      return 0;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      if (raw >= 1000000000000 && raw <= 5000000000000) {
+        return Math.floor(raw / 1000);
+      }
+      if (raw >= 946684800 && raw <= 5000000000) {
+        return Math.floor(raw);
+      }
+      return 0;
+    }
+    const text = String(raw).trim();
+    if (!text) {
+      return 0;
+    }
+    if (/^\d{9,13}$/.test(text)) {
+      const num = Number(text);
+      if (!Number.isFinite(num)) {
+        return 0;
+      }
+      if (num >= 1000000000000 && num <= 5000000000000) {
+        return Math.floor(num / 1000);
+      }
+      if (num >= 946684800 && num <= 5000000000) {
+        return Math.floor(num);
+      }
+      return 0;
+    }
+    const ymdTs = parseYmdToChinaMs(text);
+    if (Number.isFinite(ymdTs)) {
+      return Math.floor(ymdTs / 1000);
+    }
+    const genericTs = Date.parse(text);
+    if (Number.isFinite(genericTs)) {
+      const sec = Math.floor(genericTs / 1000);
+      if (sec >= 946684800 && sec <= 5000000000) {
+        return sec;
+      }
+    }
+    return 0;
+  }
+
+  function isPublishTimestampFieldName(key) {
+    const text = String(key || '').toLowerCase();
+    if (!text) {
+      return false;
+    }
+    return text === 'ct'
+      || text === 'publish_time'
+      || text === 'publishtime'
+      || text === 'create_time'
+      || text === 'createtime'
+      || text === 'send_time'
+      || text === 'sent_time'
+      || text === 'update_time'
+      || text === 'datetime'
+      || text === 'date_time'
+      || text === 'publish_date'
+      || text === 'publishdate'
+      || text === 'sendtime'
+      || text === 'senttime';
+  }
+
+  function extractPublishTimestampSecondsFromText(rawText) {
+    const text = String(rawText || '');
+    if (!text) {
+      return 0;
+    }
+    const tsMatch = text.match(/(?:publish_time|create_time|send_time|sent_time|update_time|ct|date_time|datetime)["']?\s*[:=]\s*["']?(\d{9,13})/i);
+    const ts = normalizePublishTimestampSeconds(tsMatch?.[1] || 0);
+    if (ts > 0) {
+      return ts;
+    }
+    const dateMatch = text.match(/(?:publish_date|publishDate)["']?\s*[:=]\s*["']?(\d{4}-\d{2}-\d{2})/i);
+    return normalizePublishTimestampSeconds(dateMatch?.[1] || 0);
+  }
+
+  function extractPublishTimestampSecondsFromNode(node, depth = 0) {
+    if (depth > 7 || node == null) {
+      return 0;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const ts = extractPublishTimestampSecondsFromNode(item, depth + 1);
+        if (ts > 0) {
+          return ts;
+        }
+      }
+      return 0;
+    }
+    if (typeof node === 'string') {
+      const textTs = extractPublishTimestampSecondsFromText(node);
+      if (textTs > 0) {
+        return textTs;
+      }
+      const parsed = parseMaybeJson(node);
+      if (parsed && typeof parsed === 'object') {
+        return extractPublishTimestampSecondsFromNode(parsed, depth + 1);
+      }
+      return 0;
+    }
+    if (typeof node !== 'object') {
+      return normalizePublishTimestampSeconds(node);
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (!isPublishTimestampFieldName(key)) {
+        continue;
+      }
+      const ts = normalizePublishTimestampSeconds(value);
+      if (ts > 0) {
+        return ts;
+      }
+      const nestedTs = extractPublishTimestampSecondsFromNode(value, depth + 1);
+      if (nestedTs > 0) {
+        return nestedTs;
+      }
+      if (typeof value === 'string') {
+        const textTs = extractPublishTimestampSecondsFromText(value);
+        if (textTs > 0) {
+          return textTs;
+        }
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      if (value == null) {
+        continue;
+      }
+      if (typeof value === 'object') {
+        const ts = extractPublishTimestampSecondsFromNode(value, depth + 1);
+        if (ts > 0) {
+          return ts;
+        }
+      } else if (typeof value === 'string' && value.length <= 2400) {
+        const ts = extractPublishTimestampSecondsFromText(value);
+        if (ts > 0) {
+          return ts;
+        }
+      }
+    }
+    return 0;
+  }
+
+  function resolvePublishTimestampSeconds(article, item, info) {
+    const directCandidates = [
+      article?.publish_time,
+      article?.publishTime,
+      article?.create_time,
+      article?.createTime,
+      article?.send_time,
+      article?.sent_time,
+      article?.update_time,
+      article?.ct,
+      article?.publish_date,
+      article?.publishDate,
+      item?.publish_time,
+      item?.create_time,
+      item?.send_time,
+      item?.sent_time,
+      item?.update_time,
+      item?.publish_date,
+      item?.publishDate,
+      info?.publish_time,
+      info?.create_time,
+      info?.send_time,
+      info?.sent_time,
+      info?.update_time,
+      info?.publish_date,
+      info?.publishDate,
+    ];
+    for (const value of directCandidates) {
+      const ts = normalizePublishTimestampSeconds(value);
+      if (ts > 0) {
+        return ts;
+      }
+    }
+
+    const sources = [
+      article,
+      item,
+      info,
+      item?.publish_info,
+      item?.publishInfo,
+      info?.publish_info,
+      info?.publishInfo,
+    ];
+    for (const source of sources) {
+      const ts = extractPublishTimestampSecondsFromNode(source, 0);
+      if (ts > 0) {
+        return ts;
+      }
+    }
+    return 0;
   }
 
   function parseArticlesFromPublishItem(item, itemIndex) {
@@ -2131,7 +2413,7 @@
     collectArticleCandidates(item, candidates, 0);
 
     const seen = new Set();
-    const publishTsFallback = Number(item?.publish_time || item?.create_time || 0);
+    const publishTsFallback = resolvePublishTimestampSeconds(null, item, info);
     const result = [];
     candidates.forEach((article, idx) => {
       if (isDeletedArticleCandidate(article)) {
@@ -2163,7 +2445,7 @@
         1
       );
       const title = rawTitle;
-      const publishTs = Number(article.publish_time || article.create_time || publishTsFallback || 0);
+      const publishTs = resolvePublishTimestampSeconds(article, item, info) || publishTsFallback || 0;
       const wxArticleId = String(
         article.aid
           || `${midFromUrl || metricMsgId || ''}_${metricMsgIndex}`
@@ -2186,6 +2468,7 @@
         wxArticleId,
         title,
         contentUrl: articleUrl,
+        publishTimestamp: publishTs > 0 ? publishTs : 0,
         publishTime: publishTs > 0 ? new Date(publishTs * 1000).toISOString() : '',
         publishDate: publishTs > 0 ? formatChinaDateFromUnixSeconds(publishTs) : '',
         metricMsgId,
@@ -2874,6 +3157,10 @@
     const trafficSources = trafficSourcesTotal(parsedTrafficSources) > 0
       ? parsedTrafficSources
       : (rawTraffic.trafficSources || createEmptyTrafficSources());
+    const parsedTrafficSourceRates = parsedMetrics?.trafficSourceRates || {};
+    const trafficSourceRates = trafficSourceRatesTotal(parsedTrafficSourceRates) > 0
+      ? parsedTrafficSourceRates
+      : createEmptyTrafficSourceRates();
     const trafficDebug = (parsedMetrics?.trafficDebug && parsedMetrics.trafficDebug.sceneItemCount > 0)
       ? parsedMetrics.trafficDebug
       : (rawTraffic.trafficDebug || { sceneItemCount: 0, sceneSamples: [] });
@@ -2894,6 +3181,7 @@
       avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeSec),
       newFollowers,
       trafficSources,
+      trafficSourceRates,
       trafficDebug,
       topKeys: parsedMetrics?.topKeys || [],
       parseScore,
@@ -2934,6 +3222,15 @@
     );
     if (fallbackTrafficLooksBetter) {
       merged.trafficSources = fallback.trafficSources;
+    }
+    const mergedRateTotal = trafficSourceRatesTotal(merged.trafficSourceRates);
+    const fallbackRateTotal = trafficSourceRatesTotal(fallback.trafficSourceRates);
+    if (fallbackRateTotal > 0 && (
+      mergedRateTotal <= 0
+      || fallbackParseScore > mergedParseScore
+      || fallbackRateTotal >= Math.max(10, mergedRateTotal * 1.2)
+    )) {
+      merged.trafficSourceRates = fallback.trafficSourceRates;
     }
     if ((!merged.trafficDebug || merged.trafficDebug.sceneItemCount <= 0) && fallback.trafficDebug) {
       merged.trafficDebug = fallback.trafficDebug;
@@ -3236,6 +3533,18 @@
     };
   }
 
+  function createEmptyTrafficSourceRates() {
+    return {
+      朋友圈: 0,
+      公众号消息: 0,
+      推荐: 0,
+      公众号主页: 0,
+      聊天会话: 0,
+      搜一搜: 0,
+      其它: 0,
+    };
+  }
+
   function sourceKeyByScene(scene) {
     const sceneId = Number(scene);
     if (!Number.isFinite(sceneId) || sceneId === 9999) {
@@ -3282,6 +3591,8 @@
   const SCENE_COUNT_STRONG_ALIAS_SET = buildAliasSet([
     'int_page_read_user',
     'intPageReadUser',
+    'read_user',
+    'readUser',
     'read_uv',
     'readUv',
     'read_num',
@@ -3539,6 +3850,236 @@
     }, 0);
   }
 
+  function trafficSourceRateNonZeroCount(rateMap) {
+    if (!rateMap || typeof rateMap !== 'object') {
+      return 0;
+    }
+    return Object.values(rateMap).reduce((count, value) => {
+      const one = toLooseNumber(value);
+      if (!Number.isFinite(one) || one <= 0) {
+        return count;
+      }
+      return count + 1;
+    }, 0);
+  }
+
+  function trafficSourceRatesTotal(rateMap) {
+    if (!rateMap || typeof rateMap !== 'object') {
+      return 0;
+    }
+    return Object.values(rateMap).reduce((sum, value) => {
+      const one = toLooseNumber(value);
+      if (!Number.isFinite(one) || one <= 0) {
+        return sum;
+      }
+      return sum + one;
+    }, 0);
+  }
+
+  function normalizeTrafficSourceRatePercent(rawRate) {
+    const value = Number(rawRate || 0);
+    if (!Number.isFinite(value) || value <= 0) {
+      return 0;
+    }
+    let percent = value;
+    if (percent <= 1) {
+      percent = percent * 100;
+    } else if (percent > 100 && percent <= 10000) {
+      percent = percent / 100;
+    }
+    if (!Number.isFinite(percent) || percent <= 0) {
+      return 0;
+    }
+    return Math.min(100, percent);
+  }
+
+  function roundToRatePercent(value) {
+    const one = Number(value || 0);
+    if (!Number.isFinite(one) || one <= 0) {
+      return 0;
+    }
+    return Math.round(one * 100) / 100;
+  }
+
+  function buildTrafficSourceRatesFromSceneItems(sceneItems) {
+    const rateMap = createEmptyTrafficSourceRates();
+    if (!Array.isArray(sceneItems) || sceneItems.length === 0) {
+      return rateMap;
+    }
+    sceneItems.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        return;
+      }
+      const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
+      const sceneDesc = String(
+        item.scene_desc
+          ?? item.sceneDesc
+          ?? item.scene_name
+          ?? item.sceneName
+          ?? item.source_name
+          ?? item.sourceName
+          ?? ''
+      ).trim();
+      const sourceKey = sourceKeyByLabel(sceneDesc) || sourceKeyByScene(scene);
+      if (!sourceKey) {
+        return;
+      }
+      const ratio = extractSceneMetricRatio(item);
+      const percent = normalizeTrafficSourceRatePercent(ratio);
+      if (percent <= 0) {
+        return;
+      }
+      rateMap[sourceKey] = Math.max(Number(rateMap[sourceKey] || 0), percent);
+    });
+    Object.keys(rateMap).forEach((key) => {
+      rateMap[key] = roundToRatePercent(rateMap[key]);
+    });
+    return rateMap;
+  }
+
+  function sceneReadMetricValue(item) {
+    if (!item || typeof item !== 'object') {
+      return 0;
+    }
+    const direct = [
+      item.read_count,
+      item.readCount,
+      item.read_user,
+      item.readUser,
+      item.read_uv,
+      item.readUv,
+      item.read_num,
+      item.readNum,
+      item.int_page_read_user,
+      item.intPageReadUser,
+      item.int_page_read_count,
+      item.intPageReadCount,
+    ];
+    for (const one of direct) {
+      const value = toLooseNumber(one);
+      if (Number.isFinite(value) && value > 0) {
+        return Number(value);
+      }
+    }
+    return extractSceneMetricCount(item);
+  }
+
+  function extractSummarySceneList(summaryData) {
+    const parsed = parseStructuredData(summaryData);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    if (parsed && typeof parsed === 'object') {
+      const list = parseStructuredData(parsed.list)
+        || parseStructuredData(parsed.data)
+        || parseStructuredData(parsed.items)
+        || parseStructuredData(parsed.scene_list)
+        || parseStructuredData(parsed.sceneList);
+      if (Array.isArray(list)) {
+        return list;
+      }
+    }
+    return [];
+  }
+
+  function buildOfficialTrafficSourceRatesFromSummary(summaryData) {
+    const list = extractSummarySceneList(summaryData);
+    const sourceCountMap = createEmptyTrafficSources();
+    const rateMap = createEmptyTrafficSourceRates();
+    if (!Array.isArray(list) || list.length <= 0) {
+      return rateMap;
+    }
+
+    let baseTotal = 0;
+    list.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        return;
+      }
+      const scene = Number(item.scene ?? item.scene_id ?? item.source_scene);
+      const value = sceneReadMetricValue(item);
+      if (!Number.isFinite(value) || value <= 0) {
+        return;
+      }
+      if (scene === 9999) {
+        baseTotal += value;
+        return;
+      }
+      const sceneDesc = String(
+        item.scene_desc
+          ?? item.sceneDesc
+          ?? item.scene_name
+          ?? item.sceneName
+          ?? item.source_name
+          ?? item.sourceName
+          ?? ''
+      ).trim();
+      const sourceKey = sourceKeyByScene(scene) || sourceKeyByLabel(sceneDesc);
+      if (!sourceKey) {
+        return;
+      }
+      sourceCountMap[sourceKey] = Number(sourceCountMap[sourceKey] || 0) + Number(value);
+    });
+
+    if (baseTotal <= 0) {
+      return rateMap;
+    }
+
+    Object.keys(rateMap).forEach((key) => {
+      const count = Number(sourceCountMap[key] || 0);
+      if (!Number.isFinite(count) || count <= 0) {
+        return;
+      }
+      rateMap[key] = roundToRatePercent((count * 100) / baseTotal);
+    });
+    return rateMap;
+  }
+
+  function buildTrafficSourceRates(root, totalRead = 0) {
+    void totalRead;
+    const officialSummaryRates = buildOfficialTrafficSourceRatesFromSummary(root?.articleSummaryData);
+    if (trafficSourceRateNonZeroCount(officialSummaryRates) > 0) {
+      return officialSummaryRates;
+    }
+    const summaryItems = collectSceneItems(root?.articleSummaryData);
+    const detailItems = collectSceneItems(root?.detailData);
+    const allItems = collectSceneItems(root);
+    const candidates = [
+      { sceneItemCount: summaryItems.length, map: buildTrafficSourceRatesFromSceneItems(summaryItems) },
+      { sceneItemCount: detailItems.length, map: buildTrafficSourceRatesFromSceneItems(detailItems) },
+      { sceneItemCount: allItems.length, map: buildTrafficSourceRatesFromSceneItems(allItems) },
+    ];
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const candidate = candidates[i];
+      const total = trafficSourceRatesTotal(candidate.map);
+      if (total <= 0) {
+        continue;
+      }
+      const nonZeroCount = trafficSourceRateNonZeroCount(candidate.map);
+      if (candidate.sceneItemCount >= 6 && nonZeroCount <= 1) {
+        continue;
+      }
+      return candidate.map;
+    }
+    return createEmptyTrafficSourceRates();
+  }
+
+  function buildTrafficSourceRatesFromCounts(sourceMap) {
+    const rates = createEmptyTrafficSourceRates();
+    const total = trafficSourcesTotal(sourceMap);
+    if (total <= 0) {
+      return rates;
+    }
+    Object.keys(rates).forEach((key) => {
+      const count = Number(sourceMap?.[key] || 0);
+      if (!Number.isFinite(count) || count <= 0) {
+        return;
+      }
+      rates[key] = roundToRatePercent((count * 100) / total);
+    });
+    return rates;
+  }
+
   function isSuspiciousTrafficDistribution(sourceMap, readCount, sceneItemCount = 0) {
     const total = trafficSourcesTotal(sourceMap);
     if (total <= 0) {
@@ -3663,6 +4204,11 @@
     const completionRateRaw = findFirstNumberByKeys(root, ['complete_read_rate', 'finished_read_pv_ratio']);
     const avgReadTimeRaw = findFirstNumberByKeys(root, ['avg_article_read_time', 'avg_read_time', 'avg_read_duration', 'read_time_avg']);
     const trafficDebug = buildTrafficDebug(root);
+    const trafficSources = buildTrafficSources(root, readCount);
+    const trafficSourceRatesRaw = buildTrafficSourceRates(root, readCount);
+    const trafficSourceRates = trafficSourceRatesTotal(trafficSourceRatesRaw) > 0
+      ? trafficSourceRatesRaw
+      : buildTrafficSourceRatesFromCounts(trafficSources);
     return {
       readCount,
       sendCount,
@@ -3674,7 +4220,8 @@
       completionRate: normalizeCompletionRate(completionRateRaw),
       avgReadTimeSec: normalizeAvgReadTimeSec(avgReadTimeRaw),
       newFollowers,
-      trafficSources: buildTrafficSources(root, readCount),
+      trafficSources,
+      trafficSourceRates,
       topKeys: safeObjectKeys(payload),
       trafficDebug,
       parseScore: payloadQualityScore(payload),
@@ -3917,6 +4464,7 @@
         sendCount: Number(metrics.sendCount || 0),
         trafficTotal: trafficSourcesTotal(metrics.trafficSources),
         trafficSources: metrics.trafficSources,
+        trafficSourceRates: metrics.trafficSourceRates || {},
         parseScore: Number(metrics.parseScore || 0),
         topKeys: Array.isArray(metrics.topKeys) ? metrics.topKeys.slice(0, 12) : [],
         trafficDebug: metrics.trafficDebug || null,
@@ -3987,6 +4535,7 @@
       completionRate: metrics.completionRate,
       avgReadTimeSec: metrics.avgReadTimeSec,
       trafficSources: metrics.trafficSources,
+      trafficSourceRates: metrics.trafficSourceRates || {},
       newFollowers: metrics.newFollowers,
     };
   }

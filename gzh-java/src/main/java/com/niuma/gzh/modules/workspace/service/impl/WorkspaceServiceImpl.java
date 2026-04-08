@@ -199,6 +199,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
             card.setNewFollowers(nullToZero(article.getNewFollowers()));
             card.setCompletionRate(article.getCompletionRate());
             card.setTrafficSources(article.getTrafficSources());
+            card.setTrafficSourceRates(article.getTrafficSourceRates());
             cards.add(card);
         }
         return cards;

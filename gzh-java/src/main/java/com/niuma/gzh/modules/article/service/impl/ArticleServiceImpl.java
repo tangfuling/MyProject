@@ -163,7 +163,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             snapshot.setAvgReadTimeSec(defaultInt(snapshotItem.getAvgReadTimeSec()));
             snapshot.setNewFollowers(defaultInt(snapshotItem.getNewFollowers()));
             Map<String, Integer> normalizedTrafficSources = normalizeTrafficSources(snapshotItem.getTrafficSources());
+            Map<String, Double> normalizedTrafficSourceRates = normalizeTrafficSourceRates(snapshotItem.getTrafficSourceRates());
+            if (totalTrafficSourceRates(normalizedTrafficSourceRates) <= 0D
+                && totalTrafficSources(normalizedTrafficSources) > 0) {
+                normalizedTrafficSourceRates = buildTrafficSourceRatesFromCounts(normalizedTrafficSources);
+            }
             snapshot.setTrafficSourcesJson(jsonUtil.toJson(normalizedTrafficSources));
+            snapshot.setTrafficSourceRatesJson(jsonUtil.toJson(normalizedTrafficSourceRates));
             snapshot.setSourceFriendCount(sourceCount(normalizedTrafficSources, SOURCE_FRIEND));
             snapshot.setSourceMessageCount(sourceCount(normalizedTrafficSources, SOURCE_MESSAGE));
             snapshot.setSourceRecommendCount(sourceCount(normalizedTrafficSources, SOURCE_RECOMMEND));
@@ -354,7 +360,14 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             vo.setNewFollowers(latest.getNewFollowers());
             vo.setAvgReadTimeSec(latest.getAvgReadTimeSec());
             vo.setCompletionRate(normalizeCompletionRate(latest.getCompletionRate()));
-            vo.setTrafficSources(mergeTrafficSourcesWithColumns(latest, jsonUtil.toIntMap(latest.getTrafficSourcesJson())));
+            Map<String, Integer> mergedTrafficSources = mergeTrafficSourcesWithColumns(latest, jsonUtil.toIntMap(latest.getTrafficSourcesJson()));
+            vo.setTrafficSources(mergedTrafficSources);
+            Map<String, Double> normalizedTrafficSourceRates = normalizeTrafficSourceRates(jsonUtil.toDoubleMap(latest.getTrafficSourceRatesJson()));
+            if (totalTrafficSourceRates(normalizedTrafficSourceRates) <= 0D
+                && totalTrafficSources(mergedTrafficSources) > 0) {
+                normalizedTrafficSourceRates = buildTrafficSourceRatesFromCounts(mergedTrafficSources);
+            }
+            vo.setTrafficSourceRates(normalizedTrafficSourceRates);
         }
         return vo;
     }
@@ -459,6 +472,90 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             normalized.put(sourceKey, normalized.getOrDefault(sourceKey, 0) + value);
         }
         return normalized;
+    }
+
+    private Map<String, Double> normalizeTrafficSourceRates(Map<String, Double> rawRates) {
+        // Keep signature compatible with old snapshots; strict mode only trusts official ratio fields.
+        Map<String, Double> normalized = createEmptyTrafficSourceRates();
+        if (rawRates != null && !rawRates.isEmpty()) {
+            for (Map.Entry<String, Double> entry : rawRates.entrySet()) {
+                String sourceKey = normalizeTrafficSourceKey(entry.getKey());
+                double value = normalizeRatePercent(entry.getValue());
+                if (value <= 0) {
+                    continue;
+                }
+                normalized.put(sourceKey, Math.max(normalized.getOrDefault(sourceKey, 0D), value));
+            }
+        }
+        Map<String, Double> rounded = createEmptyTrafficSourceRates();
+        normalized.forEach((k, v) -> rounded.put(k, roundRatePercent(v)));
+        return rounded;
+    }
+
+    private Map<String, Double> createEmptyTrafficSourceRates() {
+        Map<String, Double> rates = new LinkedHashMap<>();
+        for (String key : SOURCE_ORDER) {
+            rates.put(key, 0D);
+        }
+        return rates;
+    }
+
+    private Map<String, Double> buildTrafficSourceRatesFromCounts(Map<String, Integer> sourceMap) {
+        Map<String, Double> rates = createEmptyTrafficSourceRates();
+        int total = totalTrafficSources(sourceMap);
+        if (total <= 0) {
+            return rates;
+        }
+        for (String key : SOURCE_ORDER) {
+            int count = sourceCount(sourceMap, key);
+            if (count <= 0) {
+                continue;
+            }
+            rates.put(key, roundRatePercent((count * 100D) / total));
+        }
+        return rates;
+    }
+
+    private double totalTrafficSourceRates(Map<String, Double> rates) {
+        if (rates == null || rates.isEmpty()) {
+            return 0D;
+        }
+        double sum = 0D;
+        for (Double value : rates.values()) {
+            if (value == null) {
+                continue;
+            }
+            if (Double.isFinite(value) && value > 0) {
+                sum += value;
+            }
+        }
+        return sum;
+    }
+
+    private double normalizeRatePercent(Double rawValue) {
+        if (rawValue == null) {
+            return 0D;
+        }
+        double value = rawValue;
+        if (!Double.isFinite(value) || value <= 0) {
+            return 0D;
+        }
+        if (value <= 1) {
+            value = value * 100;
+        } else if (value > 100 && value <= 10000) {
+            value = value / 100;
+        }
+        if (value <= 0) {
+            return 0D;
+        }
+        return Math.min(100, value);
+    }
+
+    private double roundRatePercent(double value) {
+        if (!Double.isFinite(value) || value <= 0) {
+            return 0D;
+        }
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private Map<String, Integer> mergeTrafficSourcesWithColumns(ArticleSnapshotEntity snapshot, Map<String, Integer> raw) {

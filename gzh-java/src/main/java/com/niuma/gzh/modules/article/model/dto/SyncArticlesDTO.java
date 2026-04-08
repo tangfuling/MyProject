@@ -47,6 +47,7 @@ public class SyncArticlesDTO {
         private Double completionRate;
         private Integer avgReadTimeSec;
         private Map<String, Integer> trafficSources;
+        private Map<String, Double> trafficSourceRates;
         private Integer newFollowers;
     }
 
