@@ -338,7 +338,7 @@ export default function GzhHomePage() {
             <li>按量计费，无月费无隐藏费用</li>
             <li>随时充值，余额长期有效</li>
           </ul>
-          <div className="pricing-note">可在个人中心切换 AI 模型（千问 / 豆包 / Claude / GPT）</div>
+          <div className="pricing-note">可在个人中心切换千问模型版本（千问 3.5-Flash / 千问 3.6-Plus）</div>
           <button className="btn btn-primary pricing-main-btn" type="button" onClick={gotoWorkspace}>
             免费开始，领取 ¥1 试用额度
           </button>

@@ -9,16 +9,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-public class QwenAiClient extends BaseHttpAiClient {
+public class Qwen36AiClient extends BaseHttpAiClient {
     private final String endpoint;
     private final String apiKey;
     private final String model;
 
-    public QwenAiClient(ObjectMapper objectMapper,
-                        @Value("${app.ai.timeout-ms:30000}") int timeoutMs,
-                        @Value("${app.ai.qwen35.endpoint}") String endpoint,
-                        @Value("${app.ai.qwen35.api-key}") String apiKey,
-                        @Value("${app.ai.qwen35.model}") String model) {
+    public Qwen36AiClient(ObjectMapper objectMapper,
+                          @Value("${app.ai.timeout-ms:30000}") int timeoutMs,
+                          @Value("${app.ai.qwen36.endpoint}") String endpoint,
+                          @Value("${app.ai.qwen36.api-key}") String apiKey,
+                          @Value("${app.ai.qwen36.model}") String model) {
         super(objectMapper, timeoutMs);
         this.endpoint = endpoint;
         this.apiKey = apiKey;
@@ -27,7 +27,7 @@ public class QwenAiClient extends BaseHttpAiClient {
 
     @Override
     public AiModelProvider provider() {
-        return AiModelProvider.QWEN_3_5;
+        return AiModelProvider.QWEN_3_6;
     }
 
     @Override

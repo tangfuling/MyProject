@@ -18,6 +18,7 @@ import com.niuma.gzh.modules.analysis.model.vo.AnalysisEstimateVO;
 import com.niuma.gzh.modules.analysis.model.vo.AnalysisReportVO;
 import com.niuma.gzh.modules.analysis.repository.AnalysisReportRepository;
 import com.niuma.gzh.modules.analysis.service.AnalysisService;
+import com.niuma.gzh.modules.analysis.util.AnalysisResultParser;
 import com.niuma.gzh.modules.article.model.vo.ArticleVO;
 import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.service.ArticleService;
@@ -26,11 +27,9 @@ import com.niuma.gzh.modules.user.service.UserService;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -144,14 +143,20 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
 
             streamText(emitter, content);
 
-            List<String> suggestedQuestions = buildSuggestedQuestions(content, overview, articles);
-            int costCent = provider.calcCostCent(aiResult.inputTokens(), aiResult.outputTokens());
+            AnalysisResultParser.Parsed parsed = AnalysisResultParser.parse(content);
+            StructuredResult structuredResult = enrichStructuredByAi(client, content, parsed);
+            AnalysisResultParser.Parsed structured = structuredResult.parsed;
+            List<String> suggestedQuestions = structured.suggestedQuestions();
+            int totalInputTokens = aiResult.inputTokens() + structuredResult.extraInputTokens;
+            int totalOutputTokens = aiResult.outputTokens() + structuredResult.extraOutputTokens;
+            int costCent = provider.calcCostCent(totalInputTokens, totalOutputTokens);
             AnalysisReportEntity saved = transactionTemplate.execute(status -> persistReportAndCharge(
                 userId,
                 range,
                 overview.getArticleCount(),
                 provider.getCode(),
-                aiResult,
+                totalInputTokens,
+                totalOutputTokens,
                 content,
                 suggestedQuestions,
                 costCent
@@ -160,15 +165,20 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 throw new IllegalStateException("保存报告失败");
             }
 
-            sendEvent(emitter, Map.of(
-                "type", "done",
-                "reportId", saved.getId(),
-                "inputTokens", aiResult.inputTokens(),
-                "outputTokens", aiResult.outputTokens(),
-                "costCent", costCent,
-                "aiModel", provider.getCode(),
-                "suggestedQuestions", suggestedQuestions
-            ));
+            Map<String, Object> donePayload = new LinkedHashMap<>();
+            donePayload.put("type", "done");
+            donePayload.put("reportId", saved.getId());
+            donePayload.put("inputTokens", totalInputTokens);
+            donePayload.put("outputTokens", totalOutputTokens);
+            donePayload.put("costCent", costCent);
+            donePayload.put("aiModel", provider.getCode());
+            donePayload.put("stage", structured.stage());
+            donePayload.put("findings", structured.findings());
+            donePayload.put("actionSuggestions", structured.actionSuggestions());
+            donePayload.put("rhythm", structured.rhythm());
+            donePayload.put("riskHint", structured.riskHint());
+            donePayload.put("suggestedQuestions", suggestedQuestions);
+            sendEvent(emitter, donePayload);
             emitter.complete();
         } catch (Exception ex) {
             try {
@@ -185,7 +195,8 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                                                         String range,
                                                         int articleCount,
                                                         String aiModel,
-                                                        AiGenerateResult result,
+                                                        int inputTokens,
+                                                        int outputTokens,
                                                         String content,
                                                         List<String> suggestedQuestions,
                                                         int costCent) {
@@ -195,8 +206,8 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         report.setUserId(userId);
         report.setRangeCode(range);
         report.setArticleCount(articleCount);
-        report.setInputTokens(result.inputTokens());
-        report.setOutputTokens(result.outputTokens());
+        report.setInputTokens(inputTokens);
+        report.setOutputTokens(outputTokens);
         report.setCostCent(costCent);
         report.setAiModel(aiModel);
         report.setContent(content);
@@ -206,7 +217,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         analysisReportRepository.save(report);
 
         userService.logTokenCost(userId, "analysis", String.valueOf(report.getId()), aiModel,
-            result.inputTokens(), result.outputTokens(), costCent);
+            inputTokens, outputTokens, costCent);
         return report;
     }
 
@@ -220,7 +231,17 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         vo.setCostCent(entity.getCostCent());
         vo.setAiModel(entity.getAiModel());
         vo.setContent(entity.getContent());
-        vo.setSuggestedQuestions(parseQuestions(entity.getSuggestedQuestionsJson()));
+        AnalysisResultParser.Parsed parsed = AnalysisResultParser.parse(entity.getContent());
+        vo.setStage(parsed.stage());
+        vo.setFindings(parsed.findings());
+        vo.setActionSuggestions(parsed.actionSuggestions());
+        vo.setRhythm(parsed.rhythm());
+        vo.setRiskHint(parsed.riskHint());
+        List<String> questions = parseQuestions(entity.getSuggestedQuestionsJson());
+        if (questions.isEmpty()) {
+            questions = parsed.suggestedQuestions();
+        }
+        vo.setSuggestedQuestions(questions);
         vo.setCreatedAt(entity.getCreatedAt());
         return vo;
     }
@@ -229,7 +250,25 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         if (json == null || json.isBlank()) {
             return List.of();
         }
-        return jsonUtil.fromJson(json, List.class);
+        try {
+            List<?> raw = jsonUtil.fromJson(json, List.class);
+            List<String> result = new ArrayList<>();
+            for (Object item : raw) {
+                if (item == null) {
+                    continue;
+                }
+                String text = String.valueOf(item).trim();
+                if (!text.isEmpty()) {
+                    result.add(text);
+                }
+                if (result.size() >= 5) {
+                    break;
+                }
+            }
+            return List.copyOf(result);
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 
     private String buildAnalysisPrompt(String range, OverviewVO overview, List<ArticleVO> articles) {
@@ -254,99 +293,200 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 .append(" 完读率=").append(article.getCompletionRate())
                 .append("\n");
         }
-        sb.append("\n请按固定结构输出：阶段、核心发现、3条建议、节奏感、5条推荐问题。\n");
+        sb.append("\n请按固定结构输出：你现在在什么阶段、核心发现、3条可执行建议、风险提示、节奏感、5条推荐问题。\n");
+        sb.append("输出必须引用数据，不要泛泛而谈。\n");
         return sb.toString();
     }
 
     private String analysisSystemPrompt() {
-        return "你是公众号数据运营助手。输出风格：事实导向、具体可执行、避免鸡汤。核心发现必须引用具体数字。建议必须是本周可执行动作。";
+        return "你是公众号数据运营助手。输出风格：事实导向、具体可执行、避免鸡汤。"
+            + "必须严格输出以下小节标题：你现在在什么阶段、核心发现、可执行建议、风险提示、节奏感、推荐问题。"
+            + "核心发现必须引用具体数字，建议必须是本周可执行动作。";
     }
 
-    private List<String> buildSuggestedQuestions(String content, OverviewVO overview, List<ArticleVO> articles) {
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (content != null && !content.isBlank()) {
-            String[] lines = content.split("\\R");
-            for (String line : lines) {
-                String candidate = normalizeQuestionCandidate(line);
-                if (candidate != null) {
-                    result.add(candidate);
-                    if (result.size() >= 5) {
-                        return List.copyOf(result);
-                    }
+    private StructuredResult enrichStructuredByAi(AiClient client,
+                                                  String reportContent,
+                                                  AnalysisResultParser.Parsed parsed) {
+        if (isStructuredComplete(parsed)) {
+            return new StructuredResult(parsed, 0, 0);
+        }
+        try {
+            String prompt = buildExtractPrompt(reportContent);
+            AiGenerateResult extractResult = client.generate(new AiGenerateRequest(
+                "你是严格的 JSON 提取器。你只能输出 JSON，不要输出任何解释。",
+                prompt,
+                List.of()
+            ));
+            StructuredExtract payload = parseStructuredExtract(extractResult.content());
+            if (payload == null) {
+                return new StructuredResult(parsed, extractResult.inputTokens(), extractResult.outputTokens());
+            }
+            return new StructuredResult(
+                mergeParsed(parsed, payload),
+                extractResult.inputTokens(),
+                extractResult.outputTokens()
+            );
+        } catch (Exception ignored) {
+            return new StructuredResult(parsed, 0, 0);
+        }
+    }
+
+    private boolean isStructuredComplete(AnalysisResultParser.Parsed parsed) {
+        return parsed != null
+            && parsed.stage() != null && !parsed.stage().isBlank()
+            && parsed.findings() != null && !parsed.findings().isEmpty()
+            && parsed.actionSuggestions() != null && !parsed.actionSuggestions().isEmpty()
+            && parsed.riskHint() != null && !parsed.riskHint().isBlank()
+            && parsed.suggestedQuestions() != null && parsed.suggestedQuestions().size() >= 3;
+    }
+
+    private String buildExtractPrompt(String content) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("请把下面分析报告提取成 JSON，对象字段固定为：\n");
+        sb.append("stage(string)、findings(string[])、actionSuggestions(string[])、rhythm(string)、riskHint(string)、suggestedQuestions(string[])。\n");
+        sb.append("规则：\n");
+        sb.append("1) 只输出 JSON 对象，不要 markdown。\n");
+        sb.append("2) findings 保留 3~5 条，actionSuggestions 保留 3 条，suggestedQuestions 保留 5 条。\n");
+        sb.append("3) 如果缺失字段，用空字符串或空数组。\n\n");
+        sb.append("报告原文：\n");
+        sb.append(content == null ? "" : content);
+        return sb.toString();
+    }
+
+    private StructuredExtract parseStructuredExtract(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String json = extractFirstJsonObject(text);
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> map = jsonUtil.fromJson(json, Map.class);
+            StructuredExtract payload = new StructuredExtract();
+            payload.stage = firstString(map, "stage");
+            payload.findings = firstStringList(map, "findings", "coreFindings", "core_findings");
+            payload.actionSuggestions = firstStringList(map, "actionSuggestions", "action_suggestions", "actions");
+            payload.rhythm = firstString(map, "rhythm");
+            payload.riskHint = firstString(map, "riskHint", "risk_hint");
+            payload.suggestedQuestions = firstStringList(map, "suggestedQuestions", "suggested_questions", "questions");
+            return payload;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String firstString(Map<String, Object> map, String... keys) {
+        if (map == null || map.isEmpty()) {
+            return "";
+        }
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (!text.isEmpty()) {
+                return text;
+            }
+        }
+        return "";
+    }
+
+    private List<String> firstStringList(Map<String, Object> map, String... keys) {
+        if (map == null || map.isEmpty()) {
+            return List.of();
+        }
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (!(value instanceof List<?> raw)) {
+                continue;
+            }
+            List<String> result = new ArrayList<>();
+            for (Object item : raw) {
+                if (item == null) {
+                    continue;
+                }
+                String text = String.valueOf(item).trim();
+                if (!text.isEmpty()) {
+                    result.add(text);
+                }
+            }
+            if (!result.isEmpty()) {
+                return List.copyOf(result);
+            }
+        }
+        return List.of();
+    }
+
+    private String extractFirstJsonObject(String text) {
+        int start = text.indexOf('{');
+        if (start < 0) {
+            return null;
+        }
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return text.substring(start, i + 1);
                 }
             }
         }
-
-        appendHeuristicQuestions(result, overview, articles);
-        return List.copyOf(result).subList(0, Math.min(5, result.size()));
+        return null;
     }
 
-    private String normalizeQuestionCandidate(String line) {
-        if (line == null || line.isBlank()) {
-            return null;
-        }
-        String text = line.trim()
-            .replaceFirst("^[\\-•*\\d\\.\\)\\s]+", "")
-            .replaceFirst("^Q[:：]\\s*", "");
-        if (text.startsWith("推荐问题") || text.startsWith("问题")) {
-            return null;
-        }
-        if (!(text.contains("?") || text.contains("？"))) {
-            return null;
-        }
-        text = text.replace("?", "？");
-        int idx = text.indexOf('？');
-        if (idx <= 0) {
-            return null;
-        }
-        text = text.substring(0, idx + 1).trim();
-        if (text.length() < 5 || text.length() > 28) {
-            return null;
-        }
-        return text;
+    private AnalysisResultParser.Parsed mergeParsed(AnalysisResultParser.Parsed parsed, StructuredExtract extracted) {
+        String stage = mergeText(parsed.stage(), extracted.stage);
+        String rhythm = mergeText(parsed.rhythm(), extracted.rhythm);
+        String riskHint = mergeText(parsed.riskHint(), extracted.riskHint);
+        List<String> findings = parsed.findings().isEmpty() ? extracted.findings : parsed.findings();
+        List<String> actions = parsed.actionSuggestions().isEmpty() ? extracted.actionSuggestions : parsed.actionSuggestions();
+        List<String> questions = parsed.suggestedQuestions().isEmpty() ? extracted.suggestedQuestions : parsed.suggestedQuestions();
+        return new AnalysisResultParser.Parsed(
+            stage,
+            findings == null ? List.of() : findings,
+            actions == null ? List.of() : actions,
+            rhythm,
+            riskHint,
+            questions == null ? List.of() : questions
+        );
     }
 
-    private void appendHeuristicQuestions(Set<String> questions, OverviewVO overview, List<ArticleVO> articles) {
-        OverviewVO.Metrics metrics = overview == null ? null : overview.getMetrics();
-        double completionRate = metrics == null || metrics.getCompletionRate() == null ? 0 : metrics.getCompletionRate();
-        int totalShare = metrics == null || metrics.getTotalShare() == null ? 0 : metrics.getTotalShare();
-        int totalRead = metrics == null || metrics.getTotalRead() == null ? 0 : metrics.getTotalRead();
-        double shareRate = totalRead <= 0 ? 0 : totalShare * 100.0 / totalRead;
-
-        if (completionRate < 60) {
-            questions.add("完读率偏低先改哪三处？");
-        } else {
-            questions.add("如何把完读率再提10%？");
+    private String mergeText(String parsedText, String extractedText) {
+        if (parsedText != null && !parsedText.isBlank()) {
+            return parsedText;
         }
-        if (shareRate < 6) {
-            questions.add("怎样把分享率提高一倍？");
-        } else {
-            questions.add("下一篇怎么提升传播半径？");
-        }
-
-        ArticleVO best = articles == null ? null : articles.stream()
-            .max(Comparator.comparing(a -> a.getReadCount() == null ? 0 : a.getReadCount()))
-            .orElse(null);
-        if (best != null && best.getTitle() != null && !best.getTitle().isBlank()) {
-            questions.add("怎么复用《" + shortTitle(best.getTitle()) + "》的方法？");
-        }
-
-        questions.add("下周选题怎么排优先级？");
-        questions.add("哪种标题更可能提升分享率？");
-        questions.add("朋友圈以外如何拉新？");
-        questions.add("下一篇我先改哪三点？");
+        return extractedText == null ? "" : extractedText.trim();
     }
 
-    private String shortTitle(String title) {
-        if (title.length() <= 12) {
-            return title;
+    private static class StructuredExtract {
+        private String stage = "";
+        private List<String> findings = List.of();
+        private List<String> actionSuggestions = List.of();
+        private String rhythm = "";
+        private String riskHint = "";
+        private List<String> suggestedQuestions = List.of();
+    }
+
+    private static class StructuredResult {
+        private final AnalysisResultParser.Parsed parsed;
+        private final int extraInputTokens;
+        private final int extraOutputTokens;
+
+        private StructuredResult(AnalysisResultParser.Parsed parsed, int extraInputTokens, int extraOutputTokens) {
+            this.parsed = parsed;
+            this.extraInputTokens = Math.max(extraInputTokens, 0);
+            this.extraOutputTokens = Math.max(extraOutputTokens, 0);
         }
-        return title.substring(0, 12) + "...";
     }
 
     private String friendlyErrorMessage(Exception ex) {
         if (ex instanceof BizException bizException && bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
-            return "当前模型暂时不可用，请切换其他模型重试";
+            return "当前千问模型暂时不可用，请切换千问版本后重试";
         }
         String message = ex.getMessage();
         if (message == null || message.isBlank()) {

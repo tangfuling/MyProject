@@ -10,10 +10,8 @@ import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import './GzhPages.css';
 
 const MODEL_OPTIONS = [
-  { code: 'qwen', name: '千问', desc: '通义千问 · 国产性价比之选' },
-  { code: 'doubao', name: '豆包', desc: '字节豆包 · 中文理解力强' },
-  { code: 'claude', name: 'Claude', desc: 'Anthropic Claude · 分析能力出众' },
-  { code: 'gpt', name: 'GPT', desc: 'OpenAI GPT-4o · 综合能力强' },
+  { code: 'qwen_3_5', name: '千问 3.5-Flash', desc: '通义千问 3.5-Flash · 速度更快，适合日常分析' },
+  { code: 'qwen_3_6', name: '千问 3.6-Plus', desc: '通义千问 3.6-Plus · 推理更强，适合深度建议' },
 ];
 
 const RECHARGE_OPTIONS = [1000, 3000, 5000];

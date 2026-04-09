@@ -6,7 +6,7 @@
 
 执行 SQL:
 
-- `src/main/resources/db/schema-mysql.sql`
+- `../docs/Sql/navicat-init.sql`
 
 数据库名默认 `gzh`（可通过 `MYSQL_URL` 修改）。
 
@@ -18,7 +18,6 @@
 
 - MySQL / Redis
 - `JWT_SECRET`
-- 至少一个 AI 模型 key（如 `QWEN_API_KEY`）
 - 短信服务配置（`SMS_ENDPOINT` 等）
 - 支付宝配置（`ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY`）
 

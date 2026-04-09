@@ -78,6 +78,10 @@ public class WorkspaceOverviewVO {
         private Integer outputTokens;
         private Integer costCent;
         private String summary;
+        private String stage;
+        private List<String> findings;
+        private String rhythm;
+        private String riskHint;
         private List<String> actionSuggestions;
         private List<String> suggestedQuestions;
         private String content;

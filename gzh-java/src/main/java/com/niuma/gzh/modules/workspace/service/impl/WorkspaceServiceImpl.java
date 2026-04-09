@@ -5,6 +5,7 @@ import com.niuma.gzh.common.security.AuthContext;
 import com.niuma.gzh.common.util.JsonUtil;
 import com.niuma.gzh.modules.analysis.model.entity.AnalysisReportEntity;
 import com.niuma.gzh.modules.analysis.repository.AnalysisReportRepository;
+import com.niuma.gzh.modules.analysis.util.AnalysisResultParser;
 import com.niuma.gzh.modules.article.model.vo.ArticleVO;
 import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.service.ArticleService;
@@ -27,13 +28,6 @@ import org.springframework.stereotype.Service;
 public class WorkspaceServiceImpl extends BaseService implements WorkspaceService {
     private static final DateTimeFormatter TREND_LABEL_FORMAT = DateTimeFormatter.ofPattern("MM-dd", Locale.CHINA);
     private static final Pattern TECHNICAL_MP_ID_PATTERN = Pattern.compile("^(gh_|wxid_)[a-z0-9_]{4,}$", Pattern.CASE_INSENSITIVE);
-    private static final List<String> DEFAULT_QUESTIONS = List.of(
-        "下一篇写什么",
-        "怎么提高分享率",
-        "对比上周变化",
-        "哪篇完读率最高",
-        "搜一搜怎么优化"
-    );
 
     private final ArticleService articleService;
     private final UserService userService;
@@ -54,35 +48,35 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     public WorkspaceOverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
         String realRange = normalizeRange(range);
-        log.info("[workspace.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
+        log.info("[tfling][workspace.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
+        try {
+            UserEntity user = userService.getById(userId);
+            UserProfileVO profile = userService.profile();
+            OverviewVO overview = articleService.overview(realRange);
+            List<ArticleVO> allArticles = articleService.listRangeArticles(realRange, 40);
 
-        UserEntity user = userService.getById(userId);
-        UserProfileVO profile = userService.profile();
-        OverviewVO overview = articleService.overview(realRange);
-        List<ArticleVO> allArticles = articleService.listRangeArticles(realRange, 40);
+            WorkspaceOverviewVO vo = new WorkspaceOverviewVO();
+            vo.setRange(realRange);
+            vo.setHeader(buildHeader(user, profile));
+            vo.setDataPanel(buildDataPanel(overview, allArticles));
 
-        WorkspaceOverviewVO vo = new WorkspaceOverviewVO();
-        vo.setRange(realRange);
-        vo.setHeader(buildHeader(user, profile));
-        vo.setDataPanel(buildDataPanel(overview, allArticles));
+            AnalysisReportEntity latestReport = analysisReportRepository.latestByUser(userId);
+            WorkspaceOverviewVO.AnalysisPanel analysisPanel = buildAnalysisPanel(latestReport);
+            vo.setAnalysisPanel(analysisPanel);
+            vo.setQuickQuestions(analysisPanel.getSuggestedQuestions() == null ? List.of() : analysisPanel.getSuggestedQuestions());
 
-        AnalysisReportEntity latestReport = analysisReportRepository.latestByUser(userId);
-        WorkspaceOverviewVO.AnalysisPanel analysisPanel = buildAnalysisPanel(latestReport);
-        vo.setAnalysisPanel(analysisPanel);
-
-        List<String> questions = analysisPanel.getSuggestedQuestions();
-        if (questions == null || questions.isEmpty()) {
-            questions = DEFAULT_QUESTIONS;
+            vo.setArticles(buildArticles(allArticles, 8));
+            Integer totalRead = vo.getDataPanel() == null || vo.getDataPanel().getMetrics() == null
+                ? null : vo.getDataPanel().getMetrics().getTotalRead();
+            Integer articleCount = vo.getHeader() == null ? null : vo.getHeader().getArticleCount();
+            log.info("[tfling][workspace.overview] done userId={}, range={}, articleCount={}, totalRead={}, articleCards={}",
+                userId, realRange, articleCount, totalRead, vo.getArticles().size());
+            return vo;
+        } catch (Exception ex) {
+            log.error("[tfling][workspace.overview] failed userId={}, range={}, message={}",
+                userId, realRange, ex.getMessage(), ex);
+            throw ex;
         }
-        vo.setQuickQuestions(questions);
-
-        vo.setArticles(buildArticles(allArticles, 8));
-        Integer totalRead = vo.getDataPanel() == null || vo.getDataPanel().getMetrics() == null
-            ? null : vo.getDataPanel().getMetrics().getTotalRead();
-        Integer articleCount = vo.getHeader() == null ? null : vo.getHeader().getArticleCount();
-        log.info("[workspace.overview] done userId={}, range={}, articleCount={}, totalRead={}, articleCards={}",
-            userId, realRange, articleCount, totalRead, vo.getArticles().size());
-        return vo;
     }
 
     private WorkspaceOverviewVO.Header buildHeader(UserEntity user, UserProfileVO profile) {
@@ -169,16 +163,21 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     private WorkspaceOverviewVO.AnalysisPanel buildAnalysisPanel(AnalysisReportEntity report) {
         WorkspaceOverviewVO.AnalysisPanel panel = new WorkspaceOverviewVO.AnalysisPanel();
         if (report == null) {
-            panel.setSummary("暂无分析报告，先同步数据后点击“重新生成”");
-            panel.setActionSuggestions(List.of("点击“重新生成”获取第一份报告"));
-            panel.setSuggestedQuestions(DEFAULT_QUESTIONS);
+            panel.setSummary("等待千问分析报告生成后展示建议");
+            panel.setStage("");
+            panel.setFindings(List.of());
+            panel.setRhythm("");
+            panel.setRiskHint("等待千问生成风险提示");
+            panel.setActionSuggestions(List.of());
+            panel.setSuggestedQuestions(List.of());
             panel.setContent("");
             return panel;
         }
 
         List<String> questions = parseQuestions(report.getSuggestedQuestionsJson());
+        AnalysisResultParser.Parsed parsed = AnalysisResultParser.parse(report.getContent());
         if (questions.isEmpty()) {
-            questions = DEFAULT_QUESTIONS;
+            questions = parsed.suggestedQuestions();
         }
         panel.setReportId(report.getId());
         panel.setRangeCode(report.getRangeCode());
@@ -187,8 +186,12 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         panel.setInputTokens(report.getInputTokens());
         panel.setOutputTokens(report.getOutputTokens());
         panel.setCostCent(report.getCostCent());
-        panel.setSummary(toSummary(report.getContent()));
-        panel.setActionSuggestions(questions.subList(0, Math.min(3, questions.size())));
+        panel.setSummary(AnalysisResultParser.toSummary(report.getContent()));
+        panel.setStage(parsed.stage());
+        panel.setFindings(parsed.findings());
+        panel.setRhythm(parsed.rhythm());
+        panel.setRiskHint(parsed.riskHint());
+        panel.setActionSuggestions(parsed.actionSuggestions());
         panel.setSuggestedQuestions(questions);
         panel.setContent(report.getContent() == null ? "" : report.getContent());
         return panel;
@@ -261,17 +264,6 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         } catch (Exception ignore) {
             return List.of();
         }
-    }
-
-    private String toSummary(String content) {
-        if (content == null || content.isBlank()) {
-            return "暂无分析摘要";
-        }
-        String text = content.replace('\n', ' ').replace('\r', ' ').replaceAll("\\s+", " ").trim();
-        if (text.length() <= 130) {
-            return text;
-        }
-        return text.substring(0, 130) + "...";
     }
 
     private String normalizeRange(String range) {

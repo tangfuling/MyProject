@@ -22,12 +22,12 @@ public class WorkspaceController extends BaseController {
 
     @GetMapping("/overview")
     public ApiResponse<WorkspaceOverviewVO> overview(@RequestParam(value = "range", required = false) String range) {
-        log.info("[workspace/overview] request range={}", range);
+        log.info("[tfling][workspace/overview] request range={}", range);
         WorkspaceOverviewVO overview = workspaceService.overview(range);
         Integer articleCount = overview.getHeader() == null ? null : overview.getHeader().getArticleCount();
         Integer totalRead = (overview.getDataPanel() == null || overview.getDataPanel().getMetrics() == null)
             ? null : overview.getDataPanel().getMetrics().getTotalRead();
-        log.info("[workspace/overview] response range={}, articleCount={}, totalRead={}", overview.getRange(), articleCount, totalRead);
+        log.info("[tfling][workspace/overview] response range={}, articleCount={}, totalRead={}", overview.getRange(), articleCount, totalRead);
         return ApiResponse.success(overview);
     }
 }

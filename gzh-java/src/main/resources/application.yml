@@ -48,12 +48,16 @@ app:
     sign-name: ${SMS_SIGN_NAME:公众号助手}
     template-code: ${SMS_TEMPLATE_CODE:SMS_000000001}
   ai:
-    default-model: ${AI_DEFAULT_MODEL:qwen}
+    default-model: ${AI_DEFAULT_MODEL:qwen_3_5}
     timeout-ms: ${AI_TIMEOUT_MS:30000}
-    qwen:
-      endpoint: ${QWEN_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
-      api-key: ${QWEN_API_KEY:}
-      model: ${QWEN_MODEL:qwen-plus}
+    qwen35:
+      endpoint: ${QWEN35_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      api-key: ${QWEN35_API_KEY:sk-050a5b5511074c36a17dfc5d98fd1b57}
+      model: ${QWEN35_MODEL:qwen3.5-flash}
+    qwen36:
+      endpoint: ${QWEN36_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      api-key: ${QWEN36_API_KEY:sk-050a5b5511074c36a17dfc5d98fd1b57}
+      model: ${QWEN36_MODEL:qwen3.6-plus}
     doubao:
       endpoint: ${DOUBAO_ENDPOINT:https://ark.cn-beijing.volces.com/api/v3/chat/completions}
       api-key: ${DOUBAO_API_KEY:}

@@ -60,6 +60,10 @@ export type WorkspaceAnalysisPanel = {
   outputTokens?: number;
   costCent?: number;
   summary: string;
+  stage?: string;
+  findings?: string[];
+  rhythm?: string;
+  riskHint?: string;
   actionSuggestions: string[];
   suggestedQuestions: string[];
   content: string;

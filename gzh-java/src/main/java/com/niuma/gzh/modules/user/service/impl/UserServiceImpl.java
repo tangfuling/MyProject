@@ -32,11 +32,13 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+@Slf4j
 @Service
 public class UserServiceImpl extends BaseService implements UserService {
     private static final long MAX_AVATAR_BYTES = 2L * 1024 * 1024;
@@ -79,7 +81,7 @@ public class UserServiceImpl extends BaseService implements UserService {
         UserEntity created = new UserEntity();
         created.setPhone(phone);
         created.setDisplayName(defaultDisplayNameByPhone(phone));
-        created.setAiModel("qwen");
+        created.setAiModel(AiModelProvider.QWEN_3_5.getCode());
         created.setBalanceCent(0);
         created.setFreeQuotaCent(100);
         userRepository.save(created);
@@ -106,7 +108,7 @@ public class UserServiceImpl extends BaseService implements UserService {
         vo.setDisplayName(resolveDisplayName(user));
         vo.setMpAccountName(resolveMpAccountName(user));
         vo.setAvatarUrl(user.getAvatarUrl());
-        vo.setAiModel(user.getAiModel());
+        vo.setAiModel(normalizeToQwenModelCode(user.getAiModel()));
         vo.setBalanceCent(user.getBalanceCent());
         vo.setFreeQuotaCent(user.getFreeQuotaCent());
         vo.setArticleCount(articleRepository.countByUser(userId));
@@ -177,7 +179,7 @@ public class UserServiceImpl extends BaseService implements UserService {
     public void updateAiModel(String model) {
         Long userId = AuthContext.requiredUserId();
         UserEntity user = getById(userId);
-        user.setAiModel(AiModelProvider.fromCode(model).getCode());
+        user.setAiModel(resolveSelectableModelCode(model));
         userRepository.save(user);
     }
 
@@ -337,6 +339,24 @@ public class UserServiceImpl extends BaseService implements UserService {
             prefix = prefix.substring(0, prefix.length() - 1);
         }
         return prefix;
+    }
+
+    private String resolveSelectableModelCode(String model) {
+        AiModelProvider provider = AiModelProvider.fromCode(model);
+        if (provider == AiModelProvider.QWEN_3_5 || provider == AiModelProvider.QWEN_3_6) {
+            return provider.getCode();
+        }
+        log.warn("[tfling][user.aiModel] unsupported selectable model input={}", model);
+        throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "当前仅支持千问3.5-Flash和千问3.6-Plus");
+    }
+
+    private String normalizeToQwenModelCode(String modelCode) {
+        AiModelProvider provider = AiModelProvider.fromCode(modelCode);
+        if (provider == AiModelProvider.QWEN_3_5 || provider == AiModelProvider.QWEN_3_6) {
+            return provider.getCode();
+        }
+        log.error("[tfling][user.aiModel] invalid stored modelCode={}", modelCode);
+        throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "用户模型配置非法，仅支持千问3.5-Flash和千问3.6-Plus");
     }
 
     private boolean isTechnicalMpId(String value) {

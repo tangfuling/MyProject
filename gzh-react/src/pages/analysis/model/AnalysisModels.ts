@@ -9,6 +9,11 @@ export type AnalysisReport = {
   costCent: number;
   aiModel: string;
   content: string;
+  stage?: string;
+  findings?: string[];
+  actionSuggestions?: string[];
+  rhythm?: string;
+  riskHint?: string;
   suggestedQuestions: string[];
   createdAt: string;
 };
@@ -31,5 +36,10 @@ export type AnalysisDoneEvent = {
   outputTokens: number;
   costCent: number;
   aiModel: string;
+  stage?: string;
+  findings?: string[];
+  actionSuggestions?: string[];
+  rhythm?: string;
+  riskHint?: string;
   suggestedQuestions: string[];
 };

@@ -1,6 +1,7 @@
 package com.niuma.gzh.modules.auth.service.impl;
 
 import com.niuma.gzh.common.base.BaseService;
+import com.niuma.gzh.common.ai.AiModelProvider;
 import com.niuma.gzh.common.cache.CacheKey;
 import com.niuma.gzh.common.cache.RedisClient;
 import com.niuma.gzh.common.security.JwtService;
@@ -81,7 +82,7 @@ public class AuthServiceImpl extends BaseService implements AuthService {
         userVO.setAvatarUrl(user.getAvatarUrl());
         userVO.setBalance(user.getBalanceCent());
         userVO.setFreeQuota(user.getFreeQuotaCent());
-        userVO.setAiModel(user.getAiModel());
+        userVO.setAiModel(normalizeToQwenModelCode(user.getAiModel()));
         vo.setUser(userVO);
         return vo;
     }
@@ -103,5 +104,13 @@ public class AuthServiceImpl extends BaseService implements AuthService {
             }
         }
         return "";
+    }
+
+    private String normalizeToQwenModelCode(String modelCode) {
+        AiModelProvider provider = AiModelProvider.fromCode(modelCode);
+        if (provider == AiModelProvider.QWEN_3_5 || provider == AiModelProvider.QWEN_3_6) {
+            return provider.getCode();
+        }
+        throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "用户模型配置非法，仅支持千问3.5-Flash和千问3.6-Plus");
     }
 }

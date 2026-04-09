@@ -4,7 +4,8 @@ import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
 
 public enum AiModelProvider {
-    QWEN("qwen", 200, 600),
+    QWEN_3_5("qwen_3_5", 200, 600),
+    QWEN_3_6("qwen_3_6", 600, 1800),
     DOUBAO("doubao", 300, 900),
     GPT("gpt", 1000, 3000),
     CLAUDE("claude", 1500, 7500);

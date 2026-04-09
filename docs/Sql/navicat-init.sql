@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS gzh_user (
     display_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '显示名称',
     mp_account_name VARCHAR(128) NULL COMMENT '公众号名称(来自插件同步)',
     avatar_url VARCHAR(512) NULL COMMENT '头像地址',
-    ai_model VARCHAR(32) NOT NULL DEFAULT 'qwen' COMMENT '当前 AI 模型',
+    ai_model VARCHAR(32) NOT NULL DEFAULT 'qwen_3_5' COMMENT '当前 AI 模型',
     balance_cent INT NOT NULL DEFAULT 0 COMMENT '余额(分)',
     free_quota_cent INT NOT NULL DEFAULT 100 COMMENT '免费额度(分)',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -456,5 +456,18 @@ SET source_friend_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_source
     source_other_count = COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(traffic_sources_json, '$.\"其它\"')) AS UNSIGNED), 0)
 WHERE deleted = 0
   AND JSON_VALID(traffic_sources_json) = 1;
+
+-- 统一 AI 模型 code（严格模式仅支持 qwen_3_5 / qwen_3_6）
+UPDATE gzh_user
+SET ai_model = 'qwen_3_5'
+WHERE ai_model IN ('qwen', 'qwen_35');
+
+UPDATE gzh_user
+SET ai_model = 'qwen_3_6'
+WHERE ai_model = 'qwen_46';
+
+UPDATE gzh_user
+SET ai_model = 'qwen_3_5'
+WHERE ai_model NOT IN ('qwen_3_5', 'qwen_3_6');
 
 SET FOREIGN_KEY_CHECKS = 1;

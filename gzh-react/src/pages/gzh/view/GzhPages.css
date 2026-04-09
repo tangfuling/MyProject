@@ -1122,6 +1122,54 @@
   white-space: pre-wrap;
 }
 
+.gzh-v2-workspace .thinking-card {
+  border: 1px dashed #c5d9f0;
+  background: #f6fbff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.gzh-v2-workspace .thinking-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue-dark);
+}
+
+.gzh-v2-workspace .thinking-sub {
+  font-size: 10px;
+  color: #475569;
+  margin-top: 3px;
+}
+
+.gzh-v2-workspace .thinking-skeleton {
+  height: 28px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, #edf2f7 20%, #f8fafc 40%, #edf2f7 60%);
+  background-size: 300% 100%;
+  animation: ws-think-pulse 1.3s ease infinite;
+}
+
+.gzh-v2-workspace .stage-block {
+  background: var(--card);
+  border: 1px solid var(--line-light);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #334155;
+  margin-bottom: 10px;
+}
+
+@keyframes ws-think-pulse {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
 .gzh-v2-workspace .findings-title,
 .gzh-v2-workspace .actions-title {
   font-size: 10px;

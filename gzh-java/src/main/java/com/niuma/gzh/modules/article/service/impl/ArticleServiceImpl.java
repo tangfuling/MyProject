@@ -286,6 +286,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     public OverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
         String realRange = range == null || range.isBlank() ? "all" : range;
+        log.info("[tfling][article.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
 
         int days = RangeUtil.toDays(realRange);
         LocalDateTime now = LocalDateTime.now();
@@ -327,6 +328,8 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         changes.setNewFollowers(pctChange(current.newFollowers, previous.newFollowers));
         vo.setChanges(changes);
         vo.setTrafficSummary(current.trafficPercent);
+        log.info("[tfling][article.overview] done userId={}, range={}, articleCount={}, totalRead={}, avgRead={}",
+            userId, realRange, current.articleCount, current.totalRead, current.avgRead);
 
         return vo;
     }

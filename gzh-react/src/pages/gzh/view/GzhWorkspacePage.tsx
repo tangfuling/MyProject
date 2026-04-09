@@ -29,13 +29,10 @@ const RANGE_OPTIONS: Array<{ value: RangeCode; label: string }> = [
 ];
 
 const MODEL_OPTIONS = [
-  { code: 'qwen', name: '千问', desc: '国产性价比之选' },
-  { code: 'doubao', name: '豆包', desc: '中文理解力强' },
-  { code: 'claude', name: 'Claude', desc: '分析能力出众' },
-  { code: 'gpt', name: 'GPT', desc: '综合能力强' },
+  { code: 'qwen_3_5', name: '千问 3.5-Flash', desc: '速度更快，适合日常分析' },
+  { code: 'qwen_3_6', name: '千问 3.6-Plus', desc: '推理更强，适合深度建议' },
 ];
 
-const QUICK_DEFAULTS = ['近30天分析', '高推荐样本', '外向型 vs 记录型', '本周选题计划'];
 const CHAT_SESSION_KEY = 'gzh_chat_session_id';
 
 function createSessionId() {
@@ -246,18 +243,23 @@ export default function GzhWorkspacePage() {
     [metrics?.totalComment, metrics?.totalRead, metrics?.totalShare, metrics?.totalWow]
   );
   const analysisPanel = overview?.analysisPanel;
-  const analysisSummary = analysisPanel?.summary || '暂无分析总结。';
-  const analysisText = analysisGenerating ? analysisLive || '正在分析数据…' : analysisDetail?.content || analysisPanel?.content || analysisSummary;
+  const analysisSummary = analysisPanel?.summary || '等待千问分析生成后展示。';
+  const analysisText = analysisGenerating ? analysisLive || '千问正在思考中，请稍候…' : analysisDetail?.content || analysisPanel?.content || analysisSummary;
 
-  const currentModelCode = header?.aiModel || profile?.aiModel || 'qwen';
+  const currentModelCode = header?.aiModel || profile?.aiModel || 'qwen_3_5';
   const currentModelName = MODEL_OPTIONS.find((x) => x.code === currentModelCode)?.name || currentModelCode;
+
+  const analysisStage = analysisDetail?.stage || analysisPanel?.stage || '';
+  const analysisFindings = (analysisDetail?.findings || analysisPanel?.findings || []).filter((x) => x && x.trim());
+  const actionSuggestions = (analysisDetail?.actionSuggestions || analysisPanel?.actionSuggestions || []).filter((x) => x && x.trim());
+  const analysisRhythm = analysisDetail?.rhythm || analysisPanel?.rhythm || '';
+  const riskText = analysisDetail?.riskHint || analysisPanel?.riskHint || '等待千问生成风险提示';
 
   const quickPrompts = useMemo(() => {
     const list = [
       ...(overview?.quickQuestions ?? []),
       ...(analysisPanel?.suggestedQuestions ?? []),
       ...(analysisDetail?.suggestedQuestions ?? []),
-      ...QUICK_DEFAULTS,
     ].filter((x) => x && x.trim());
     return Array.from(new Set(list)).slice(0, 8);
   }, [overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
@@ -268,54 +270,6 @@ export default function GzhWorkspacePage() {
   }, [overview?.dataPanel.trend]);
 
   const sparkline = useMemo(() => buildSparkline(trendValues), [trendValues]);
-
-  const findings = useMemo(() => {
-    const items: Array<{ type: 'good' | 'bad'; text: string }> = [];
-
-    if ((metrics?.avgRead ?? 0) > 0) {
-      items.push({ type: 'good', text: `篇均阅读 ${fmtNum(metrics?.avgRead)}，总阅读 ${fmtNum(metrics?.totalRead)}。` });
-    }
-
-    const readDelta = toPercentValue(changes?.totalRead);
-    if (readDelta >= 0) {
-      items.push({ type: 'good', text: `总阅读环比 ${fmtDeltaPercent(changes?.totalRead, 0)}，整体趋势向上。` });
-    } else {
-      items.push({ type: 'bad', text: `总阅读环比 ${fmtDeltaPercent(changes?.totalRead, 0)}，需关注题材承接。` });
-    }
-
-    if (recommendPercent >= 15) {
-      items.push({ type: 'good', text: `推荐率 ${fmtPercent(recommendRate, 1)}，进入可优化区间。` });
-    } else {
-      items.push({ type: 'bad', text: `推荐率 ${fmtPercent(recommendRate, 1)}，仍低于 15% 观察线。` });
-    }
-
-    if (toPercentValue(metrics?.shareRate) < 1) {
-      items.push({ type: 'bad', text: `分享率 ${fmtPercent(metrics?.shareRate, 1)}，传播主要依赖私域。` });
-    }
-
-    return items.slice(0, 4);
-  }, [changes?.totalRead, metrics?.avgRead, metrics?.totalRead, metrics?.shareRate, recommendPercent, recommendRate]);
-
-  const actionSuggestions = useMemo(() => {
-    const source = analysisPanel?.actionSuggestions?.filter((x) => x && x.trim()) ?? [];
-    if (source.length > 0) {
-      return source.slice(0, 3);
-    }
-    return [
-      '下一篇继续使用高推荐主题，验证阅读承接是否持续。',
-      '标题加入“创业 + 具体场景”关键词，观察搜一搜变化。',
-      '文末增加一句分享引导，降低读者转发决策成本。',
-    ];
-  }, [analysisPanel?.actionSuggestions]);
-
-  const actionEvidence = useMemo(
-    () => [
-      `依据：近${RANGE_OPTIONS.find((x) => x.value === range)?.label ?? '30天'}推荐率 ${fmtPercent(recommendRate, 1)}，总阅读 ${fmtNum(metrics?.totalRead)}。`,
-      `依据：篇均阅读 ${fmtNum(metrics?.avgRead)}，完读率 ${fmtPercent(metrics?.completionRate, 0)}。`,
-      `依据：分享率 ${fmtPercent(metrics?.shareRate, 1)}，关注率 ${fmtPercent(metrics?.followRate, 1)}。`,
-    ],
-    [metrics?.avgRead, metrics?.completionRate, metrics?.followRate, metrics?.shareRate, metrics?.totalRead, range, recommendRate]
-  );
 
   useEffect(() => {
     document.title = '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b \u00b7 \u5de5\u4f5c\u53f0';
@@ -380,6 +334,11 @@ export default function GzhWorkspacePage() {
           costCent: event.costCent,
           aiModel: event.aiModel,
           content: analysisLiveRef.current || analysisPanel?.content || analysisSummary,
+          stage: event.stage || '',
+          findings: event.findings || [],
+          actionSuggestions: event.actionSuggestions || [],
+          rhythm: event.rhythm || '',
+          riskHint: event.riskHint || '',
           suggestedQuestions: event.suggestedQuestions || [],
           createdAt: new Date().toISOString(),
         });
@@ -470,11 +429,6 @@ export default function GzhWorkspacePage() {
     });
   };
 
-  const riskText =
-    recommendPercent < 15
-      ? '风险提示：推荐率近 2 天低于 15%，本周先不要加大发文频次。'
-      : '风险提示：推荐率处于观察区间，建议保持当前发文频率继续验证。';
-
   return (
     <div className="gzh-v2-root gzh-v2-workspace">
       <div className="topbar">
@@ -541,7 +495,7 @@ export default function GzhWorkspacePage() {
           <div className="ctx-body">
             <div className="goal-card">
               <div className="goal-title">本周信号概览</div>
-              <div className="goal-sub">推荐率观察区间 15%~21% · 当前 {fmtPercent(recommendRate, 1)}</div>
+              <div className="goal-sub">当前推荐率 {fmtPercent(recommendRate, 1)} · 建议由千问基于数据生成</div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${Math.max(6, recommendPercent)}%` }} />
               </div>
@@ -553,7 +507,9 @@ export default function GzhWorkspacePage() {
               <div className="kpi-chip">篇均阅读 {fmtNum(metrics?.avgRead)}</div>
             </div>
 
-            <div className="risk-alert">{riskText}</div>
+            <div className="risk-alert">
+              <b>风险提示：</b>{riskText}
+            </div>
 
             <div className="ctx-caption">核心指标</div>
             <div className="kpi-grid">
@@ -601,7 +557,7 @@ export default function GzhWorkspacePage() {
               <div className="rec-bar">
                 <div className="rec-fill" style={{ width: `${Math.max(6, recommendPercent)}%` }} />
               </div>
-              <div className="rec-sub">近7天区间 15%~21%</div>
+              <div className="rec-sub">以实际分发表现为准，建议见右侧千问分析</div>
             </div>
 
             <details className="interact-details" open>
@@ -653,31 +609,41 @@ export default function GzhWorkspacePage() {
                   </div>
                 </div>
                 <div className="ai-sub">{analysisText}</div>
+                {analysisGenerating ? (
+                  <div className="thinking-card">
+                    <div className="thinking-title">千问思考中...</div>
+                    <div className="thinking-sub">正在整理风险提示、核心发现和可执行建议</div>
+                  </div>
+                ) : null}
+                {analysisStage ? (
+                  <div className="stage-block">
+                    <b>阶段判断：</b>{analysisStage}
+                  </div>
+                ) : null}
 
                 <div className="findings-title">核心发现</div>
-                {findings.map((item, index) => (
+                {analysisGenerating ? <div className="thinking-skeleton" /> : null}
+                {!analysisGenerating && analysisFindings.length === 0 ? <div className="empty-tip">等待千问生成核心发现。</div> : null}
+                {!analysisGenerating && analysisFindings.map((item, index) => (
                   <div key={`finding-${index}`} className="finding-item">
-                    <span className={item.type === 'good' ? 'fi-good' : 'fi-bad'}>{item.type === 'good' ? '✓' : '✗'}</span>
-                    {item.text}
+                    <span className="fi-good">•</span>
+                    {item}
                   </div>
                 ))}
 
                 <div className="actions-title">本周可执行的 3 件事</div>
-                {actionSuggestions.map((item, index) => (
+                {analysisGenerating ? <div className="thinking-skeleton" /> : null}
+                {!analysisGenerating && actionSuggestions.length === 0 ? <div className="empty-tip">等待千问生成可执行建议。</div> : null}
+                {!analysisGenerating && actionSuggestions.map((item, index) => (
                   <div key={`action-${index}`} className="action-item">
                     <div className="action-row">
                       <div className="action-num">{index + 1}</div>
                       <div className="action-text">{item}</div>
                     </div>
-                    <div className="action-evidence">{actionEvidence[index] || actionEvidence[actionEvidence.length - 1]}</div>
                   </div>
                 ))}
 
-                <div className="mood-block">
-                  {header?.articleCount
-                    ? `${fmtNum(header.articleCount)} 篇历史内容已纳入分析。保持稳定节奏，比追求短期波动更重要。`
-                    : '写作习惯已建立，先保持节奏，再持续优化推荐率和分享率。'}
-                </div>
+                <div className="mood-block">{analysisRhythm || (analysisGenerating ? '千问正在组织节奏建议…' : '等待千问生成节奏建议。')}</div>
 
                 <div className="ai-footer">
                   {quickPrompts.slice(0, 2).map((item) => (
@@ -702,11 +668,17 @@ export default function GzhWorkspacePage() {
           </div>
 
           <div className="chat-quick">
-            {quickPrompts.slice(0, 4).map((item) => (
-              <button key={item} className="quick-btn" type="button" onClick={() => setChatInput(item)}>
-                {item}
+            {quickPrompts.length === 0 ? (
+              <button className="quick-btn" type="button" disabled>
+                生成分析后显示推荐问题
               </button>
-            ))}
+            ) : (
+              quickPrompts.slice(0, 4).map((item) => (
+                <button key={item} className="quick-btn" type="button" onClick={() => setChatInput(item)}>
+                  {item}
+                </button>
+              ))
+            )}
           </div>
 
           <div className="chat-input-bar">
