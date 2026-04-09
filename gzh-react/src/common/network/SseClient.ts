@@ -2,6 +2,7 @@ export type SseCallbacks<TDone> = {
   onChunk: (content: string) => void;
   onDone: (data: TDone) => void;
   onError: (error: Error) => void;
+  onStatus?: (data: Record<string, unknown>) => void;
 };
 
 export function createSseStream<TDone>(
@@ -52,6 +53,8 @@ export function createSseStream<TDone>(
             const json = JSON.parse(payload) as Record<string, unknown>;
             if (json.type === 'chunk') {
               callbacks.onChunk(String(json.content ?? ''));
+            } else if (json.type === 'status') {
+              callbacks.onStatus?.(json);
             } else if (json.type === 'done') {
               callbacks.onDone(json as TDone);
             } else if (json.type === 'error') {

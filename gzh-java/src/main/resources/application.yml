@@ -49,7 +49,7 @@ app:
     template-code: ${SMS_TEMPLATE_CODE:SMS_000000001}
   ai:
     default-model: ${AI_DEFAULT_MODEL:qwen_3_5}
-    timeout-ms: ${AI_TIMEOUT_MS:30000}
+    timeout-ms: ${AI_TIMEOUT_MS:90000}
     qwen35:
       endpoint: ${QWEN35_ENDPOINT:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
       api-key: ${QWEN35_API_KEY:sk-050a5b5511074c36a17dfc5d98fd1b57}

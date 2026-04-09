@@ -9,6 +9,7 @@ export type AnalysisReport = {
   costCent: number;
   aiModel: string;
   content: string;
+  signalOverview?: string;
   stage?: string;
   findings?: string[];
   actionSuggestions?: string[];
@@ -32,10 +33,12 @@ export type AnalysisEstimate = {
 export type AnalysisDoneEvent = {
   type: 'done';
   reportId: number;
+  articleCount: number;
   inputTokens: number;
   outputTokens: number;
   costCent: number;
   aiModel: string;
+  signalOverview?: string;
   stage?: string;
   findings?: string[];
   actionSuggestions?: string[];

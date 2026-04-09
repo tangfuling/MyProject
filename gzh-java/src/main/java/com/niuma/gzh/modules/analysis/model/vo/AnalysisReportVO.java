@@ -14,6 +14,7 @@ public class AnalysisReportVO {
     private Integer costCent;
     private String aiModel;
     private String content;
+    private String signalOverview;
     private String stage;
     private List<String> findings;
     private List<String> actionSuggestions;

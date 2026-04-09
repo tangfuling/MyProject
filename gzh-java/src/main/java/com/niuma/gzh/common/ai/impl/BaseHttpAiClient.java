@@ -21,7 +21,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public abstract class BaseHttpAiClient implements AiClient {
 
     protected final HttpClient httpClient;
@@ -40,6 +42,14 @@ public abstract class BaseHttpAiClient implements AiClient {
                                                      AiGenerateRequest request,
                                                      Map<String, String> extraHeaders) {
         ensureApiKey(apiKey);
+        long startedAt = System.currentTimeMillis();
+        log.info("[tfling][ai.http] request provider=openai-compatible, model={}, endpoint={}, timeoutMs={}, historyCount={}, toolCount={}, promptChars={}",
+            model,
+            endpoint,
+            timeoutMs,
+            request.safeHistory().size(),
+            request.safeTools().size(),
+            request.userPrompt() == null ? 0 : request.userPrompt().length());
         try {
             List<Map<String, Object>> messages = buildOpenAiMessages(request);
 
@@ -66,9 +76,22 @@ public abstract class BaseHttpAiClient implements AiClient {
             }
 
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            long elapsedMs = System.currentTimeMillis() - startedAt;
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.warn("[tfling][ai.http] failed provider=openai-compatible, model={}, endpoint={}, status={}, elapsedMs={}, body={}",
+                    model,
+                    endpoint,
+                    response.statusCode(),
+                    elapsedMs,
+                    trimForLog(response.body(), 600));
                 throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "模型调用失败: " + response.body());
             }
+            log.info("[tfling][ai.http] done provider=openai-compatible, model={}, endpoint={}, status={}, elapsedMs={}, bodyChars={}",
+                model,
+                endpoint,
+                response.statusCode(),
+                elapsedMs,
+                response.body() == null ? 0 : response.body().length());
 
             JsonNode json = objectMapper.readTree(response.body());
             JsonNode messageNode = json.path("choices").path(0).path("message");
@@ -98,6 +121,11 @@ public abstract class BaseHttpAiClient implements AiClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            log.error("[tfling][ai.http] exception provider=openai-compatible, model={}, endpoint={}, elapsedMs={}, message={}",
+                model,
+                endpoint,
+                System.currentTimeMillis() - startedAt,
+                e.getMessage());
             throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "模型调用失败: " + e.getMessage());
         }
     }
@@ -107,6 +135,14 @@ public abstract class BaseHttpAiClient implements AiClient {
                                           String model,
                                           AiGenerateRequest request) {
         ensureApiKey(apiKey);
+        long startedAt = System.currentTimeMillis();
+        log.info("[tfling][ai.http] request provider=claude, model={}, endpoint={}, timeoutMs={}, historyCount={}, toolCount={}, promptChars={}",
+            model,
+            endpoint,
+            timeoutMs,
+            request.safeHistory().size(),
+            request.safeTools().size(),
+            request.userPrompt() == null ? 0 : request.userPrompt().length());
         try {
             List<Map<String, Object>> messages = buildClaudeMessages(request);
 
@@ -133,9 +169,22 @@ public abstract class BaseHttpAiClient implements AiClient {
                 .build();
 
             HttpResponse<String> response = httpClient.send(requestObj, HttpResponse.BodyHandlers.ofString());
+            long elapsedMs = System.currentTimeMillis() - startedAt;
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.warn("[tfling][ai.http] failed provider=claude, model={}, endpoint={}, status={}, elapsedMs={}, body={}",
+                    model,
+                    endpoint,
+                    response.statusCode(),
+                    elapsedMs,
+                    trimForLog(response.body(), 600));
                 throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "Claude 调用失败: " + response.body());
             }
+            log.info("[tfling][ai.http] done provider=claude, model={}, endpoint={}, status={}, elapsedMs={}, bodyChars={}",
+                model,
+                endpoint,
+                response.statusCode(),
+                elapsedMs,
+                response.body() == null ? 0 : response.body().length());
 
             JsonNode json = objectMapper.readTree(response.body());
             List<AiToolCall> toolCalls = new ArrayList<>();
@@ -167,6 +216,11 @@ public abstract class BaseHttpAiClient implements AiClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            log.error("[tfling][ai.http] exception provider=claude, model={}, endpoint={}, elapsedMs={}, message={}",
+                model,
+                endpoint,
+                System.currentTimeMillis() - startedAt,
+                e.getMessage());
             throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "Claude 调用失败: " + e.getMessage());
         }
     }
@@ -238,5 +292,16 @@ public abstract class BaseHttpAiClient implements AiClient {
         if (apiKey == null || apiKey.isBlank()) {
             throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "AI API Key 未配置");
         }
+    }
+
+    private String trimForLog(String text, int maxChars) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String normalized = text.replace('\n', ' ').replace('\r', ' ').trim();
+        if (normalized.length() <= maxChars) {
+            return normalized;
+        }
+        return normalized.substring(0, maxChars) + "...";
     }
 }

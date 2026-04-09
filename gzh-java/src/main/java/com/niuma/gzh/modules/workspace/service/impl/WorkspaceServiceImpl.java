@@ -164,6 +164,8 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         WorkspaceOverviewVO.AnalysisPanel panel = new WorkspaceOverviewVO.AnalysisPanel();
         if (report == null) {
             panel.setSummary("等待千问分析报告生成后展示建议");
+            panel.setArticleCount(0);
+            panel.setSignalOverview("等待千问生成信号概览");
             panel.setStage("");
             panel.setFindings(List.of());
             panel.setRhythm("");
@@ -181,12 +183,14 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
         }
         panel.setReportId(report.getId());
         panel.setRangeCode(report.getRangeCode());
+        panel.setArticleCount(report.getArticleCount());
         panel.setCreatedAt(report.getCreatedAt());
         panel.setAiModel(report.getAiModel());
         panel.setInputTokens(report.getInputTokens());
         panel.setOutputTokens(report.getOutputTokens());
         panel.setCostCent(report.getCostCent());
         panel.setSummary(AnalysisResultParser.toSummary(report.getContent()));
+        panel.setSignalOverview(parsed.signalOverview());
         panel.setStage(parsed.stage());
         panel.setFindings(parsed.findings());
         panel.setRhythm(parsed.rhythm());

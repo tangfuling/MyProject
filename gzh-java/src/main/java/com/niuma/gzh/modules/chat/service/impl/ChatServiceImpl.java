@@ -185,7 +185,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                 sendEvent(emitter, Map.of("type", "error", "message", friendlyErrorMessage(ex)));
             } catch (IOException ignored) {
             }
-            emitter.completeWithError(ex);
+            emitter.complete();
         } finally {
             AuthContext.clear();
         }
@@ -362,6 +362,10 @@ public class ChatServiceImpl extends BaseService implements ChatService {
 
     private String friendlyErrorMessage(Exception ex) {
         if (ex instanceof BizException bizException && bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
+            String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+            if (message.contains("timed out") || message.contains("timeout")) {
+                return "千问响应超时，请稍后重试或切换千问版本";
+            }
             return "当前模型暂时不可用，请切换其他模型重试";
         }
         String message = ex.getMessage();

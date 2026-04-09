@@ -54,12 +54,14 @@ export type WorkspaceDataPanel = {
 export type WorkspaceAnalysisPanel = {
   reportId?: number;
   rangeCode?: string;
+  articleCount?: number;
   createdAt?: string;
   aiModel?: string;
   inputTokens?: number;
   outputTokens?: number;
   costCent?: number;
   summary: string;
+  signalOverview?: string;
   stage?: string;
   findings?: string[];
   rhythm?: string;

@@ -14,6 +14,7 @@ public final class AnalysisResultParser {
             return Parsed.empty();
         }
 
+        String signalOverview = "";
         String stage = "";
         String rhythm = "";
         String riskHint = "";
@@ -36,6 +37,11 @@ public final class AnalysisResultParser {
             }
 
             switch (section) {
+                case SIGNAL -> {
+                    if (signalOverview.isBlank()) {
+                        signalOverview = line;
+                    }
+                }
                 case STAGE -> {
                     if (stage.isBlank()) {
                         stage = line;
@@ -60,6 +66,9 @@ public final class AnalysisResultParser {
                     }
                 }
                 case NONE -> {
+                    if (signalOverview.isBlank() && likelySignalSentence(line)) {
+                        signalOverview = line;
+                    }
                     if (stage.isBlank() && likelyStageSentence(line)) {
                         stage = line;
                     }
@@ -84,11 +93,15 @@ public final class AnalysisResultParser {
             }
         }
 
+        if (signalOverview.isBlank() && !findings.isEmpty()) {
+            signalOverview = findings.get(0);
+        }
+
         findings = uniqueLimited(findings, 5);
         actions = uniqueLimited(actions, 5);
         questions = uniqueLimited(questions, 5);
 
-        return new Parsed(stage, findings, actions, rhythm, riskHint, questions);
+        return new Parsed(signalOverview, stage, findings, actions, rhythm, riskHint, questions);
     }
 
     public static String toSummary(String content) {
@@ -114,6 +127,16 @@ public final class AnalysisResultParser {
             || line.contains("处于");
     }
 
+    private static boolean likelySignalSentence(String line) {
+        if (line.length() < 8 || line.length() > 120) {
+            return false;
+        }
+        return line.contains("信号")
+            || line.contains("概览")
+            || line.contains("推荐率")
+            || line.contains("趋势");
+    }
+
     private static String normalizeLine(String raw) {
         if (raw == null) {
             return "";
@@ -133,6 +156,9 @@ public final class AnalysisResultParser {
 
     private static Section detectSection(String line) {
         String normalized = line.replaceAll("[：:：\\s]", "");
+        if (normalized.contains("信号概览") || normalized.contains("关键信号")) {
+            return Section.SIGNAL;
+        }
         if (normalized.contains("风险提示") || normalized.equals("风险")) {
             return Section.RISK;
         }
@@ -203,6 +229,7 @@ public final class AnalysisResultParser {
 
     private enum Section {
         NONE,
+        SIGNAL,
         STAGE,
         FINDINGS,
         ACTIONS,
@@ -212,6 +239,7 @@ public final class AnalysisResultParser {
     }
 
     public record Parsed(
+        String signalOverview,
         String stage,
         List<String> findings,
         List<String> actionSuggestions,
@@ -220,7 +248,7 @@ public final class AnalysisResultParser {
         List<String> suggestedQuestions
     ) {
         public static Parsed empty() {
-            return new Parsed("", List.of(), List.of(), "", "", List.of());
+            return new Parsed("", "", List.of(), List.of(), "", "", List.of());
         }
     }
 }

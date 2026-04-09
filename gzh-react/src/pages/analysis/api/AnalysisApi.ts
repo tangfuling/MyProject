@@ -14,13 +14,19 @@ const AnalysisApi = {
   detail(id: number) {
     return http.get<AnalysisReport>(`/analysis/reports/${id}`);
   },
-  generate(range: string, onChunk: (chunk: string) => void, onDone: (event: AnalysisDoneEvent) => void, onError: (error: Error) => void) {
+  generate(
+    range: string,
+    onChunk: (chunk: string) => void,
+    onDone: (event: AnalysisDoneEvent) => void,
+    onError: (error: Error) => void,
+    onStatus?: (event: Record<string, unknown>) => void
+  ) {
     const token = useAuthStore.getState().token ?? '';
     return createSseStream<AnalysisDoneEvent>(
       `${HttpConfig.getBaseUrl()}/analysis/generate`,
       { range },
       token,
-      { onChunk, onDone, onError }
+      { onChunk, onDone, onError, onStatus }
     );
   },
 };

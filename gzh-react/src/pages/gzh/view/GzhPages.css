@@ -1142,6 +1142,12 @@
   margin-top: 3px;
 }
 
+.gzh-v2-workspace .thinking-meta {
+  font-size: 10px;
+  color: var(--ink-light);
+  margin-top: 4px;
+}
+
 .gzh-v2-workspace .thinking-skeleton {
   height: 28px;
   border-radius: 8px;

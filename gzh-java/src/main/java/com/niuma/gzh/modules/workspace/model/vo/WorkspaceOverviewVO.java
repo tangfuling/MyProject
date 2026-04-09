@@ -72,12 +72,14 @@ public class WorkspaceOverviewVO {
     public static class AnalysisPanel {
         private Long reportId;
         private String rangeCode;
+        private Integer articleCount;
         private LocalDateTime createdAt;
         private String aiModel;
         private Integer inputTokens;
         private Integer outputTokens;
         private Integer costCent;
         private String summary;
+        private String signalOverview;
         private String stage;
         private List<String> findings;
         private String rhythm;

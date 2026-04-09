@@ -186,6 +186,8 @@ export default function GzhWorkspacePage() {
   const [analysisDetail, setAnalysisDetail] = useState<AnalysisReport | null>(null);
   const [analysisGenerating, setAnalysisGenerating] = useState(false);
   const [analysisLive, setAnalysisLive] = useState('');
+  const [analysisStatusText, setAnalysisStatusText] = useState('');
+  const [analysisElapsedSec, setAnalysisElapsedSec] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const [chatMessages, setChatMessages] = useState<UiMessage[]>([]);
@@ -207,6 +209,7 @@ export default function GzhWorkspacePage() {
   const chatAbortRef = useRef<AbortController | null>(null);
   const analysisAbortRef = useRef<AbortController | null>(null);
   const analysisLiveRef = useRef('');
+  const analysisTickerRef = useRef<number | null>(null);
 
   const overviewQuery = useQuery({
     queryKey: ['workspace-overview', range],
@@ -244,7 +247,13 @@ export default function GzhWorkspacePage() {
   );
   const analysisPanel = overview?.analysisPanel;
   const analysisSummary = analysisPanel?.summary || '等待千问分析生成后展示。';
-  const analysisText = analysisGenerating ? analysisLive || '千问正在思考中，请稍候…' : analysisDetail?.content || analysisPanel?.content || analysisSummary;
+  const waitingSuffix = analysisElapsedSec > 0 ? `（已等待${analysisElapsedSec}s）` : '';
+  const analysisFallback = analysisStatusText
+    ? `${analysisStatusText}${waitingSuffix}`
+    : `千问正在思考中，请稍候…${waitingSuffix}`;
+  const analysisText = analysisGenerating
+    ? analysisLive || analysisFallback
+    : analysisDetail?.content || analysisPanel?.content || analysisSummary;
 
   const currentModelCode = header?.aiModel || profile?.aiModel || 'qwen_3_5';
   const currentModelName = MODEL_OPTIONS.find((x) => x.code === currentModelCode)?.name || currentModelCode;
@@ -253,7 +262,15 @@ export default function GzhWorkspacePage() {
   const analysisFindings = (analysisDetail?.findings || analysisPanel?.findings || []).filter((x) => x && x.trim());
   const actionSuggestions = (analysisDetail?.actionSuggestions || analysisPanel?.actionSuggestions || []).filter((x) => x && x.trim());
   const analysisRhythm = analysisDetail?.rhythm || analysisPanel?.rhythm || '';
-  const riskText = analysisDetail?.riskHint || analysisPanel?.riskHint || '等待千问生成风险提示';
+  const analysisSignalOverview = analysisGenerating
+    ? '千问正在生成信号概览…'
+    : analysisDetail?.signalOverview || analysisPanel?.signalOverview || '等待千问生成信号概览';
+  const riskText = analysisGenerating
+    ? '千问正在生成风险提示…'
+    : analysisDetail?.riskHint || analysisPanel?.riskHint || '等待千问生成风险提示';
+  const analysisRangeLabel = RANGE_OPTIONS.find((x) => x.value === range)?.label ?? '30天';
+  const analysisArticleCount = analysisDetail?.articleCount ?? analysisPanel?.articleCount ?? header?.articleCount ?? 0;
+  const analysisCoverageText = `${analysisGenerating ? '正在分析您近' : '已分析您近'}${analysisRangeLabel}${fmtNum(analysisArticleCount)}篇文章的数据`;
 
   const quickPrompts = useMemo(() => {
     const list = [
@@ -270,6 +287,13 @@ export default function GzhWorkspacePage() {
   }, [overview?.dataPanel.trend]);
 
   const sparkline = useMemo(() => buildSparkline(trendValues), [trendValues]);
+
+  const stopAnalysisTicker = () => {
+    if (analysisTickerRef.current !== null) {
+      window.clearInterval(analysisTickerRef.current);
+      analysisTickerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     document.title = '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b \u00b7 \u5de5\u4f5c\u53f0';
@@ -290,6 +314,7 @@ export default function GzhWorkspacePage() {
     return () => {
       chatAbortRef.current?.abort();
       analysisAbortRef.current?.abort();
+      stopAnalysisTicker();
     };
   }, []);
 
@@ -310,30 +335,44 @@ export default function GzhWorkspacePage() {
     if (analysisGenerating) return;
 
     analysisAbortRef.current?.abort();
+    stopAnalysisTicker();
     setAnalysisError(null);
     setAnalysisGenerating(true);
     setAnalysisLive('');
+    setAnalysisStatusText('正在准备分析数据');
+    setAnalysisElapsedSec(0);
     analysisLiveRef.current = '';
     setAnalysisDetail(null);
+    analysisTickerRef.current = window.setInterval(() => {
+      setAnalysisElapsedSec((prev) => prev + 1);
+    }, 1000);
 
     analysisAbortRef.current = AnalysisApi.generate(
       range,
       (chunk) => {
+        if (!analysisLiveRef.current) {
+          setAnalysisStatusText('千问正在输出分析内容…');
+        }
         analysisLiveRef.current += chunk;
         setAnalysisLive((prev) => prev + chunk);
       },
       (event: AnalysisDoneEvent) => {
+        const finalContent = analysisLiveRef.current || analysisPanel?.content || analysisSummary;
+        stopAnalysisTicker();
         setAnalysisGenerating(false);
         setAnalysisLive('');
+        setAnalysisStatusText('');
+        setAnalysisElapsedSec(0);
         setAnalysisDetail({
           id: event.reportId,
           rangeCode: range,
-          articleCount: header?.articleCount ?? 0,
+          articleCount: event.articleCount ?? header?.articleCount ?? 0,
           inputTokens: event.inputTokens,
           outputTokens: event.outputTokens,
           costCent: event.costCent,
           aiModel: event.aiModel,
-          content: analysisLiveRef.current || analysisPanel?.content || analysisSummary,
+          content: finalContent,
+          signalOverview: event.signalOverview || '',
           stage: event.stage || '',
           findings: event.findings || [],
           actionSuggestions: event.actionSuggestions || [],
@@ -342,10 +381,22 @@ export default function GzhWorkspacePage() {
           suggestedQuestions: event.suggestedQuestions || [],
           createdAt: new Date().toISOString(),
         });
+        analysisLiveRef.current = '';
       },
       (error) => {
+        stopAnalysisTicker();
         setAnalysisGenerating(false);
+        setAnalysisLive('');
+        setAnalysisStatusText('');
+        setAnalysisElapsedSec(0);
         setAnalysisError(error.message || '分析失败，请稍后重试。');
+        analysisLiveRef.current = '';
+      },
+      (event) => {
+        const message = typeof event.message === 'string' ? event.message.trim() : '';
+        if (message) {
+          setAnalysisStatusText(message);
+        }
       }
     );
   };
@@ -495,7 +546,7 @@ export default function GzhWorkspacePage() {
           <div className="ctx-body">
             <div className="goal-card">
               <div className="goal-title">本周信号概览</div>
-              <div className="goal-sub">当前推荐率 {fmtPercent(recommendRate, 1)} · 建议由千问基于数据生成</div>
+              <div className="goal-sub">{analysisSignalOverview}</div>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${Math.max(6, recommendPercent)}%` }} />
               </div>
@@ -603,7 +654,7 @@ export default function GzhWorkspacePage() {
             <div className="msg-ai">
               <div className="ai-card">
                 <div className="ai-card-head">
-                  <div className="ai-card-title">已分析你近 {RANGE_OPTIONS.find((x) => x.value === range)?.label ?? '30天'}的 {fmtNum(overview?.articles?.length ?? header?.articleCount ?? 0)} 篇文章</div>
+                  <div className="ai-card-title">{analysisCoverageText}</div>
                   <div className="ai-badge">
                     {aiModelName} · {fmtDateShort(analysisDetail?.createdAt || analysisPanel?.createdAt || header?.lastSyncAt)} · {fmtNum(aiTokens)} tok
                   </div>
@@ -612,7 +663,10 @@ export default function GzhWorkspacePage() {
                 {analysisGenerating ? (
                   <div className="thinking-card">
                     <div className="thinking-title">千问思考中...</div>
-                    <div className="thinking-sub">正在整理风险提示、核心发现和可执行建议</div>
+                    <div className="thinking-sub">
+                      {analysisStatusText || '正在整理风险提示、核心发现和可执行建议'}
+                    </div>
+                    <div className="thinking-meta">{analysisElapsedSec > 0 ? `已等待 ${analysisElapsedSec}s` : '正在连接千问...'}</div>
                   </div>
                 ) : null}
                 {analysisStage ? (
