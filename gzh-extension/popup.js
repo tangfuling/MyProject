@@ -18,22 +18,9 @@ if (!HTTP_CONFIG) {
   throw new Error('GzhHttpConfig is required.');
 }
 const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
-
-const STAGE_LABELS = {
-  need_login_web: '未登录',
-  ready: '已登录 · 待同步',
-  fetch_list: '同步中',
-  fetch_detail: '同步中',
-  upload: '同步中',
-  done: '同步完成',
-  login_expired: '登录过期',
-  partial_failed: '部分失败',
-  error: '失败',
-  idle: '待同步',
-};
-
-const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
-const DEFAULT_WEB_BASE = HTTP_CONFIG.isDebug ? 'http://localhost:5173' : 'https://gzh.niumatech.com';
+const STAGE_LABELS = HTTP_CONFIG.stageLabels;
+const RUNNING_STAGES = new Set(HTTP_CONFIG.runningStages);
+const DEFAULT_WEB_BASE = HTTP_CONFIG.getDefaultWebBase();
 
 let latestAuthToken = '';
 let latestLastSync = null;

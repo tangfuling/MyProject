@@ -7,29 +7,17 @@
   const STYLE_ID = 'gzh-sync-style';
   const LAUNCHER_ID = 'gzh-sync-launcher';
 
-  const STAGE_LABELS = {
-    need_login_web: '未登录',
-    ready: '已登录 · 待同步',
-    fetch_list: '同步中',
-    fetch_detail: '同步中',
-    upload: '同步中',
-    done: '同步完成',
-    login_expired: '登录过期',
-    partial_failed: '部分失败',
-    error: '失败',
-    idle: '待同步',
-  };
-
   const HTTP_CONFIG = globalThis.GzhHttpConfig;
   if (!HTTP_CONFIG) {
     throw new Error('GzhHttpConfig is required.');
   }
+  const STAGE_LABELS = HTTP_CONFIG.stageLabels;
   const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
-  const RUNNING_STAGES = new Set(['fetch_list', 'fetch_detail', 'upload']);
-  const DEFAULT_WEB_BASE = HTTP_CONFIG.isDebug ? 'http://localhost:5173' : 'https://gzh.niumatech.com';
-  const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
+  const RUNNING_STAGES = new Set(HTTP_CONFIG.runningStages);
+  const DEFAULT_WEB_BASE = HTTP_CONFIG.getDefaultWebBase();
   const FREQ_CONTROL_RE = /freq\s*control|频控|频率|频繁|操作过于频繁/i;
-  const LOG_PREFIX = '[tfling]';
+  const LOG_PREFIX = HTTP_CONFIG.logPrefix;
+  const ENABLE_PLUGIN_LOG = HTTP_CONFIG.enablePluginLog === true;
   const MP_FETCH_BASE_INTERVAL_MS = 1800;
   const MP_FETCH_JITTER_MS = 1200;
   const MP_FREQ_HIT_WINDOW_MS = 3 * 60 * 1000;
@@ -96,10 +84,7 @@
   }
 
   function isContextInvalidatedError(errorOrMessage) {
-    const msg = typeof errorOrMessage === 'string'
-      ? errorOrMessage
-      : String(errorOrMessage?.message || errorOrMessage || '');
-    return CONTEXT_INVALIDATED_RE.test(msg);
+    return HTTP_CONFIG.isContextInvalidatedError(errorOrMessage);
   }
 
   function safeSendMessage(payload) {
@@ -1269,6 +1254,9 @@
   }
 
   function safeLog(level, message, payload) {
+    if (!ENABLE_PLUGIN_LOG) {
+      return;
+    }
     try {
       if (String(level || '').toLowerCase() === 'info') {
         return;
@@ -3511,7 +3499,7 @@
     if (!json || typeof json !== 'object') {
       throw new Error(`文章指标接口返回格式异常(status=${response.status})`);
     }
-    if (trafficProbeLogCount < 12) {
+    if (ENABLE_PLUGIN_LOG && trafficProbeLogCount < 12) {
       safeWarnProbe('traffic probe raw markers', {
         msgId,
         publishDate,
@@ -3524,7 +3512,7 @@
         rawProbe: buildTrafficRawProbe(text),
       });
     }
-    if (metricsPayloadParseWarnCount < 6 && payloadQualityScore(json) <= 1) {
+    if (ENABLE_PLUGIN_LOG && metricsPayloadParseWarnCount < 6 && payloadQualityScore(json) <= 1) {
       metricsPayloadParseWarnCount += 1;
       safeLog('warn', 'metrics payload parse weak', {
         msgId,
@@ -4676,7 +4664,7 @@
       usedPublishDate,
       phase: 'final',
     });
-    if (trafficProbeLogCount < 30) {
+    if (ENABLE_PLUGIN_LOG && trafficProbeLogCount < 30) {
       safeWarnProbe('traffic probe parsed result', {
         wxArticleId: article?.wxArticleId ?? '',
         title: article?.title ?? '',

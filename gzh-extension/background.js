@@ -7,9 +7,13 @@ if (!HTTP_CONFIG) {
 }
 const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
 const ALLOWED_PROXY_PREFIX = `${API_BASE_URL}/`;
-const LOG_PREFIX = '[tfling]';
+const LOG_PREFIX = HTTP_CONFIG.logPrefix;
+const ENABLE_PLUGIN_LOG = HTTP_CONFIG.enablePluginLog === true;
 
 function bgLog(level, message, payload) {
+  if (!ENABLE_PLUGIN_LOG) {
+    return;
+  }
   if (String(level || '').toLowerCase() === 'info') {
     return;
   }

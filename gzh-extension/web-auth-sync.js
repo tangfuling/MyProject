@@ -2,7 +2,12 @@
   const TOKEN_KEY = 'gzh_token';
   const PROFILE_KEY = 'gzh_profile';
   const LOGOUT_FLAG_KEY = 'gzh_logout_flag';
-  const CONTEXT_INVALIDATED_RE = /extension context invalidated|invalidated|receiving end does not exist/i;
+  const HTTP_CONFIG = globalThis.GzhHttpConfig;
+  if (!HTTP_CONFIG) {
+    throw new Error('GzhHttpConfig is required.');
+  }
+  const LOG_PREFIX = HTTP_CONFIG.logPrefix;
+  const ENABLE_PLUGIN_LOG = HTTP_CONFIG.enablePluginLog === true;
 
   let lastToken = '__init__';
   let lastProfileRaw = '__init__';
@@ -17,10 +22,7 @@
   }
 
   function isContextInvalidatedError(errorOrMessage) {
-    const msg = typeof errorOrMessage === 'string'
-      ? errorOrMessage
-      : String(errorOrMessage?.message || errorOrMessage || '');
-    return CONTEXT_INVALIDATED_RE.test(msg);
+    return HTTP_CONFIG.isContextInvalidatedError(errorOrMessage);
   }
 
   function parseProfile(raw) {
@@ -38,6 +40,21 @@
     }
   }
 
+  function authSyncLogWarn(message, payload) {
+    if (!ENABLE_PLUGIN_LOG) {
+      return;
+    }
+    try {
+      if (payload === undefined) {
+        console.warn(`${LOG_PREFIX} ${message}`);
+        return;
+      }
+      console.warn(`${LOG_PREFIX} ${message}`, payload);
+    } catch {
+      // ignore log failures
+    }
+  }
+
   function pushAuthToken(token, profileRaw) {
     const profile = parseProfile(profileRaw);
     const payload = {
@@ -51,12 +68,12 @@
       chrome.storage.local.set(payload, () => {
         const err = chrome.runtime?.lastError;
         if (err && !isContextInvalidatedError(err.message)) {
-          console.warn('[gzh-extension] web-auth-sync storage.set failed', err.message);
+          authSyncLogWarn('web-auth-sync storage.set failed', err.message);
         }
       });
     } catch (error) {
       if (!isContextInvalidatedError(error)) {
-        console.warn('[gzh-extension] web-auth-sync storage.set threw', error);
+        authSyncLogWarn('web-auth-sync storage.set threw', error);
       }
     }
   }
