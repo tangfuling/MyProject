@@ -1062,6 +1062,11 @@
   color: var(--teal);
 }
 
+.gzh-v2-workspace .quick-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .gzh-v2-workspace .chat-messages {
   flex: 1;
   overflow-y: auto;

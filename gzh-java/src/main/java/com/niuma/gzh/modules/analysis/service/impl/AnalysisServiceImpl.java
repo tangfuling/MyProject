@@ -131,18 +131,11 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     private void runGenerate(Long userId, String range, SseEmitter emitter) {
         AuthContext.setUserId(userId);
         long startedAt = System.currentTimeMillis();
-        log.info("[tfling][analysis.generate] start userId={}, range={}", userId, range);
         try {
             sendStatusQuietly(emitter, "preparing", "正在准备分析数据");
             OverviewVO overview = articleService.overview(range);
             List<ArticleVO> articles = articleService.listRangeArticles(range, 20);
             UserEntity user = userService.getById(userId);
-            log.info("[tfling][analysis.generate] prepared userId={}, range={}, articleCount={}, selectedArticles={}, model={}",
-                userId,
-                range,
-                overview.getArticleCount(),
-                articles.size(),
-                user.getAiModel());
 
             String systemPrompt = analysisSystemPrompt();
             String userPrompt = buildAnalysisPrompt(range, overview, articles);
@@ -150,38 +143,20 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             AiClient client = aiClientFactory.getByModelCode(user.getAiModel());
             AiModelProvider provider = aiClientFactory.getProvider(user.getAiModel());
             sendStatusQuietly(emitter, "calling_model", "正在调用千问生成分析");
-            long mainCallStart = System.currentTimeMillis();
             AiGenerateResult aiResult = client.generate(new AiGenerateRequest(systemPrompt, userPrompt, List.of()));
-            long mainCallElapsed = System.currentTimeMillis() - mainCallStart;
             String content = aiResult.content();
-            log.info("[tfling][analysis.generate] main model done userId={}, range={}, model={}, elapsedMs={}, inputTokens={}, outputTokens={}, contentChars={}",
-                userId,
-                range,
-                provider.getCode(),
-                mainCallElapsed,
-                aiResult.inputTokens(),
-                aiResult.outputTokens(),
-                content == null ? 0 : content.length());
 
             sendStatusQuietly(emitter, "streaming", "主分析完成，正在回传内容");
             streamText(emitter, content);
 
             AnalysisResultParser.Parsed parsed = AnalysisResultParser.parse(content);
             sendStatusQuietly(emitter, "structuring", "正在提取结构化分析结果");
-            long structStart = System.currentTimeMillis();
             StructuredResult structuredResult = enrichStructuredByAi(client, content, parsed);
-            long structElapsed = System.currentTimeMillis() - structStart;
             AnalysisResultParser.Parsed structured = structuredResult.parsed;
             List<String> suggestedQuestions = structured.suggestedQuestions();
             int totalInputTokens = aiResult.inputTokens() + structuredResult.extraInputTokens;
             int totalOutputTokens = aiResult.outputTokens() + structuredResult.extraOutputTokens;
             int costCent = provider.calcCostCent(totalInputTokens, totalOutputTokens);
-            log.info("[tfling][analysis.generate] structured done userId={}, range={}, elapsedMs={}, extraInputTokens={}, extraOutputTokens={}",
-                userId,
-                range,
-                structElapsed,
-                structuredResult.extraInputTokens,
-                structuredResult.extraOutputTokens);
             sendStatusQuietly(emitter, "persisting", "正在保存分析结果");
             AnalysisReportEntity saved = transactionTemplate.execute(status -> persistReportAndCharge(
                 userId,
@@ -215,14 +190,6 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             donePayload.put("suggestedQuestions", suggestedQuestions);
             sendEvent(emitter, donePayload);
             emitter.complete();
-            log.info("[tfling][analysis.generate] done userId={}, range={}, reportId={}, totalInputTokens={}, totalOutputTokens={}, costCent={}, elapsedMs={}",
-                userId,
-                range,
-                saved.getId(),
-                totalInputTokens,
-                totalOutputTokens,
-                costCent,
-                System.currentTimeMillis() - startedAt);
         } catch (Exception ex) {
             log.error("[tfling][analysis.generate] failed userId={}, range={}, elapsedMs={}, message={}",
                 userId,
@@ -322,7 +289,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 if (!text.isEmpty()) {
                     result.add(text);
                 }
-                if (result.size() >= 5) {
+                if (result.size() >= 10) {
                     break;
                 }
             }
@@ -354,7 +321,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 .append(" 完读率=").append(article.getCompletionRate())
                 .append("\n");
         }
-        sb.append("\n请按固定结构输出：信号概览、你现在在什么阶段、核心发现、3条可执行建议、风险提示、节奏感、5条推荐问题。\n");
+        sb.append("\n请按固定结构输出：信号概览、你现在在什么阶段、核心发现、3条可执行建议、风险提示、节奏感、10条推荐问题。\n");
         sb.append("输出必须引用数据，不要泛泛而谈。\n");
         return sb.toString();
     }
@@ -408,7 +375,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         sb.append("signalOverview(string)、stage(string)、findings(string[])、actionSuggestions(string[])、rhythm(string)、riskHint(string)、suggestedQuestions(string[])。\n");
         sb.append("规则：\n");
         sb.append("1) 只输出 JSON 对象，不要 markdown。\n");
-        sb.append("2) signalOverview 保留 1 条，findings 保留 3~5 条，actionSuggestions 保留 3 条，suggestedQuestions 保留 5 条。\n");
+        sb.append("2) signalOverview 保留 1 条，findings 保留 3~5 条，actionSuggestions 保留 3 条，suggestedQuestions 保留 10 条。\n");
         sb.append("3) 如果缺失字段，用空字符串或空数组。\n\n");
         sb.append("报告原文：\n");
         sb.append(content == null ? "" : content);

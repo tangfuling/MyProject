@@ -34,6 +34,14 @@ const MODEL_OPTIONS = [
 ];
 
 const CHAT_SESSION_KEY = 'gzh_chat_session_id';
+const DEFAULT_QUICK_PROMPTS = [
+  '哪些内容主题最该加码？',
+  '下周先优化哪一项指标？',
+  '哪篇文章最值得复盘？',
+  '怎么提升推荐率和完读率？',
+  '本周三件事怎么排优先级？',
+  '怎么降低数据下滑风险？',
+];
 
 function createSessionId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -273,12 +281,12 @@ export default function GzhWorkspacePage() {
   const analysisCoverageText = `${analysisGenerating ? '正在分析您近' : '已分析您近'}${analysisRangeLabel}${fmtNum(analysisArticleCount)}篇文章的数据`;
 
   const quickPrompts = useMemo(() => {
-    const list = [
+    const dynamicList = [
       ...(overview?.quickQuestions ?? []),
       ...(analysisPanel?.suggestedQuestions ?? []),
       ...(analysisDetail?.suggestedQuestions ?? []),
     ].filter((x) => x && x.trim());
-    return Array.from(new Set(list)).slice(0, 8);
+    return Array.from(new Set([...dynamicList, ...DEFAULT_QUICK_PROMPTS])).slice(0, 12);
   }, [overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
 
   const trendValues = useMemo(() => {
@@ -453,6 +461,14 @@ export default function GzhWorkspacePage() {
         setChatError(error.message || '发送失败，请稍后重试。');
       }
     );
+  };
+
+  const sendSuggestedPrompt = (text: string) => {
+    if (chatStreaming) {
+      return;
+    }
+    setChatInput('');
+    submitPrompt(text);
   };
 
   const sendFromInput = () => {
@@ -700,8 +716,8 @@ export default function GzhWorkspacePage() {
                 <div className="mood-block">{analysisRhythm || (analysisGenerating ? '千问正在组织节奏建议…' : '等待千问生成节奏建议。')}</div>
 
                 <div className="ai-footer">
-                  {quickPrompts.slice(0, 2).map((item) => (
-                    <span key={`tag-${item}`} className="ai-tag" onClick={() => setChatInput(item)}>
+                  {quickPrompts.slice(0, 4).map((item) => (
+                    <span key={`tag-${item}`} className="ai-tag" onClick={() => sendSuggestedPrompt(item)}>
                       {item}
                     </span>
                   ))}
@@ -728,7 +744,13 @@ export default function GzhWorkspacePage() {
               </button>
             ) : (
               quickPrompts.slice(0, 4).map((item) => (
-                <button key={item} className="quick-btn" type="button" onClick={() => setChatInput(item)}>
+                <button
+                  key={item}
+                  className="quick-btn"
+                  type="button"
+                  onClick={() => sendSuggestedPrompt(item)}
+                  disabled={chatStreaming}
+                >
                   {item}
                 </button>
               ))

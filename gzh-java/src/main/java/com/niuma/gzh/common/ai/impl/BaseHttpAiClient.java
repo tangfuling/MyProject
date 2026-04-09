@@ -43,13 +43,6 @@ public abstract class BaseHttpAiClient implements AiClient {
                                                      Map<String, String> extraHeaders) {
         ensureApiKey(apiKey);
         long startedAt = System.currentTimeMillis();
-        log.info("[tfling][ai.http] request provider=openai-compatible, model={}, endpoint={}, timeoutMs={}, historyCount={}, toolCount={}, promptChars={}",
-            model,
-            endpoint,
-            timeoutMs,
-            request.safeHistory().size(),
-            request.safeTools().size(),
-            request.userPrompt() == null ? 0 : request.userPrompt().length());
         try {
             List<Map<String, Object>> messages = buildOpenAiMessages(request);
 
@@ -86,12 +79,6 @@ public abstract class BaseHttpAiClient implements AiClient {
                     trimForLog(response.body(), 600));
                 throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "模型调用失败: " + response.body());
             }
-            log.info("[tfling][ai.http] done provider=openai-compatible, model={}, endpoint={}, status={}, elapsedMs={}, bodyChars={}",
-                model,
-                endpoint,
-                response.statusCode(),
-                elapsedMs,
-                response.body() == null ? 0 : response.body().length());
 
             JsonNode json = objectMapper.readTree(response.body());
             JsonNode messageNode = json.path("choices").path(0).path("message");
@@ -136,13 +123,6 @@ public abstract class BaseHttpAiClient implements AiClient {
                                           AiGenerateRequest request) {
         ensureApiKey(apiKey);
         long startedAt = System.currentTimeMillis();
-        log.info("[tfling][ai.http] request provider=claude, model={}, endpoint={}, timeoutMs={}, historyCount={}, toolCount={}, promptChars={}",
-            model,
-            endpoint,
-            timeoutMs,
-            request.safeHistory().size(),
-            request.safeTools().size(),
-            request.userPrompt() == null ? 0 : request.userPrompt().length());
         try {
             List<Map<String, Object>> messages = buildClaudeMessages(request);
 
@@ -179,12 +159,6 @@ public abstract class BaseHttpAiClient implements AiClient {
                     trimForLog(response.body(), 600));
                 throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "Claude 调用失败: " + response.body());
             }
-            log.info("[tfling][ai.http] done provider=claude, model={}, endpoint={}, status={}, elapsedMs={}, bodyChars={}",
-                model,
-                endpoint,
-                response.statusCode(),
-                elapsedMs,
-                response.body() == null ? 0 : response.body().length());
 
             JsonNode json = objectMapper.readTree(response.body());
             List<AiToolCall> toolCalls = new ArrayList<>();

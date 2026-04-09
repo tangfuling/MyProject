@@ -48,7 +48,6 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     public WorkspaceOverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
         String realRange = normalizeRange(range);
-        log.info("[tfling][workspace.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
         try {
             UserEntity user = userService.getById(userId);
             UserProfileVO profile = userService.profile();
@@ -66,11 +65,6 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
             vo.setQuickQuestions(analysisPanel.getSuggestedQuestions() == null ? List.of() : analysisPanel.getSuggestedQuestions());
 
             vo.setArticles(buildArticles(allArticles, 8));
-            Integer totalRead = vo.getDataPanel() == null || vo.getDataPanel().getMetrics() == null
-                ? null : vo.getDataPanel().getMetrics().getTotalRead();
-            Integer articleCount = vo.getHeader() == null ? null : vo.getHeader().getArticleCount();
-            log.info("[tfling][workspace.overview] done userId={}, range={}, articleCount={}, totalRead={}, articleCards={}",
-                userId, realRange, articleCount, totalRead, vo.getArticles().size());
             return vo;
         } catch (Exception ex) {
             log.error("[tfling][workspace.overview] failed userId={}, range={}, message={}",
@@ -260,7 +254,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
                 if (!text.isEmpty()) {
                     result.add(text);
                 }
-                if (result.size() >= 5) {
+                if (result.size() >= 10) {
                     break;
                 }
             }
