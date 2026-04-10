@@ -13,7 +13,7 @@ import SettingsApi from '../../settings/api/SettingsApi';
 import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import './GzhPages.css';
 
-type RangeCode = '7d' | '30d' | '90d' | 'all';
+type RangeCode = '7d' | '30d' | '60d' | '90d' | 'all';
 
 type UiMessage = {
   id: string;
@@ -26,6 +26,7 @@ type UiMessage = {
 const RANGE_OPTIONS: Array<{ value: RangeCode; label: string }> = [
   { value: '7d', label: '7天' },
   { value: '30d', label: '30天' },
+  { value: '60d', label: '60天' },
   { value: '90d', label: '90天' },
   { value: 'all', label: '全部' },
 ];

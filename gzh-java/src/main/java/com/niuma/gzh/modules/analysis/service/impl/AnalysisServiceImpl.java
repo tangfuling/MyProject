@@ -577,7 +577,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     }
 
     private String normalizeRange(String range) {
-        if ("7d".equals(range) || "30d".equals(range) || "90d".equals(range) || "all".equals(range)) {
+        if ("7d".equals(range) || "30d".equals(range) || "60d".equals(range) || "90d".equals(range) || "all".equals(range)) {
             return range;
         }
         return "30d";

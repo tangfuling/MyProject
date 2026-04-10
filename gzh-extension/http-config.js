@@ -14,6 +14,7 @@
     fetch_detail: '同步中',
     upload: '同步中',
     done: '同步完成',
+    canceled: '已取消',
     login_expired: '登录过期',
     partial_failed: '部分失败',
     error: '失败',

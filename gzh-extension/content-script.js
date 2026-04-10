@@ -1,6 +1,7 @@
 (() => {
   const STATE = {
     syncing: false,
+    cancelRequested: false,
   };
 
   const PANEL_ID = 'gzh-sync-panel';
@@ -37,6 +38,7 @@
   const MAX_SYNC_ISSUES_PER_UPLOAD = 40;
   const DEFAULT_SYNC_RANGE_CODE = '30d';
   const SYNC_RANGE_OPTIONS = [
+    { code: '7d', label: '最近7天', days: 7 },
     { code: '30d', label: '最近30天', days: 30 },
     { code: '60d', label: '最近60天', days: 60 },
     { code: '90d', label: '最近90天', days: 90 },
@@ -199,7 +201,7 @@
     if (stage === 'done') {
       return 'done';
     }
-    if (stage === 'partial_failed') {
+    if (stage === 'canceled' || stage === 'partial_failed') {
       return 'warn';
     }
     if (stage === 'login_expired' || stage === 'error' || stage === 'need_login_web') {
@@ -237,6 +239,7 @@
     }
     if (state && (
       state.stage === 'done'
+      || state.stage === 'canceled'
       || state.stage === 'partial_failed'
       || state.stage === 'login_expired'
       || state.stage === 'error'
@@ -275,7 +278,9 @@
 
   function syncRangeOptionByCode(rawCode) {
     const code = normalizeSyncRangeCode(rawCode);
-    return SYNC_RANGE_OPTIONS.find((item) => item.code === code) || SYNC_RANGE_OPTIONS[0];
+    return SYNC_RANGE_OPTIONS.find((item) => item.code === code)
+      || SYNC_RANGE_OPTIONS.find((item) => item.code === DEFAULT_SYNC_RANGE_CODE)
+      || SYNC_RANGE_OPTIONS[0];
   }
 
   function syncRangeDaysByCode(rawCode) {
@@ -397,6 +402,10 @@
         color: #334155;
         font-size: 12px;
         line-height: 1.6;
+      }
+      .gzh-sync-message.error {
+        color: #b91c1c;
+        font-weight: 700;
       }
       .gzh-sync-progress-wrap {
         margin-top: 8px;
@@ -580,7 +589,7 @@
     }
     if (STATE.syncing) {
       launcher.setAttribute('data-running', 'true');
-      launcher.setAttribute('title', '同步中，点击查看进度');
+      launcher.setAttribute('title', STATE.cancelRequested ? '正在取消同步，请稍候' : '同步中，点击查看进度');
     } else {
       launcher.setAttribute('data-running', 'false');
       launcher.setAttribute('title', '同步到运营助手');
@@ -610,7 +619,12 @@
 
     const progress = Number(state.progress || 0);
     progressTextEl.textContent = `${progress}%`;
-    messageEl.textContent = state.message || '等待同步';
+    const isFailureStage = state.stage === 'error' || state.stage === 'partial_failed';
+    const reason = String(state.message || '').trim();
+    messageEl.textContent = isFailureStage
+      ? `失败原因：${reason || '同步失败，请稍后重试'}`
+      : (state.message || '等待同步');
+    messageEl.className = isFailureStage ? 'gzh-sync-message error' : 'gzh-sync-message';
     barEl.style.width = `${progress}%`;
 
     if (state.total) {
@@ -633,6 +647,8 @@
 
     if (state.stage === 'done') {
       summaryEl.textContent = `新增 ${state.newArticles || 0}，更新 ${state.updatedArticles || 0}`;
+    } else if (state.stage === 'canceled') {
+      summaryEl.textContent = '已取消本次同步，可修改范围后重新发起';
     } else if (state.stage === 'partial_failed') {
       const failCount = (state.failedMetrics || 0) + (state.failedContent || 0) + (state.failedUpload || 0);
       summaryEl.textContent = `已完成上传，失败 ${failCount}（指标 ${state.failedMetrics || 0} / 全文 ${state.failedContent || 0} / 上传 ${state.failedUpload || 0}）`;
@@ -659,11 +675,16 @@
       secondaryAction = 'open_web';
       secondaryText = '打开运营助手';
     } else if (RUNNING_STAGES.has(state.stage)) {
-      primaryAction = 'running';
-      primaryText = '同步中...';
-      primaryDisabled = true;
+      primaryAction = 'cancel';
+      primaryText = STATE.cancelRequested ? '取消中...' : '取消同步';
+      primaryDisabled = STATE.cancelRequested;
       secondaryAction = 'close';
       secondaryText = '收起';
+    } else if (state.stage === 'canceled') {
+      primaryAction = 'start';
+      primaryText = '重新同步';
+      secondaryAction = 'open_workspace';
+      secondaryText = '前往运营助手查看';
     } else if (state.stage === 'done' || state.stage === 'partial_failed') {
       primaryAction = 'open_workspace';
       primaryText = '前往运营助手查看 →';
@@ -697,6 +718,13 @@
     if (action === 'start') {
       openPanel();
       void startSync();
+      return;
+    }
+    if (action === 'cancel') {
+      if (!window.confirm('确认取消本次同步？')) {
+        return;
+      }
+      requestSyncCancel('panel_action');
       return;
     }
     if (action === 'open_web') {
@@ -1063,6 +1091,43 @@
       Object.assign(error, extra);
     }
     return error;
+  }
+
+  function createSyncCanceledError(message = '已取消同步') {
+    const error = new Error(message);
+    error.isUserCanceled = true;
+    return error;
+  }
+
+  function throwIfSyncCanceled() {
+    if (STATE.cancelRequested) {
+      throw createSyncCanceledError();
+    }
+  }
+
+  function requestSyncCancel(source = 'unknown') {
+    if (!STATE.syncing) {
+      return false;
+    }
+    if (STATE.cancelRequested) {
+      return true;
+    }
+    STATE.cancelRequested = true;
+    updateLauncherState();
+
+    const stage = RUNNING_STAGES.has(panelState?.stage) ? panelState.stage : 'fetch_detail';
+    notifyState({
+      stage,
+      message: '正在取消同步，请稍候...',
+      progress: Number(panelState?.progress || 0),
+      total: Number(panelState?.total || 0),
+      synced: Number(panelState?.synced || 0),
+      failedMetrics: Number(panelState?.failedMetrics || 0),
+      failedContent: Number(panelState?.failedContent || 0),
+      failedUpload: Number(panelState?.failedUpload || 0),
+    });
+    safeLog('info', 'sync cancel requested', { source });
+    return true;
   }
 
   function compactMpFreqHits(nowMs) {
@@ -1788,6 +1853,7 @@
       return;
     }
     STATE.syncing = true;
+    STATE.cancelRequested = false;
     updateLauncherState();
     let apiBase = API_BASE_URL;
     let authToken = '';
@@ -1818,6 +1884,7 @@
       }
     };
     try {
+      throwIfSyncCanceled();
       const token = parseTokenFromUrl();
       if (!token) {
         notifyState({
@@ -1845,12 +1912,14 @@
       }
 
       beginSyncIssueSession();
+      throwIfSyncCanceled();
 
       const syncRangeCode = normalizeSyncRangeCode(selectedSyncRangeCode);
       const syncRangeDays = syncRangeDaysByCode(syncRangeCode);
       const syncRangeLabel = syncRangeLabelByCode(syncRangeCode);
       notifyState({ stage: 'fetch_list', message: `正在读取文章列表（${syncRangeLabel}）...`, progress: 5 });
       const articles = await fetchAllArticles(token, { syncRangeDays });
+      throwIfSyncCanceled();
       syncAccountName = resolveSyncAccountName(latestDetectedMpAccountName);
 
       if (articles.length === 0) {
@@ -1924,6 +1993,7 @@
       };
 
       const flushPendingUploads = async (index, total) => {
+        throwIfSyncCanceled();
         const issueBatch = takeSyncIssueBatch(MAX_SYNC_ISSUES_PER_UPLOAD);
         if (pendingSyncItems.length === 0 && issueBatch.length === 0) {
           return true;
@@ -1938,6 +2008,7 @@
         });
 
         try {
+          throwIfSyncCanceled();
           const uploadResult = await uploadSyncChunk(
             apiBase,
             authToken,
@@ -1974,6 +2045,9 @@
           }
         } catch (error) {
           pushSyncIssueBatchBack(issueBatch);
+          if (error?.isUserCanceled) {
+            throw error;
+          }
           const uploadReason = error?.message || String(error);
           if (!firstUploadError) {
             firstUploadError = uploadReason;
@@ -2090,6 +2164,7 @@
       };
 
       for (let index = 0; index < articles.length; index += 1) {
+        throwIfSyncCanceled();
         const article = articles[index];
         const isNew = !mergedIds[article.wxArticleId];
         if (isNew) {
@@ -2122,6 +2197,7 @@
           if (waitMs > 0) {
             await sleep(waitMs + Math.floor(Math.random() * 200));
           }
+          throwIfSyncCanceled();
           lastMetricsRequestedAt = Date.now();
           let metricsError = await fetchArticleMetrics(token, article)
             .then((result) => {
@@ -2135,6 +2211,7 @@
               Math.max(metricsRequestIntervalMs + 1500, METRICS_BASE_INTERVAL_MS + 800)
             );
             await sleep(METRICS_FREQ_RETRY_MIN_MS + Math.floor(Math.random() * METRICS_FREQ_RETRY_JITTER_MS));
+            throwIfSyncCanceled();
             lastMetricsRequestedAt = Date.now();
             metricsError = await fetchArticleMetrics(token, article)
               .then((result) => {
@@ -2176,6 +2253,7 @@
         let content = null;
         let wordCount = null;
         if (isNew && contentPromise) {
+          throwIfSyncCanceled();
           const contentResult = await contentPromise;
           contentPromiseByArticleId.delete(String(article.wxArticleId || article.contentUrl || ''));
           if (!contentResult.ok) {
@@ -2232,6 +2310,7 @@
 
       let issueFlushGuard = 0;
       while (syncIssueState.queue.length > 0 && issueFlushGuard < 8) {
+        throwIfSyncCanceled();
         issueFlushGuard += 1;
         const continueSync = await flushPendingUploads(processedArticles, articles.length);
         if (!continueSync) {
@@ -2301,6 +2380,19 @@
         uploadedSnapshotsWithMetrics,
       });
     } catch (error) {
+      if (error?.isUserCanceled) {
+        notifyState({
+          stage: 'canceled',
+          message: '同步已取消',
+          progress: Number(panelState?.progress || 0),
+          total: Number(panelState?.total || 0),
+          synced: Number(panelState?.synced || 0),
+          failedMetrics: Number(panelState?.failedMetrics || 0),
+          failedContent: Number(panelState?.failedContent || 0),
+          failedUpload: Number(panelState?.failedUpload || 0),
+        });
+        return;
+      }
       if (error?.isFreqLimited) {
         reportSyncIssue('mp_freq_limit', 'sync_run', {
           message: error.message || '频控触发',
@@ -2323,6 +2415,8 @@
     } finally {
       clearSyncIssueSession();
       STATE.syncing = false;
+      STATE.cancelRequested = false;
+      renderPanel(panelState);
       updateLauncherState();
     }
   }
@@ -2334,6 +2428,7 @@
     const pageSize = 10;
 
     while (begin < 1000) {
+      throwIfSyncCanceled();
       const url = `/cgi-bin/appmsgpublish?sub=list&begin=${begin}&count=${pageSize}&token=${encodeURIComponent(token)}&lang=zh_CN&f=json&ajax=1`;
       const { response, text } = await guardedMpFetchText(
         url,
@@ -2346,6 +2441,7 @@
         },
         { source: 'publish-list' }
       );
+      throwIfSyncCanceled();
       let json = parseMaybeJson(text);
       if (!json || typeof json !== 'object') {
         const htmlPublishPage = parsePublishPageFromHtml(text);
@@ -4961,6 +5057,15 @@
         openPanel();
         void startSync();
         sendResponse({ ok: true });
+        return true;
+      }
+      if (message?.type === 'cancel-sync') {
+        const accepted = requestSyncCancel('runtime_message');
+        if (!accepted) {
+          sendResponse({ ok: false, error: 'not-syncing' });
+          return true;
+        }
+        sendResponse({ ok: true, canceling: true });
         return true;
       }
       return undefined;

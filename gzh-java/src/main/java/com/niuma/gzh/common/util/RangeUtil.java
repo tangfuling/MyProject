@@ -12,6 +12,7 @@ public final class RangeUtil {
         return switch (range) {
             case "7d" -> 7;
             case "30d" -> 30;
+            case "60d" -> 60;
             case "90d" -> 90;
             case "all" -> 36500;
             default -> throw new BizException(ErrorCode.INVALID_PARAM.getCode(), "不支持的时间范围");

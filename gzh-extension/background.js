@@ -7,8 +7,10 @@ if (!HTTP_CONFIG) {
 }
 const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
 const ALLOWED_PROXY_PREFIX = `${API_BASE_URL}/`;
+const RUNNING_STAGES = new Set(HTTP_CONFIG.runningStages || []);
 const LOG_PREFIX = HTTP_CONFIG.logPrefix;
 const ENABLE_PLUGIN_LOG = HTTP_CONFIG.enablePluginLog === true;
+let currentSyncTabId = null;
 
 function bgLog(level, message, payload) {
   if (!ENABLE_PLUGIN_LOG) {
@@ -74,6 +76,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
       if (!tab?.id) {
+        currentSyncTabId = null;
         const state = { stage: 'error', message: '未找到当前页面，请重试', progress: 0, synced: 0, total: 0 };
         setState(state);
         safeBroadcast({ type: 'sync-state-broadcast', payload: state });
@@ -81,6 +84,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       if (!tab.url || !tab.url.includes('https://mp.weixin.qq.com')) {
+        currentSyncTabId = null;
         const state = {
           stage: 'login_expired',
           message: '请先打开并登录微信公众号后台页面后再同步',
@@ -93,8 +97,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         safeRespond(sendResponse, { ok: false, error: 'not-mp-page' });
         return;
       }
+      currentSyncTabId = tab.id;
       chrome.tabs.sendMessage(tab.id, { type: 'start-sync' }, (response) => {
         if (chrome.runtime.lastError) {
+          currentSyncTabId = null;
           const state = {
             stage: 'login_expired',
             message: '微信后台登录已过期，请刷新页面后重试',
@@ -113,7 +119,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'cancel-sync') {
+    const sendCancel = (tabId) => {
+      if (!tabId) {
+        safeRespond(sendResponse, { ok: false, error: 'not-syncing' });
+        return;
+      }
+      chrome.tabs.sendMessage(tabId, { type: 'cancel-sync' }, (response) => {
+        if (chrome.runtime.lastError) {
+          const reason = String(chrome.runtime.lastError.message || '');
+          if (/receiving end does not exist|no tab with id/i.test(reason)) {
+            currentSyncTabId = null;
+            safeRespond(sendResponse, { ok: false, error: 'not-syncing' });
+            return;
+          }
+          safeRespond(sendResponse, { ok: false, error: reason });
+          return;
+        }
+        if (!response?.ok) {
+          safeRespond(sendResponse, { ok: false, error: response?.error || 'cancel-rejected' });
+          return;
+        }
+        safeRespond(sendResponse, { ok: true });
+      });
+    };
+
+    if (currentSyncTabId) {
+      sendCancel(currentSyncTabId);
+      return true;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      sendCancel(tab?.id || null);
+    });
+    return true;
+  }
+
   if (message?.type === 'sync-state') {
+    const stage = message.payload?.stage;
+    const senderTabId = sender?.tab?.id;
+    if (senderTabId && RUNNING_STAGES.has(stage)) {
+      currentSyncTabId = senderTabId;
+    } else if (senderTabId && currentSyncTabId === senderTabId && !RUNNING_STAGES.has(stage)) {
+      currentSyncTabId = null;
+    }
     setState(message.payload);
     safeBroadcast({ type: 'sync-state-broadcast', payload: message.payload });
     if (message.payload?.stage === 'done' || message.payload?.stage === 'partial_failed') {

@@ -265,10 +265,10 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     }
 
     private String normalizeRange(String range) {
-        if ("7d".equals(range) || "30d".equals(range) || "90d".equals(range) || "all".equals(range)) {
+        if ("7d".equals(range) || "30d".equals(range) || "60d".equals(range) || "90d".equals(range) || "all".equals(range)) {
             return range;
         }
-        return "all";
+        return "30d";
     }
 
     private int nullToZero(Integer value) {

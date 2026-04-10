@@ -6,7 +6,7 @@ import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import type { WorkspaceArticleCard } from '../../workspace/model/WorkspaceModels';
 import './GzhPages.css';
 
-type RangeCode = '7d' | '30d' | '90d' | 'all';
+type RangeCode = '7d' | '30d' | '60d' | '90d' | 'all';
 type SortKey = 'publish' | 'read' | 'finish' | 'recommend' | 'share';
 type ViewMode = 'all' | 'top5' | 'low3';
 
@@ -48,12 +48,13 @@ const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
 const RANGE_LABEL_MAP: Record<RangeCode, string> = {
   '7d': '7\u5929',
   '30d': '30\u5929',
+  '60d': '60\u5929',
   '90d': '90\u5929',
   all: '\u5168\u90e8',
 };
 
 function parseRangeCode(raw: string | null): RangeCode {
-  if (raw === '7d' || raw === '30d' || raw === '90d' || raw === 'all') return raw;
+  if (raw === '7d' || raw === '30d' || raw === '60d' || raw === '90d' || raw === 'all') return raw;
   return '30d';
 }
 

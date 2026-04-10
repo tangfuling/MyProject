@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 public class ArticleListQuery {
-    @Pattern(regexp = "^(7d|30d|90d|all)$", message = "range 仅支持 7d/30d/90d/all")
+    @Pattern(regexp = "^(7d|30d|60d|90d|all)$", message = "range 仅支持 7d/30d/60d/90d/all")
     private String range = "30d";
 
     private Long page = 1L;

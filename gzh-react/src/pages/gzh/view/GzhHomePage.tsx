@@ -37,6 +37,7 @@ const FALLBACK_PREVIEW: HomePreviewMetrics = {
 const RANGE_LABEL_MAP: Record<string, string> = {
   '7d': '近7天',
   '30d': '近30天',
+  '60d': '近60天',
   '90d': '近90天',
   all: '全部',
 };

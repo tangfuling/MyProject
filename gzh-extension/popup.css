@@ -139,6 +139,17 @@ body {
   line-height: 1.65;
 }
 
+.state-error-reason {
+  margin-top: 8px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 7px 8px;
+}
+
 .state-chip-row {
   margin-top: 8px;
   display: flex;
@@ -299,6 +310,11 @@ body {
   margin-top: 7px;
   color: var(--ink-soft);
   font-size: 12px;
+}
+
+.status-text-error {
+  color: #b91c1c;
+  font-weight: 700;
 }
 
 .count-text,

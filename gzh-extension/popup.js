@@ -24,6 +24,7 @@ const RUNNING_STAGES = new Set(HTTP_CONFIG.runningStages);
 const DEFAULT_WEB_BASE = HTTP_CONFIG.getDefaultWebBase();
 const DEFAULT_SYNC_RANGE_CODE = '30d';
 const SYNC_RANGE_OPTIONS = [
+  { code: '7d', label: '最近7天' },
   { code: '30d', label: '最近30天' },
   { code: '60d', label: '最近60天' },
   { code: '90d', label: '最近90天' },
@@ -43,7 +44,11 @@ function normalizeSyncRangeCode(rawCode) {
 
 function syncRangeLabelByCode(rawCode) {
   const code = normalizeSyncRangeCode(rawCode);
-  return (SYNC_RANGE_OPTIONS.find((item) => item.code === code) || SYNC_RANGE_OPTIONS[0]).label;
+  return (
+    SYNC_RANGE_OPTIONS.find((item) => item.code === code)
+    || SYNC_RANGE_OPTIONS.find((item) => item.code === DEFAULT_SYNC_RANGE_CODE)
+    || SYNC_RANGE_OPTIONS[0]
+  ).label;
 }
 
 function normalizeWebBase(raw) {
@@ -66,9 +71,26 @@ function formatTime(iso) {
   return `${month}-${date} ${hour}:${minute}`;
 }
 
+function escapeHtml(raw) {
+  return String(raw || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function errorReasonHtml(message) {
+  const text = String(message || '').trim();
+  if (!text) {
+    return '';
+  }
+  return `<div class="state-error-reason">失败原因：${escapeHtml(text)}</div>`;
+}
+
 function withDefaultState(state) {
   if (state && RUNNING_STAGES.has(state.stage)) return state;
-  if (state && (state.stage === 'done' || state.stage === 'partial_failed' || state.stage === 'login_expired' || state.stage === 'error')) {
+  if (state && (state.stage === 'done' || state.stage === 'canceled' || state.stage === 'partial_failed' || state.stage === 'login_expired' || state.stage === 'error')) {
     return state;
   }
   if (!latestAuthToken) {
@@ -97,6 +119,10 @@ function setBadge(stage) {
 
   if (stage === 'done') {
     stateLabel.classList.add('badge-connected');
+    return;
+  }
+  if (stage === 'canceled') {
+    stateLabel.classList.add('badge-warning');
     return;
   }
   if (stage === 'partial_failed' || stage === 'error' || stage === 'need_login_web' || stage === 'login_expired') {
@@ -185,6 +211,15 @@ function renderStateView(state) {
     return;
   }
 
+  if (state.stage === 'canceled') {
+    stateView.innerHTML = `
+      <div class="state-icon-wrap"><div class="state-icon state-icon-warn">${iconWarn()}</div></div>
+      <div class="state-title">同步已取消</div>
+      <div class="state-desc">本次同步已由你手动取消，可调整同步范围后重新发起。</div>
+    `;
+    return;
+  }
+
   if (state.stage === 'login_expired') {
     stateView.innerHTML = `
       <div class="state-icon-wrap"><div class="state-icon state-icon-warn">${iconWarn()}</div></div>
@@ -200,6 +235,7 @@ function renderStateView(state) {
       <div class="state-icon-wrap"><div class="state-icon state-icon-warn">${iconWarn()}</div></div>
       <div class="state-title">同步部分完成</div>
       <div class="state-desc">成功 ${state.synced || 0}，失败 ${failCount}，可重试失败项。</div>
+      ${errorReasonHtml(state.message)}
       <div class="state-chip-row">
         <span class="state-chip">指标失败 ${state.failedMetrics || 0}</span>
         <span class="state-chip">全文失败 ${state.failedContent || 0}</span>
@@ -209,10 +245,12 @@ function renderStateView(state) {
     return;
   }
 
+  const reason = String(state.message || '').trim() || '同步失败，请重试。';
   stateView.innerHTML = `
     <div class="state-icon-wrap"><div class="state-icon state-icon-danger">${iconDanger()}</div></div>
     <div class="state-title">同步失败</div>
-    <div class="state-desc">${state.message || '同步失败，请重试。'}</div>
+    <div class="state-desc">本次同步未完成，请根据失败原因排查后重试。</div>
+    ${errorReasonHtml(reason)}
   `;
 }
 
@@ -240,6 +278,10 @@ function renderSummary(state) {
     summaryText.textContent = `已完成上传，失败 ${failCount}`;
     return;
   }
+  if (state.stage === 'canceled') {
+    summaryText.textContent = '已取消本次同步';
+    return;
+  }
   if (state.stage === 'ready' && latestLastSync) {
     summaryText.textContent = `上次同步 ${formatTime(latestLastSync.updatedAt)} · ${latestLastSync.total || 0} 篇`;
     return;
@@ -260,10 +302,16 @@ function renderButtons(state) {
     secondaryAction = 'open-web';
     secondaryText = '打开运营助手';
   } else if (RUNNING_STAGES.has(state.stage)) {
-    primaryAction = 'running';
-    primaryText = '同步中...';
-    disabled = true;
+    const canceling = typeof state.message === 'string' && state.message.includes('正在取消');
+    primaryAction = 'cancel';
+    primaryText = canceling ? '取消中...' : '取消同步';
+    disabled = canceling;
     secondaryAction = 'open-web';
+    secondaryText = '查看工作台';
+  } else if (state.stage === 'canceled') {
+    primaryAction = 'start';
+    primaryText = '重新同步';
+    secondaryAction = 'open-workspace';
     secondaryText = '查看工作台';
   } else if (state.stage === 'done') {
     primaryAction = 'open-workspace';
@@ -308,7 +356,12 @@ function renderState(rawState) {
   const progress = Number(state.progress || 0);
   progressText.textContent = `${progress}%`;
   progressFill.style.width = `${progress}%`;
-  statusText.textContent = state.message || '等待同步';
+  const isFailureStage = state.stage === 'error' || state.stage === 'partial_failed';
+  const reason = String(state.message || '').trim();
+  statusText.classList.toggle('status-text-error', isFailureStage);
+  statusText.textContent = isFailureStage
+    ? `失败原因：${reason || '同步失败，请稍后重试'}`
+    : (state.message || '等待同步');
   countText.textContent = state.total ? `已处理 ${state.synced || 0}/${state.total}` : '';
   progressTitle.textContent = RUNNING_STAGES.has(state.stage) ? '同步进度' : '状态';
 
@@ -336,6 +389,38 @@ function triggerSync() {
   });
 }
 
+function triggerCancelSync() {
+  chrome.runtime.sendMessage({ type: 'cancel-sync' }, (result) => {
+    const runtimeErr = chrome.runtime?.lastError;
+    if (runtimeErr) {
+      renderState({
+        stage: 'error',
+        message: `取消失败: ${runtimeErr.message || '扩展通信异常'}`,
+        progress: Number(currentState?.progress || 0),
+        total: Number(currentState?.total || 0),
+        synced: Number(currentState?.synced || 0),
+      });
+      return;
+    }
+    if (result?.ok) {
+      return;
+    }
+    if (result?.error === 'not-syncing') {
+      chrome.runtime.sendMessage({ type: 'get-state' }, (state) => {
+        renderState(state);
+      });
+      return;
+    }
+    renderState({
+      stage: 'error',
+      message: `取消失败: ${result?.error || '未知错误'}`,
+      progress: Number(currentState?.progress || 0),
+      total: Number(currentState?.total || 0),
+      synced: Number(currentState?.synced || 0),
+    });
+  });
+}
+
 function refreshMpTab() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs[0];
@@ -350,6 +435,13 @@ function refreshMpTab() {
 function handleAction(action) {
   if (action === 'start') {
     triggerSync();
+    return;
+  }
+  if (action === 'cancel') {
+    if (!window.confirm('确认取消本次同步？')) {
+      return;
+    }
+    triggerCancelSync();
     return;
   }
   if (action === 'open-login') {
