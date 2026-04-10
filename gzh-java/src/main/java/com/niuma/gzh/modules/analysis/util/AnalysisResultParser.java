@@ -99,7 +99,7 @@ public final class AnalysisResultParser {
 
         findings = uniqueLimited(findings, 5);
         actions = uniqueLimited(actions, 5);
-        questions = uniqueLimited(questions, 10);
+        questions = uniqueLimited(questions, 6);
 
         return new Parsed(signalOverview, stage, findings, actions, rhythm, riskHint, questions);
     }

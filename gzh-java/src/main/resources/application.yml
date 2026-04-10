@@ -70,12 +70,34 @@ app:
       endpoint: ${CLAUDE_ENDPOINT:https://api.anthropic.com/v1/messages}
       api-key: ${CLAUDE_API_KEY:}
       model: ${CLAUDE_MODEL:claude-3-5-sonnet-latest}
+    pricing:
+      charge-multiplier: ${AI_PRICING_MULTIPLIER:5}
+      models:
+        qwen_3_5:
+          tiers:
+            - max-input-tokens: 131072
+              input-per-million-cent: 20
+              output-per-million-cent: 200
+            - max-input-tokens: 262144
+              input-per-million-cent: 80
+              output-per-million-cent: 800
+            - max-input-tokens: 1000000
+              input-per-million-cent: 120
+              output-per-million-cent: 1200
+        qwen_3_6:
+          tiers:
+            - max-input-tokens: 262144
+              input-per-million-cent: 200
+              output-per-million-cent: 1200
+            - max-input-tokens: 1000000
+              input-per-million-cent: 800
+              output-per-million-cent: 4800
   payment:
     alipay:
       gateway-url: ${ALIPAY_GATEWAY_URL:https://openapi.alipay.com/gateway.do}
-      app-id: ${ALIPAY_APP_ID:}
-      private-key: ${ALIPAY_PRIVATE_KEY:}
-      alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+      app-id: ${ALIPAY_APP_ID:2021003154665146}
+      private-key: ${ALIPAY_PRIVATE_KEY:MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCJqVWbZyNubxIuhk1fTYgOIyX7WtbYpcxWYMBjWdbnF2XYU9S26CDACY79KXfDZCgJ52zlVYSiv7vzaoK4h8ddEaIwLTKSogkzI9+nOp79vkajpyO7sHozg3Nsf5mvTvaIu4mW4UmvOH+NnByjzYitmG/GR21SRek/lBlCS/nYNpgeaaYCr29LCtojfgXycqnbGxfiPB7e45POM0ixh/aX4YmrZoEqwTGNpfRcbxvYYaWCqwRDzkyzw43UwT6x9jI7z0vJpzKtGxzxV3qrU0ETPIenE3YxOJLKPdXoJcGwbA0yXh5qctoCAyTG8hRKq5BbhxYq4/+CBpaYH2t9kbAlAgMBAAECggEAL6ZyoHkh9Y7yzzHjxFJU/vfBpPC7n4A8a8XPslQdpB4gPbI+1hUhiPeGDDF3aCXaChuWQQfKAn+1sjszBmbRZnC9IEn00HbQEmifeQY8lH5xeyJWpxgeJIiiwnKkot8FTS0FIjnXRJSc6kqYS0bQwa4bOpnsyGa0pzI/UAh2chVmz/Z75HKczCr2h3ziqAxdO0EBvKmCNvzC533uMksxYCUZ6T6sOAgWkGiE1yEVonsxHTGpoks4Wa93rkx1IdYHulx7z4g6dPfwQqu+rUQfhGsRbhY6kohBS8Z/FAINTVKsAMdBh2FxBdHU/HamUBWvRUOtb9oWSKPUQdQqTB/ZQQKBgQDn62QnE2vsIGvjHNVvuWk1xmFqxcQ0KjvwDbliUNKMjj/2IHP9TaPa/r+ID32qlGEzEto//sss4OH6wvcfXTO5ndfA5VHnEE63VJB6FSJlrnEnLxi3MRxTyGYIkh/EVuZqTbX0hll3TqebcCN/XrA0fqkCnaVJ4JAc2/XiwjfXUQKBgQCX9HztMJNW8W5rmyz1RurPwNR6aVbJFQSEL1SbRgySaVhWDAS5TS6wDcme9n1bPgLpZhchapfGMw3L1evNn9wDlljiitH42J2eOOqaPjQ70V88BxaZ7pNOAS30D3faCOQcTaZGjDZFRDO5qHghQ9MC0EBfO/QJAd6DVMOvhr/+lQKBgQDiIx16GK7wBEEOqAvaL+FNxQ0yTnpdHx1omgk8u3BCC2aEuOpAgJcYL7RUmD5BuQL6CRT0t54nOXQ/ziGm3HtWL3m0Jibxdm46xuNFlxv+J9U/juW7otBrRYlwLAN7r/xmhTW5o9LSycgWgYaraInJ9gMYgN0tpyD+cuBUZmqKsQKBgEn2u4hIiK9dPT4rfiq1pj4RwlsDQzcFf/lHgItEAYKSvGjF2NbJdtxDGczCdiofeRNamg+t7sqOtzxsmCaylUk5uXIr2CCkb7RASBFkDdDADPcPDDVJJ3JkqJWPoesDQOV19mWIgjIdDIBmPHMUrHVGIM86Q4LO4hxS+h1KHdIxAoGBAJr0oUmYrPatQXlU83rPTX29fS3ctiHXENOu+I1Apv6xO3EFPg+rSmiE/ALxPKev/ZvGKN8mmnqn+DO6jIV1ZzCPJFgadIxKZ2T0ZJ0kZZ8VY0sXm9iFy5iryqrBPmBmWbIdpYifxiL4/smXSM7PD842uJWNLKDO28dMwGZvR1QN}
+      alipay-public-key: ${ALIPAY_PUBLIC_KEY:MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnQUIGpxrUKdS6LZWpRLU8g0Z07Vz6yZV4TL2JGvD/9T2v/GKQEpWFNvCL8rNVts8uXIjHOprIYB/nD5NWUXr7ScqLQHzYHS5OKIW1JynriZZDRYrEWrANEVFL9+dUD3zRPDAnkOHBBNHUvWvMa8T58sh78pVbFjmkaAOiJO5yZHfvhZS32s4DRFmmENMf64N5IcP6T7NeVtTNa0w0HJyQPrkJAgpK8KOvMdGSDyALSKa+LRQfFeJw1a48Y3eulRqgskJGPjBup/4iyXoe0Tjoc3s62QM1KBFhAJAlgSx//eO3q8wTW9cv2Ima1qEZunmwqlVhhezXLQyhD3ORcVoiwIDAQAB}
       notify-url: ${ALIPAY_NOTIFY_URL:https://api-gzh.niuma.com/payment/notify}
       return-url: ${ALIPAY_RETURN_URL:https://gzh.niuma.com/settings}
   upload:

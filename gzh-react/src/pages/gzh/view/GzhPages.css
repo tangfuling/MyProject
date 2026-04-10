@@ -1189,7 +1189,7 @@
 .gzh-v2-workspace .ai-sub {
   font-size: 12px;
   color: var(--ink-soft);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   line-height: 1.65;
   white-space: pre-wrap;
 }
@@ -1378,11 +1378,123 @@
   white-space: pre-wrap;
 }
 
+.gzh-v2-workspace .bubble-markdown,
+.gzh-v2-workspace .md-content {
+  white-space: normal;
+  line-height: 1.6;
+}
+
 .gzh-v2-workspace .bubble-meta {
   font-size: 10px;
   color: var(--ink-light);
   margin-top: 4px;
   text-align: right;
+}
+
+.gzh-v2-workspace .md-content > :first-child,
+.gzh-v2-workspace .bubble-markdown > :first-child {
+  margin-top: 0;
+}
+
+.gzh-v2-workspace .md-content > :last-child,
+.gzh-v2-workspace .bubble-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.gzh-v2-workspace .md-content p,
+.gzh-v2-workspace .bubble-markdown p {
+  margin: 0 0 4px;
+}
+
+.gzh-v2-workspace .md-content ul,
+.gzh-v2-workspace .md-content ol,
+.gzh-v2-workspace .bubble-markdown ul,
+.gzh-v2-workspace .bubble-markdown ol {
+  margin: 0 0 4px;
+  padding-left: 20px;
+}
+
+.gzh-v2-workspace .md-content li,
+.gzh-v2-workspace .bubble-markdown li {
+  margin: 1px 0;
+  line-height: 1.6;
+}
+
+.gzh-v2-workspace .md-content li > p,
+.gzh-v2-workspace .bubble-markdown li > p {
+  margin: 0;
+}
+
+.gzh-v2-workspace .md-content h1,
+.gzh-v2-workspace .md-content h2,
+.gzh-v2-workspace .md-content h3,
+.gzh-v2-workspace .bubble-markdown h1,
+.gzh-v2-workspace .bubble-markdown h2,
+.gzh-v2-workspace .bubble-markdown h3 {
+  margin: 6px 0 3px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.gzh-v2-workspace .md-content h1 + p,
+.gzh-v2-workspace .md-content h2 + p,
+.gzh-v2-workspace .md-content h3 + p,
+.gzh-v2-workspace .md-content h1 + ul,
+.gzh-v2-workspace .md-content h2 + ul,
+.gzh-v2-workspace .md-content h3 + ul,
+.gzh-v2-workspace .md-content h1 + ol,
+.gzh-v2-workspace .md-content h2 + ol,
+.gzh-v2-workspace .md-content h3 + ol,
+.gzh-v2-workspace .bubble-markdown h1 + p,
+.gzh-v2-workspace .bubble-markdown h2 + p,
+.gzh-v2-workspace .bubble-markdown h3 + p,
+.gzh-v2-workspace .bubble-markdown h1 + ul,
+.gzh-v2-workspace .bubble-markdown h2 + ul,
+.gzh-v2-workspace .bubble-markdown h3 + ul,
+.gzh-v2-workspace .bubble-markdown h1 + ol,
+.gzh-v2-workspace .bubble-markdown h2 + ol,
+.gzh-v2-workspace .bubble-markdown h3 + ol {
+  margin-top: 2px;
+}
+
+.gzh-v2-workspace .md-content code,
+.gzh-v2-workspace .bubble-markdown code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.gzh-v2-workspace .md-content pre,
+.gzh-v2-workspace .bubble-markdown pre {
+  margin: 0 0 10px;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.gzh-v2-workspace .md-content pre code,
+.gzh-v2-workspace .bubble-markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.gzh-v2-workspace .md-content blockquote,
+.gzh-v2-workspace .bubble-markdown blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid #cbd5e1;
+  color: #475569;
+}
+
+.gzh-v2-workspace .md-content a,
+.gzh-v2-workspace .bubble-markdown a {
+  color: #0369a1;
+  text-decoration: underline;
 }
 
 .gzh-v2-workspace .chat-input-bar {

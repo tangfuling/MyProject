@@ -1,5 +1,6 @@
 package com.niuma.gzh.modules.chat.service.impl;
 
+import com.niuma.gzh.common.ai.AiBillingCalculator;
 import com.niuma.gzh.common.ai.AiClient;
 import com.niuma.gzh.common.ai.AiClientFactory;
 import com.niuma.gzh.common.ai.AiGenerateRequest;
@@ -50,6 +51,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     private final ArticleService articleService;
     private final UserService userService;
     private final AiClientFactory aiClientFactory;
+    private final AiBillingCalculator aiBillingCalculator;
     private final TransactionTemplate transactionTemplate;
     private final JsonUtil jsonUtil;
 
@@ -58,6 +60,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                            ArticleService articleService,
                            UserService userService,
                            AiClientFactory aiClientFactory,
+                           AiBillingCalculator aiBillingCalculator,
                            TransactionTemplate transactionTemplate,
                            JsonUtil jsonUtil) {
         this.chatMessageRepository = chatMessageRepository;
@@ -65,6 +68,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         this.articleService = articleService;
         this.userService = userService;
         this.aiClientFactory = aiClientFactory;
+        this.aiBillingCalculator = aiBillingCalculator;
         this.transactionTemplate = transactionTemplate;
         this.jsonUtil = jsonUtil;
     }
@@ -107,6 +111,8 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                 buildToolDefinitions()
             ));
 
+            List<AiBillingCalculator.TokenUsage> tokenUsages = new ArrayList<>();
+            tokenUsages.add(new AiBillingCalculator.TokenUsage(firstResult.inputTokens(), firstResult.outputTokens()));
             int totalInputTokens = firstResult.inputTokens();
             int totalOutputTokens = firstResult.outputTokens();
             String finalContent = sanitizeAssistantOutput(firstResult.content());
@@ -130,6 +136,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                     secondHistory,
                     List.of()
                 ));
+                tokenUsages.add(new AiBillingCalculator.TokenUsage(secondResult.inputTokens(), secondResult.outputTokens()));
                 totalInputTokens += secondResult.inputTokens();
                 totalOutputTokens += secondResult.outputTokens();
                 finalContent = sanitizeAssistantOutput(secondResult.content());
@@ -137,7 +144,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
 
             streamText(emitter, finalContent);
 
-            int costCent = provider.calcCostCent(totalInputTokens, totalOutputTokens);
+            int costCent = aiBillingCalculator.calcTotalCostCent(provider, tokenUsages);
             String assistantContentForStore = finalContent;
             final int finalInputTokens = totalInputTokens;
             final int finalOutputTokens = totalOutputTokens;

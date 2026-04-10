@@ -254,7 +254,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
                 if (!text.isEmpty()) {
                     result.add(text);
                 }
-                if (result.size() >= 10) {
+                if (result.size() >= 6) {
                     break;
                 }
             }

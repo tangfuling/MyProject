@@ -1,6 +1,7 @@
 package com.niuma.gzh.modules.analysis.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.niuma.gzh.common.ai.AiBillingCalculator;
 import com.niuma.gzh.common.ai.AiClient;
 import com.niuma.gzh.common.ai.AiClientFactory;
 import com.niuma.gzh.common.ai.AiGenerateRequest;
@@ -43,6 +44,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     private final UserService userService;
     private final AnalysisReportRepository analysisReportRepository;
     private final AiClientFactory aiClientFactory;
+    private final AiBillingCalculator aiBillingCalculator;
     private final TransactionTemplate transactionTemplate;
     private final JsonUtil jsonUtil;
 
@@ -50,12 +52,14 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                                UserService userService,
                                AnalysisReportRepository analysisReportRepository,
                                AiClientFactory aiClientFactory,
+                               AiBillingCalculator aiBillingCalculator,
                                TransactionTemplate transactionTemplate,
                                JsonUtil jsonUtil) {
         this.articleService = articleService;
         this.userService = userService;
         this.analysisReportRepository = analysisReportRepository;
         this.aiClientFactory = aiClientFactory;
+        this.aiBillingCalculator = aiBillingCalculator;
         this.transactionTemplate = transactionTemplate;
         this.jsonUtil = jsonUtil;
     }
@@ -95,7 +99,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         int contentTokens = Math.max(totalWords, articleCount * 700);
         int estimatedInputTokens = Math.max(1200, promptOverheadTokens + structureOverheadTokens + contentTokens);
         int estimatedOutputTokens = Math.max(900, Math.min(4000, 900 + articleCount * 90));
-        int estimatedCostCent = provider.calcCostCent(estimatedInputTokens, estimatedOutputTokens);
+        int estimatedCostCent = aiBillingCalculator.calcCostCent(provider, estimatedInputTokens, estimatedOutputTokens);
 
         AnalysisEstimateVO vo = new AnalysisEstimateVO();
         vo.setRange(realRange);
@@ -144,7 +148,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             AiModelProvider provider = aiClientFactory.getProvider(user.getAiModel());
             sendStatusQuietly(emitter, "calling_model", "正在调用千问生成分析");
             AiGenerateResult aiResult = client.generate(new AiGenerateRequest(systemPrompt, userPrompt, List.of()));
-            String content = aiResult.content();
+            String content = normalizeMarkdownSpacing(aiResult.content());
 
             sendStatusQuietly(emitter, "streaming", "主分析完成，正在回传内容");
             streamText(emitter, content);
@@ -156,7 +160,10 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             List<String> suggestedQuestions = structured.suggestedQuestions();
             int totalInputTokens = aiResult.inputTokens() + structuredResult.extraInputTokens;
             int totalOutputTokens = aiResult.outputTokens() + structuredResult.extraOutputTokens;
-            int costCent = provider.calcCostCent(totalInputTokens, totalOutputTokens);
+            int costCent = aiBillingCalculator.calcTotalCostCent(provider, List.of(
+                new AiBillingCalculator.TokenUsage(aiResult.inputTokens(), aiResult.outputTokens()),
+                new AiBillingCalculator.TokenUsage(structuredResult.extraInputTokens, structuredResult.extraOutputTokens)
+            ));
             sendStatusQuietly(emitter, "persisting", "正在保存分析结果");
             AnalysisReportEntity saved = transactionTemplate.execute(status -> persistReportAndCharge(
                 userId,
@@ -289,7 +296,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 if (!text.isEmpty()) {
                     result.add(text);
                 }
-                if (result.size() >= 10) {
+                if (result.size() >= 6) {
                     break;
                 }
             }
@@ -321,15 +328,19 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 .append(" 完读率=").append(article.getCompletionRate())
                 .append("\n");
         }
-        sb.append("\n请按固定结构输出：信号概览、你现在在什么阶段、核心发现、3条可执行建议、风险提示、节奏感、10条推荐问题。\n");
+        sb.append("\n请按固定结构输出：信号概览、你现在在什么阶段、核心发现、3条可执行建议、风险提示、节奏感、6条推荐问题。\n");
         sb.append("输出必须引用数据，不要泛泛而谈。\n");
+        sb.append("标题与其后的编号列表紧挨，不要插入多余空行。\n");
+        sb.append("列表统一使用 markdown 的 \"- \" 或 \"1.\"，不要使用 \"•\" 项目符号。\n");
         return sb.toString();
     }
 
     private String analysisSystemPrompt() {
         return "你是公众号数据运营助手。输出风格：事实导向、具体可执行、避免鸡汤。"
             + "必须严格输出以下小节标题：信号概览、你现在在什么阶段、核心发现、可执行建议、风险提示、节奏感、推荐问题。"
-            + "核心发现必须引用具体数字，建议必须是本周可执行动作。";
+            + "核心发现必须引用具体数字，建议必须是本周可执行动作。"
+            + "标题与列表之间不要保留空白段落。"
+            + "列表必须使用 markdown 列表语法，不要使用项目符号字符。";
     }
 
     private StructuredResult enrichStructuredByAi(AiClient client,
@@ -375,7 +386,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         sb.append("signalOverview(string)、stage(string)、findings(string[])、actionSuggestions(string[])、rhythm(string)、riskHint(string)、suggestedQuestions(string[])。\n");
         sb.append("规则：\n");
         sb.append("1) 只输出 JSON 对象，不要 markdown。\n");
-        sb.append("2) signalOverview 保留 1 条，findings 保留 3~5 条，actionSuggestions 保留 3 条，suggestedQuestions 保留 10 条。\n");
+        sb.append("2) signalOverview 保留 1 条，findings 保留 3~5 条，actionSuggestions 保留 3 条，suggestedQuestions 保留 6 条。\n");
         sb.append("3) 如果缺失字段，用空字符串或空数组。\n\n");
         sb.append("报告原文：\n");
         sb.append(content == null ? "" : content);
@@ -493,6 +504,23 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             return parsedText;
         }
         return extractedText == null ? "" : extractedText.trim();
+    }
+
+    private String normalizeMarkdownSpacing(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String normalized = text
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace('\u00A0', ' ')
+            .replaceAll("[ \\t]+\\n", "\n")
+            .replaceAll("(?m)^[ \\t]*[•·]\\s*", "- ")
+            .replaceAll("([。！？；])\\s*(?=(?:信号概览|你现在在什么阶段|核心发现|可执行建议|风险提示|节奏感|推荐问题))", "$1\n\n")
+            .replaceAll("(信号概览|你现在在什么阶段|核心发现|可执行建议|风险提示|节奏感|推荐问题)\\s*[:：]?\\s*(?=\\S)", "$1\n")
+            .replaceAll("([^\\n])\\n{2,}(?=\\s*(?:[-*+]|[•·]|\\d+\\.)\\s*)", "$1\n")
+            .replaceAll("\\n{3,}", "\n\n");
+        return normalized.trim();
     }
 
     private static class StructuredExtract {

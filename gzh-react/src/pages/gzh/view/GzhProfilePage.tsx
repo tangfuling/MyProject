@@ -14,7 +14,7 @@ const MODEL_OPTIONS = [
   { code: 'qwen_3_6', name: '千问 3.6-Plus', desc: '通义千问 3.6-Plus · 推理更强，适合深度建议' },
 ];
 
-const RECHARGE_OPTIONS = [1000, 3000, 5000];
+const RECHARGE_OPTIONS = [10, 100, 1000, 3000, 5000];
 
 function mergeById<T extends { id: number }>(prev: T[], next: T[], page: number): T[] {
   if (page === 1) {
@@ -45,6 +45,18 @@ function formatDateTime(value?: string) {
     return value.replace('T', ' ').slice(0, 16);
   }
   return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function fmtToken(v?: number | null) {
+  const n = Math.max(0, Math.round(v ?? 0));
+  if (n >= 1000) {
+    return `${(n / 1000).toFixed(1)}K`;
+  }
+  return n.toLocaleString('zh-CN');
+}
+
+function formatAmount(amountCent: number) {
+  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amountCent / 100);
 }
 
 function mapTokenType(type: string) {
@@ -326,7 +338,7 @@ export default function GzhProfilePage() {
                   className={`recharge-opt${amountCent === amount ? ' active' : ''}`}
                   onClick={() => setAmountCent(amount)}
                 >
-                  <div>¥{amount / 100}</div>
+                  <div>¥{formatAmount(amount)}</div>
                 </button>
               ))}
             </div>
@@ -338,7 +350,7 @@ export default function GzhProfilePage() {
               onClick={() => createPaymentMutation.mutate()}
               disabled={createPaymentMutation.isPending}
             >
-              {createPaymentMutation.isPending ? '创建订单中...' : `支付宝支付 ¥${(amountCent / 100).toFixed(0)}`}
+              {createPaymentMutation.isPending ? '创建订单中...' : `支付宝支付 ¥${formatAmount(amountCent)}`}
             </button>
             {createPaymentMutation.error ? <div className="error-tip">{(createPaymentMutation.error as Error).message}</div> : null}
           </div>
@@ -366,7 +378,7 @@ export default function GzhProfilePage() {
                     <tr key={item.id}>
                       <td>{formatDateTime(item.createdAt)}</td>
                       <td>{mapTokenType(item.bizType)}</td>
-                      <td>{(item.inputTokens + item.outputTokens).toLocaleString('zh-CN')} tok</td>
+                      <td>{fmtToken(item.inputTokens + item.outputTokens)} token</td>
                       <td className="amt-negative">-¥{(item.costCent / 100).toFixed(2)}</td>
                     </tr>
                   ))

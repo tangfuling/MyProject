@@ -4,40 +4,20 @@ import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
 
 public enum AiModelProvider {
-    QWEN_3_5("qwen_3_5", 200, 600),
-    QWEN_3_6("qwen_3_6", 600, 1800),
-    DOUBAO("doubao", 300, 900),
-    GPT("gpt", 1000, 3000),
-    CLAUDE("claude", 1500, 7500);
+    QWEN_3_5("qwen_3_5"),
+    QWEN_3_6("qwen_3_6"),
+    DOUBAO("doubao"),
+    GPT("gpt"),
+    CLAUDE("claude");
 
     private final String code;
-    private final int inputPerMillionCent;
-    private final int outputPerMillionCent;
 
-    AiModelProvider(String code, int inputPerMillionCent, int outputPerMillionCent) {
+    AiModelProvider(String code) {
         this.code = code;
-        this.inputPerMillionCent = inputPerMillionCent;
-        this.outputPerMillionCent = outputPerMillionCent;
     }
 
     public String getCode() {
         return code;
-    }
-
-    public int getInputPerMillionCent() {
-        return inputPerMillionCent;
-    }
-
-    public int getOutputPerMillionCent() {
-        return outputPerMillionCent;
-    }
-
-    public int calcCostCent(int inputTokens, int outputTokens) {
-        long inputCost = (long) inputTokens * inputPerMillionCent;
-        long outputCost = (long) outputTokens * outputPerMillionCent;
-        long total = inputCost + outputCost;
-        long cent = (total + 999_999L) / 1_000_000L;
-        return (int) Math.max(1, cent);
     }
 
     public static AiModelProvider fromCode(String code) {

@@ -22,7 +22,7 @@ public final class AlipaySignUtil {
 
     public static String sign(Map<String, String> params, String privateKeyPem) {
         try {
-            String content = buildSignContent(params);
+            String content = buildSignContentForRequest(params);
             PrivateKey privateKey = loadPrivateKey(privateKeyPem);
             Signature signature = Signature.getInstance("SHA256withRSA");
             signature.initSign(privateKey);
@@ -36,25 +36,48 @@ public final class AlipaySignUtil {
 
     public static boolean verify(Map<String, String> params, String alipayPublicKeyPem, String sign) {
         try {
-            String content = buildSignContent(params);
             PublicKey publicKey = loadPublicKey(alipayPublicKeyPem);
-            Signature signature = Signature.getInstance("SHA256withRSA");
-            signature.initVerify(publicKey);
-            signature.update(content.getBytes(StandardCharsets.UTF_8));
-            return signature.verify(Base64.getDecoder().decode(sign));
+            String normalizedSign = sign == null ? "" : sign.trim();
+            if (verifyWithContent(buildSignContentForCallback(params), publicKey, normalizedSign)) {
+                return true;
+            }
+            // Some gateways include sign_type in sign content. Keep fallback for compatibility.
+            if (verifyWithContent(buildSignContentForRequest(params), publicKey, normalizedSign)) {
+                return true;
+            }
+            // Defensive fallback for unexpected '+'->' ' conversion on callback transport.
+            if (normalizedSign.contains(" ")) {
+                String repairedSign = normalizedSign.replace(' ', '+');
+                if (verifyWithContent(buildSignContentForCallback(params), publicKey, repairedSign)) {
+                    return true;
+                }
+                return verifyWithContent(buildSignContentForRequest(params), publicKey, repairedSign);
+            }
+            return false;
         } catch (Exception e) {
             return false;
         }
     }
 
-    public static String buildSignContent(Map<String, String> params) {
+    public static String buildSignContentForRequest(Map<String, String> params) {
+        return buildSignContent(params, true);
+    }
+
+    public static String buildSignContentForCallback(Map<String, String> params) {
+        return buildSignContent(params, false);
+    }
+
+    private static String buildSignContent(Map<String, String> params, boolean includeSignType) {
         List<Map.Entry<String, String>> entries = new ArrayList<>(params.entrySet());
         entries.sort(Comparator.comparing(Map.Entry::getKey));
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, String> entry : entries) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (value == null || value.isBlank() || "sign".equals(key) || "sign_type".equals(key)) {
+            if (value == null || value.isBlank() || "sign".equals(key)) {
+                continue;
+            }
+            if (!includeSignType && "sign_type".equals(key)) {
                 continue;
             }
             if (sb.length() > 0) {
@@ -63,6 +86,13 @@ public final class AlipaySignUtil {
             sb.append(key).append('=').append(value);
         }
         return sb.toString();
+    }
+
+    private static boolean verifyWithContent(String content, PublicKey publicKey, String sign) throws Exception {
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        signature.initVerify(publicKey);
+        signature.update(content.getBytes(StandardCharsets.UTF_8));
+        return signature.verify(Base64.getDecoder().decode(sign));
     }
 
     public static String toQueryString(Map<String, String> params) {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { RoutePath } from '../../../common/router/RoutePath';
 import { useAuthStore } from '../../../common/state/authStore';
 import AnalysisApi from '../../analysis/api/AnalysisApi';
@@ -41,6 +43,7 @@ const DEFAULT_QUICK_PROMPTS = [
   '本周三件事怎么排优先级？',
   '怎么降低数据下滑风险？',
 ];
+const MARKDOWN_PLUGINS = [remarkGfm];
 
 function createSessionId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -56,6 +59,35 @@ function toPercentValue(v?: number | null) {
 
 function fmtNum(v?: number | null) {
   return (v ?? 0).toLocaleString('zh-CN');
+}
+
+function fmtToken(v?: number | null) {
+  const n = Math.max(0, Math.round(v ?? 0));
+  if (n >= 1000) {
+    return `${(n / 1000).toFixed(1)}K`;
+  }
+  return n.toLocaleString('zh-CN');
+}
+
+function stripSuggestedQuestions(text: string) {
+  return text.replace(/\n*(?:#{1,6}\s*)?(?:\*{0,2})推荐问题(?:\*{0,2})[\s\S]*$/m, '').trim();
+}
+
+function normalizeMarkdownSpacing(text: string) {
+  if (!text) {
+    return '';
+  }
+  const sectionPattern = '(信号概览|你现在在什么阶段|核心发现|可执行建议|风险提示|节奏感)';
+  return stripSuggestedQuestions(text)
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/^[ \t]*[•·]\s*/gm, '- ')
+    .replace(new RegExp(`([。！？；])\\s*(?=${sectionPattern})`, 'g'), '$1\n\n')
+    .replace(new RegExp(`${sectionPattern}\\s*[:：]?\\s*(?=\\S)`, 'g'), '$1\n')
+    .replace(/\n{2,}(?=\s*(?:[-*+]|[•·]|\d+\.)\s*)/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function fmtDateTime(v?: string | Date) {
@@ -216,7 +248,7 @@ function mapHistory(msg: ChatMessage): UiMessage {
     content: msg.content,
     meta:
       msg.role === 'assistant'
-        ? `${msg.aiModel || 'AI'} · ${fmtDateShort(msg.createdAt)} · ${tok.toLocaleString('zh-CN')} tok · ${fmtMoneyCent(msg.costCent)}`
+        ? `${msg.aiModel || 'AI'} · ${fmtDateShort(msg.createdAt)} · ${fmtToken(tok)} token · ${fmtMoneyCent(msg.costCent)}`
         : fmtDateShort(msg.createdAt),
   };
 }
@@ -299,14 +331,12 @@ export default function GzhWorkspacePage() {
   const analysisText = analysisGenerating
     ? analysisLive || analysisFallback
     : analysisDetail?.content || analysisPanel?.content || analysisSummary;
+  const normalizedAnalysisText = useMemo(() => normalizeMarkdownSpacing(analysisText || ''), [analysisText]);
 
   const currentModelCode = header?.aiModel || profile?.aiModel || 'qwen_3_5';
   const currentModelName = MODEL_OPTIONS.find((x) => x.code === currentModelCode)?.name || currentModelCode;
 
-  const analysisStage = analysisDetail?.stage || analysisPanel?.stage || '';
   const analysisFindings = (analysisDetail?.findings || analysisPanel?.findings || []).filter((x) => x && x.trim());
-  const actionSuggestions = (analysisDetail?.actionSuggestions || analysisPanel?.actionSuggestions || []).filter((x) => x && x.trim());
-  const analysisRhythm = analysisDetail?.rhythm || analysisPanel?.rhythm || '';
   const analysisSignalOverviewRaw = analysisDetail?.signalOverview || analysisPanel?.signalOverview || '等待千问生成信号概览';
   const analysisSignalOverview = analysisGenerating
     ? '千问正在生成信号概览…'
@@ -331,7 +361,7 @@ export default function GzhWorkspacePage() {
             ...(analysisPanel?.suggestedQuestions ?? []),
             ...(overview?.quickQuestions ?? []),
           ].filter((x) => x && x.trim());
-    return Array.from(new Set([...base, ...DEFAULT_QUICK_PROMPTS])).slice(0, 12);
+    return Array.from(new Set([...base, ...DEFAULT_QUICK_PROMPTS])).slice(0, 6);
   }, [analysisGenerating, overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
   const goodHighlights = useMemo(() => {
     const positiveFindings = analysisFindings.filter((item) => {
@@ -584,14 +614,14 @@ export default function GzhWorkspacePage() {
         chatTypingDoneRef.current = true;
         ensureChatTypingTicker();
         setChatStreaming(false);
-        setChatDoneMeta(`${event.aiModel} · ${(event.inputTokens + event.outputTokens).toLocaleString('zh-CN')} tok · ${fmtMoneyCent(event.costCent)}`);
+        setChatDoneMeta(`${event.aiModel} · ${fmtToken(event.inputTokens + event.outputTokens)} token · ${fmtMoneyCent(event.costCent)}`);
         setChatMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantId
               ? {
                   ...msg,
                   streaming: false,
-                  meta: `${event.aiModel} · ${fmtDateShort(new Date())} · ${(event.inputTokens + event.outputTokens).toLocaleString('zh-CN')} tok · ${fmtMoneyCent(event.costCent)}`,
+                  meta: `${event.aiModel} · ${fmtDateShort(new Date())} · ${fmtToken(event.inputTokens + event.outputTokens)} token · ${fmtMoneyCent(event.costCent)}`,
                 }
               : msg
           )
@@ -722,9 +752,12 @@ export default function GzhWorkspacePage() {
 
             <div className="good-alert">
               <b>做得好的点：</b>
-              {goodHighlights.length === 0 ? '等待千问生成后展示亮点。' : null}
+              {analysisGenerating
+                ? '千问正在生成做得好的点…'
+                : (goodHighlights.length === 0 ? '等待千问生成后展示亮点。' : null)}
             </div>
-            {goodHighlights.length > 0 ? (
+            {analysisGenerating ? <div className="thinking-skeleton" /> : null}
+            {!analysisGenerating && goodHighlights.length > 0 ? (
               <div className="good-list">
                 {goodHighlights.map((item, index) => (
                   <div key={`good-${index}`} className="good-item">
@@ -835,10 +868,12 @@ export default function GzhWorkspacePage() {
                 <div className="ai-card-head">
                   <div className="ai-card-title">{analysisCoverageText}</div>
                   <div className="ai-badge">
-                    {aiModelName} · {fmtDateShort(analysisDetail?.createdAt || analysisPanel?.createdAt || header?.lastSyncAt)} · {fmtNum(aiTokens)} tok
+                    {aiModelName} · {fmtDateShort(analysisDetail?.createdAt || analysisPanel?.createdAt || header?.lastSyncAt)} · {fmtToken(aiTokens)} token
                   </div>
                 </div>
-                <div className="ai-sub">{analysisText}</div>
+                <div className="ai-sub md-content">
+                  <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{normalizedAnalysisText}</ReactMarkdown>
+                </div>
                 {analysisGenerating ? (
                   <div className="thinking-card">
                     <div className="thinking-title">千问思考中...</div>
@@ -848,54 +883,20 @@ export default function GzhWorkspacePage() {
                     <div className="thinking-meta">{analysisElapsedSec > 0 ? `已等待 ${analysisElapsedSec}s` : '正在连接千问...'}</div>
                   </div>
                 ) : null}
-                {analysisStage ? (
-                  <div className="stage-block">
-                    <b>阶段判断：</b>{analysisStage}
-                  </div>
-                ) : null}
-
-                <div className="findings-title">核心发现</div>
-                {analysisGenerating ? <div className="thinking-skeleton" /> : null}
-                {!analysisGenerating && analysisFindings.length === 0 ? <div className="empty-tip">等待千问生成核心发现。</div> : null}
-                {!analysisGenerating && analysisFindings.map((item, index) => (
-                  <div key={`finding-${index}`} className="finding-item">
-                    <span className="fi-good">•</span>
-                    {item}
-                  </div>
-                ))}
-
-                <div className="actions-title">本周可执行的 3 件事</div>
-                {analysisGenerating ? <div className="thinking-skeleton" /> : null}
-                {!analysisGenerating && actionSuggestions.length === 0 ? <div className="empty-tip">等待千问生成可执行建议。</div> : null}
-                {!analysisGenerating && actionSuggestions.map((item, index) => (
-                  <div key={`action-${index}`} className="action-item">
-                    <div className="action-row">
-                      <div className="action-num">{index + 1}</div>
-                      <div className="action-text">{item}</div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="mood-block">{analysisRhythm || (analysisGenerating ? '千问正在组织节奏建议…' : '等待千问生成节奏建议。')}</div>
-
-                <div className="ai-footer">
-                  {quickPrompts.slice(0, 4).map((item) => (
-                    <span key={`tag-${item}`} className="ai-tag" onClick={() => sendSuggestedPrompt(item)}>
-                      {item}
-                    </span>
-                  ))}
-                </div>
               </div>
             </div>
 
             {chatMessages.map((msg) => (
               <div key={msg.id} className={msg.role === 'assistant' ? 'msg-ai' : 'msg-user'}>
-                <div className={msg.role === 'assistant' ? 'bubble-ai' : 'bubble-user'}>{msg.content}</div>
+                <div className={msg.role === 'assistant' ? 'bubble-ai bubble-markdown' : 'bubble-user'}>
+                  {msg.role === 'assistant'
+                    ? <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS}>{normalizeMarkdownSpacing(msg.content || '')}</ReactMarkdown>
+                    : msg.content}
+                </div>
                 {msg.meta ? <div className="bubble-meta">{msg.meta}</div> : null}
               </div>
             ))}
 
-            {chatMessages.length === 0 ? <div className="empty-tip">输入问题，基于你的数据和分析报告进行对话。</div> : null}
           </div>
 
           <div className="chat-quick">
@@ -904,7 +905,7 @@ export default function GzhWorkspacePage() {
                 生成分析后显示推荐问题
               </button>
             ) : (
-              quickPrompts.slice(0, 4).map((item) => (
+              quickPrompts.slice(0, 6).map((item) => (
                 <button
                   key={item}
                   className="quick-btn"
