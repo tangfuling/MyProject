@@ -827,11 +827,11 @@
 }
 
 .gzh-v2-workspace .kpi-chip {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 6px;
   background: var(--card);
   border: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: var(--ink-soft);
 }
@@ -852,11 +852,42 @@
   font-size: 11px;
 }
 
+.gzh-v2-workspace .good-alert {
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  border-radius: var(--r-xs);
+  padding: 9px 11px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #166534;
+  line-height: 1.5;
+}
+
+.gzh-v2-workspace .good-alert::before {
+  content: "✓ ";
+  font-size: 11px;
+}
+
+.gzh-v2-workspace .good-list {
+  margin-top: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.gzh-v2-workspace .good-item {
+  font-size: 10px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 .gzh-v2-workspace .ctx-caption {
   font-size: 11px;
   color: #334155;
-  margin-top: 10px;
-  margin-bottom: 6px;
+  margin-top: 8px;
+  margin-bottom: 4px;
   font-weight: 600;
   letter-spacing: 0.2px;
 }
@@ -864,39 +895,56 @@
 .gzh-v2-workspace .kpi-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .gzh-v2-workspace .kpi-item {
   background: var(--bg);
   border: 1px solid var(--line-light);
   border-radius: var(--r-xs);
-  padding: 9px 10px;
+  padding: 7px 8px;
+}
+
+.gzh-v2-workspace .kpi-item-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gzh-v2-workspace .kpi-item-left {
+  min-width: 0;
+}
+
+.gzh-v2-workspace .kpi-item-right {
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .gzh-v2-workspace .kpi-item-label {
-  font-size: 10px;
+  font-size: 9px;
   color: #334155;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .gzh-v2-workspace .kpi-item-value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
+  letter-spacing: 0.2px;
 }
 
 .gzh-v2-workspace .kpi-item-delta {
-  font-size: 9px;
+  font-size: 8px;
   margin-top: 1px;
 }
 
 .gzh-v2-workspace .kpi-item-sub {
-  font-size: 10px;
+  font-size: 9px;
   color: #475569;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .gzh-v2-workspace .rec-card {
@@ -969,6 +1017,13 @@
   flex-wrap: wrap;
 }
 
+.gzh-v2-workspace .interact-row-plain {
+  margin-top: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line-light);
+  border-radius: var(--r-xs);
+}
+
 .gzh-v2-workspace .interact-chip {
   padding: 3px 8px;
   border-radius: 5px;
@@ -1019,7 +1074,19 @@
 .gzh-v2-workspace .ctx-actions {
   display: grid;
   gap: 8px;
+  margin-top: 0;
+}
+
+.gzh-v2-workspace .ctx-bottom-actions {
+  position: sticky;
+  bottom: -1px;
   margin-top: 10px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #fff 26%, #fff 100%);
+}
+
+.gzh-v2-workspace .ctx-bottom-actions .ctx-link {
+  margin-top: 8px;
 }
 
 .gzh-v2-workspace .chat-wrap {

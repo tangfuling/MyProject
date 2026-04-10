@@ -33,7 +33,6 @@ const MODEL_OPTIONS = [
   { code: 'qwen_3_6', name: '千问 3.6-Plus', desc: '推理更强，适合深度建议' },
 ];
 
-const CHAT_SESSION_KEY = 'gzh_chat_session_id';
 const DEFAULT_QUICK_PROMPTS = [
   '哪些内容主题最该加码？',
   '下周先优化哪一项指标？',
@@ -131,6 +130,84 @@ function recommendRateFromSummary(summary: Record<string, number>) {
   return (recommendCount * 100) / total;
 }
 
+function normalizeSignalRateText(text: string) {
+  if (!text || !text.trim()) {
+    return text;
+  }
+  return text.replace(
+    /((?:率|转化|占比|比例|留存|完读|点击|打开|推荐|关注|互动)[^0-9%]{0,6})(-?\d+(?:\.\d+)?)(?!\s*%)/g,
+    (_match, prefix: string, rawNumber: string) => {
+      const value = Number(rawNumber);
+      if (!Number.isFinite(value) || value === 0 || Math.abs(value) >= 1) {
+        return `${prefix}${rawNumber}`;
+      }
+      const percentValue = value * 100;
+      const digits = Math.abs(percentValue) < 1 ? 2 : Math.abs(percentValue) < 10 ? 1 : 0;
+      return `${prefix}${percentValue.toFixed(digits)}%`;
+    }
+  );
+}
+
+type IndustryPoint = {
+  label: string;
+  value: number;
+  bench: number;
+  digits: number;
+};
+
+function buildIndustrySignalOverview(
+  metrics: {
+    completionRate?: number | null;
+    followRate?: number | null;
+  } | undefined,
+  recommendRate: number,
+  fallbackText: string
+) {
+  const fallback = normalizeSignalRateText(fallbackText);
+  if (!metrics) {
+    return fallback;
+  }
+
+  const points: IndustryPoint[] = [
+    { label: '推荐率', value: toPercentValue(recommendRate), bench: 18.0, digits: 1 },
+    { label: '完读率', value: toPercentValue(metrics.completionRate), bench: 42.0, digits: 0 },
+    { label: '关注转化', value: toPercentValue(metrics.followRate), bench: 1.2, digits: 1 },
+  ].filter((item) => Number.isFinite(item.value) && item.value > 0);
+
+  if (points.length === 0) {
+    return fallback;
+  }
+
+  const ranked = [...points].sort((a, b) => b.value - b.bench - (a.value - a.bench));
+  const top = ranked[0];
+  const topDelta = top.value - top.bench;
+  const strongThreshold = top.label === '关注转化' ? 0.8 : 6;
+  const positiveThreshold = top.label === '关注转化' ? 0.3 : 2;
+  const weakThreshold = top.label === '关注转化' ? -0.8 : -6;
+
+  let verdict = '接近行业平均';
+  if (topDelta >= strongThreshold) {
+    verdict = '显著高于行业平均';
+  } else if (topDelta >= positiveThreshold) {
+    verdict = '高于行业平均';
+  } else if (topDelta <= weakThreshold) {
+    verdict = '低于行业平均';
+  }
+
+  const head = `${verdict}：${top.label}${top.value.toFixed(top.digits)}%（行业${top.bench.toFixed(top.digits)}%）`;
+  const second = ranked[1];
+  if (!second) {
+    return head;
+  }
+
+  const secondDelta = second.value - second.bench;
+  const secondThreshold = second.label === '关注转化' ? 0.2 : 2;
+  if (Math.abs(secondDelta) < secondThreshold) {
+    return head;
+  }
+  return `${head}；${second.label}${second.value.toFixed(second.digits)}%（行业${second.bench.toFixed(second.digits)}%）。`;
+}
+
 function mapHistory(msg: ChatMessage): UiMessage {
   const tok = (msg.inputTokens || 0) + (msg.outputTokens || 0);
   return {
@@ -141,44 +218,6 @@ function mapHistory(msg: ChatMessage): UiMessage {
       msg.role === 'assistant'
         ? `${msg.aiModel || 'AI'} · ${fmtDateShort(msg.createdAt)} · ${tok.toLocaleString('zh-CN')} tok · ${fmtMoneyCent(msg.costCent)}`
         : fmtDateShort(msg.createdAt),
-  };
-}
-
-function pickTrendValues(values: number[], count = 11) {
-  if (values.length === 0) return [42, 40, 36, 38, 30, 32, 24, 26, 18, 15, 10];
-  if (values.length <= count) return values;
-  const step = (values.length - 1) / (count - 1);
-  const result: number[] = [];
-  for (let i = 0; i < count; i += 1) {
-    result.push(values[Math.round(i * step)] ?? 0);
-  }
-  return result;
-}
-
-function buildSparkline(values: number[]) {
-  const width = 300;
-  const height = 52;
-  const minY = Math.min(...values);
-  const maxY = Math.max(...values);
-  const range = Math.max(1, maxY - minY);
-
-  const points = values.map((v, i) => {
-    const x = (i / (values.length - 1 || 1)) * width;
-    const y = height - 8 - ((v - minY) / range) * (height - 18);
-    return { x, y };
-  });
-
-  const polyline = points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
-  const area = `M${points[0]?.x.toFixed(2) ?? '0'},${points[0]?.y.toFixed(2) ?? '42'} L${polyline
-    .split(' ')
-    .slice(1)
-    .join(' L')} L${width},${height} L0,${height} Z`;
-  const end = points[points.length - 1] ?? { x: width, y: height / 2 };
-
-  return {
-    polyline,
-    area,
-    end,
   };
 }
 
@@ -204,13 +243,7 @@ export default function GzhWorkspacePage() {
   const [chatDoneMeta, setChatDoneMeta] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
 
-  const [sessionId] = useState(() => {
-    const cached = localStorage.getItem(CHAT_SESSION_KEY);
-    if (cached) return cached;
-    const created = createSessionId();
-    localStorage.setItem(CHAT_SESSION_KEY, created);
-    return created;
-  });
+  const [sessionId, setSessionId] = useState(() => createSessionId());
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
@@ -218,6 +251,10 @@ export default function GzhWorkspacePage() {
   const analysisAbortRef = useRef<AbortController | null>(null);
   const analysisLiveRef = useRef('');
   const analysisTickerRef = useRef<number | null>(null);
+  const chatTypingTargetIdRef = useRef<string | null>(null);
+  const chatTypingBufferRef = useRef('');
+  const chatTypingDoneRef = useRef(false);
+  const chatTypingTimerRef = useRef<number | null>(null);
 
   const overviewQuery = useQuery({
     queryKey: ['workspace-overview', range],
@@ -270,9 +307,10 @@ export default function GzhWorkspacePage() {
   const analysisFindings = (analysisDetail?.findings || analysisPanel?.findings || []).filter((x) => x && x.trim());
   const actionSuggestions = (analysisDetail?.actionSuggestions || analysisPanel?.actionSuggestions || []).filter((x) => x && x.trim());
   const analysisRhythm = analysisDetail?.rhythm || analysisPanel?.rhythm || '';
+  const analysisSignalOverviewRaw = analysisDetail?.signalOverview || analysisPanel?.signalOverview || '等待千问生成信号概览';
   const analysisSignalOverview = analysisGenerating
     ? '千问正在生成信号概览…'
-    : analysisDetail?.signalOverview || analysisPanel?.signalOverview || '等待千问生成信号概览';
+    : buildIndustrySignalOverview(metrics, recommendRate, analysisSignalOverviewRaw);
   const riskText = analysisGenerating
     ? '千问正在生成风险提示…'
     : analysisDetail?.riskHint || analysisPanel?.riskHint || '等待千问生成风险提示';
@@ -281,26 +319,115 @@ export default function GzhWorkspacePage() {
   const analysisCoverageText = `${analysisGenerating ? '正在分析您近' : '已分析您近'}${analysisRangeLabel}${fmtNum(analysisArticleCount)}篇文章的数据`;
 
   const quickPrompts = useMemo(() => {
-    const dynamicList = [
-      ...(overview?.quickQuestions ?? []),
-      ...(analysisPanel?.suggestedQuestions ?? []),
-      ...(analysisDetail?.suggestedQuestions ?? []),
-    ].filter((x) => x && x.trim());
-    return Array.from(new Set([...dynamicList, ...DEFAULT_QUICK_PROMPTS])).slice(0, 12);
-  }, [overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
+    if (analysisGenerating) {
+      return [];
+    }
+    const currentReportQuestions = (analysisDetail?.suggestedQuestions ?? [])
+      .filter((x) => x && x.trim());
+    const base =
+      currentReportQuestions.length > 0
+        ? currentReportQuestions
+        : [
+            ...(analysisPanel?.suggestedQuestions ?? []),
+            ...(overview?.quickQuestions ?? []),
+          ].filter((x) => x && x.trim());
+    return Array.from(new Set([...base, ...DEFAULT_QUICK_PROMPTS])).slice(0, 12);
+  }, [analysisGenerating, overview?.quickQuestions, analysisPanel?.suggestedQuestions, analysisDetail?.suggestedQuestions]);
+  const goodHighlights = useMemo(() => {
+    const positiveFindings = analysisFindings.filter((item) => {
+      const hasPositive = /(增长|提升|上升|改善|回升|稳定|亮点|高于|突破|增加|优化|有效|良好|健康)/.test(item);
+      const hasNegative = /(下降|下滑|风险|不足|偏低|流失|波动|问题|回落)/.test(item);
+      return hasPositive && !hasNegative;
+    });
 
-  const trendValues = useMemo(() => {
-    const values = (overview?.dataPanel.trend ?? []).map((x) => x.readCount || 0);
-    return pickTrendValues(values, 11);
-  }, [overview?.dataPanel.trend]);
+    const result: string[] = [];
+    for (const item of positiveFindings) {
+      result.push(item);
+      if (result.length >= 3) {
+        return result;
+      }
+    }
 
-  const sparkline = useMemo(() => buildSparkline(trendValues), [trendValues]);
+    if (toPercentValue(changes?.totalRead) > 0) {
+      result.push(
+        `总阅读较上一统计周期（前${analysisRangeLabel}）提升 ${Math.abs(toPercentValue(changes?.totalRead)).toFixed(0)}%，触达在改善。`
+      );
+    }
+    if (toPercentValue(changes?.completionRate) > 0) {
+      result.push(
+        `完读率较上一统计周期（前${analysisRangeLabel}）提升 ${Math.abs(toPercentValue(changes?.completionRate)).toFixed(0)}%，内容吸引力在增强。`
+      );
+    }
+    if ((metrics?.followRate ?? 0) > 0) {
+      result.push(`关注转化约 ${fmtPercent(metrics?.followRate, 1)}，转粉链路有效。`);
+    }
+    if ((metrics?.totalShare ?? 0) > 0) {
+      result.push(`分享累计 ${fmtNum(metrics?.totalShare)} 次，具备扩散潜力。`);
+    }
+    return Array.from(new Set(result)).slice(0, 3);
+  }, [analysisFindings, analysisRangeLabel, changes?.completionRate, changes?.totalRead, metrics?.followRate, metrics?.totalShare]);
 
   const stopAnalysisTicker = () => {
     if (analysisTickerRef.current !== null) {
       window.clearInterval(analysisTickerRef.current);
       analysisTickerRef.current = null;
     }
+  };
+
+  const stopChatTyping = (flush = false) => {
+    if (chatTypingTimerRef.current !== null) {
+      window.clearInterval(chatTypingTimerRef.current);
+      chatTypingTimerRef.current = null;
+    }
+    if (flush && chatTypingTargetIdRef.current && chatTypingBufferRef.current) {
+      const targetId = chatTypingTargetIdRef.current;
+      const rest = chatTypingBufferRef.current;
+      setChatMessages((prev) =>
+        prev.map((msg) => (msg.id === targetId ? { ...msg, content: `${msg.content}${rest}` } : msg))
+      );
+    }
+    chatTypingBufferRef.current = '';
+    chatTypingDoneRef.current = false;
+    chatTypingTargetIdRef.current = null;
+  };
+
+  const resetChatSession = () => {
+    chatAbortRef.current?.abort();
+    stopChatTyping(false);
+    setChatMessages([]);
+    setChatInput('');
+    setChatDoneMeta('');
+    setChatError(null);
+    setChatStreaming(false);
+    setSessionId(createSessionId());
+  };
+
+  const ensureChatTypingTicker = () => {
+    if (chatTypingTimerRef.current !== null) {
+      return;
+    }
+    chatTypingTimerRef.current = window.setInterval(() => {
+      const targetId = chatTypingTargetIdRef.current;
+      if (!targetId) {
+        stopChatTyping(false);
+        return;
+      }
+
+      const buffer = chatTypingBufferRef.current;
+      if (!buffer) {
+        if (chatTypingDoneRef.current) {
+          stopChatTyping(false);
+        }
+        return;
+      }
+
+      const step = buffer.length > 120 ? 10 : buffer.length > 60 ? 6 : 3;
+      const next = buffer.slice(0, step);
+      chatTypingBufferRef.current = buffer.slice(step);
+      setChatMessages((prev) =>
+        prev.map((msg) => (msg.id === targetId ? { ...msg, content: `${msg.content}${next}` } : msg))
+      );
+    }, 16);
   };
 
   useEffect(() => {
@@ -323,6 +450,7 @@ export default function GzhWorkspacePage() {
       chatAbortRef.current?.abort();
       analysisAbortRef.current?.abort();
       stopAnalysisTicker();
+      stopChatTyping(false);
     };
   }, []);
 
@@ -342,6 +470,7 @@ export default function GzhWorkspacePage() {
   const runAnalysis = () => {
     if (analysisGenerating) return;
 
+    resetChatSession();
     analysisAbortRef.current?.abort();
     stopAnalysisTicker();
     setAnalysisError(null);
@@ -413,6 +542,8 @@ export default function GzhWorkspacePage() {
     const content = text.trim();
     if (!content || chatStreaming) return;
 
+    stopChatTyping(true);
+
     const userMsg: UiMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -432,16 +563,26 @@ export default function GzhWorkspacePage() {
     setChatStreaming(true);
     setChatDoneMeta('');
     setChatError(null);
+    chatTypingTargetIdRef.current = assistantId;
+    chatTypingBufferRef.current = '';
+    chatTypingDoneRef.current = false;
 
     chatAbortRef.current?.abort();
     chatAbortRef.current = ChatApi.send(
       { message: content, sessionId, reportId: analysisPanel?.reportId, range },
       (chunk) => {
-        setChatMessages((prev) =>
-          prev.map((msg) => (msg.id === assistantId ? { ...msg, content: `${msg.content}${chunk}` } : msg))
-        );
+        if (!chunk) {
+          return;
+        }
+        if (chatTypingTargetIdRef.current !== assistantId) {
+          chatTypingTargetIdRef.current = assistantId;
+        }
+        chatTypingBufferRef.current += chunk;
+        ensureChatTypingTicker();
       },
       (event: ChatDoneEvent) => {
+        chatTypingDoneRef.current = true;
+        ensureChatTypingTicker();
         setChatStreaming(false);
         setChatDoneMeta(`${event.aiModel} · ${(event.inputTokens + event.outputTokens).toLocaleString('zh-CN')} tok · ${fmtMoneyCent(event.costCent)}`);
         setChatMessages((prev) =>
@@ -457,6 +598,7 @@ export default function GzhWorkspacePage() {
         );
       },
       (error) => {
+        stopChatTyping(true);
         setChatStreaming(false);
         setChatError(error.message || '发送失败，请稍后重试。');
       }
@@ -578,39 +720,77 @@ export default function GzhWorkspacePage() {
               <b>风险提示：</b>{riskText}
             </div>
 
+            <div className="good-alert">
+              <b>做得好的点：</b>
+              {goodHighlights.length === 0 ? '等待千问生成后展示亮点。' : null}
+            </div>
+            {goodHighlights.length > 0 ? (
+              <div className="good-list">
+                {goodHighlights.map((item, index) => (
+                  <div key={`good-${index}`} className="good-item">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <div className="ctx-caption">核心指标</div>
             <div className="kpi-grid">
               <div className="kpi-item">
-                <div className="kpi-item-label">阅读</div>
-                <div className="kpi-item-value">{fmtNum(metrics?.totalRead)}</div>
-                <div className={`kpi-item-delta ${toPercentValue(changes?.totalRead) >= 0 ? 'delta-up' : 'delta-down'}`}>
-                  {fmtDeltaPercent(changes?.totalRead, 0)}
+                <div className="kpi-item-main">
+                  <div className="kpi-item-left">
+                    <div className="kpi-item-label">阅读</div>
+                    <div className="kpi-item-sub">篇均 {fmtNum(metrics?.avgRead)}</div>
+                  </div>
+                  <div className="kpi-item-right">
+                    <div className="kpi-item-value">{fmtNum(metrics?.totalRead)}</div>
+                    <div className={`kpi-item-delta ${toPercentValue(changes?.totalRead) >= 0 ? 'delta-up' : 'delta-down'}`}>
+                      {fmtDeltaPercent(changes?.totalRead, 0)}
+                    </div>
+                  </div>
                 </div>
-                <div className="kpi-item-sub">篇均 {fmtNum(metrics?.avgRead)}</div>
               </div>
               <div className="kpi-item">
-                <div className="kpi-item-label">完读率</div>
-                <div className="kpi-item-value">{fmtPercent(metrics?.completionRate, 0)}</div>
-                <div className={`kpi-item-delta ${toPercentValue(changes?.completionRate) >= 0 ? 'delta-up' : 'delta-down'}`}>
-                  {fmtDeltaPercent(changes?.completionRate, 0)}
+                <div className="kpi-item-main">
+                  <div className="kpi-item-left">
+                    <div className="kpi-item-label">完读率</div>
+                    <div className="kpi-item-sub">时长 {fmtDuration(metrics?.avgReadTimeSec)}</div>
+                  </div>
+                  <div className="kpi-item-right">
+                    <div className="kpi-item-value">{fmtPercent(metrics?.completionRate, 0)}</div>
+                    <div className={`kpi-item-delta ${toPercentValue(changes?.completionRate) >= 0 ? 'delta-up' : 'delta-down'}`}>
+                      {fmtDeltaPercent(changes?.completionRate, 0)}
+                    </div>
+                  </div>
                 </div>
-                <div className="kpi-item-sub">时长 {fmtDuration(metrics?.avgReadTimeSec)}</div>
               </div>
               <div className="kpi-item">
-                <div className="kpi-item-label">点赞</div>
-                <div className="kpi-item-value">{fmtNum(metrics?.totalLike)}</div>
-                <div className={`kpi-item-delta ${toPercentValue(changes?.totalLike) >= 0 ? 'delta-up' : 'delta-down'}`}>
-                  {fmtDeltaPercent(changes?.totalLike, 0)}
+                <div className="kpi-item-main">
+                  <div className="kpi-item-left">
+                    <div className="kpi-item-label">点赞</div>
+                    <div className="kpi-item-sub">点赞率 {fmtPercent(metrics?.likeRate, 1)}</div>
+                  </div>
+                  <div className="kpi-item-right">
+                    <div className="kpi-item-value">{fmtNum(metrics?.totalLike)}</div>
+                    <div className={`kpi-item-delta ${toPercentValue(changes?.totalLike) >= 0 ? 'delta-up' : 'delta-down'}`}>
+                      {fmtDeltaPercent(changes?.totalLike, 0)}
+                    </div>
+                  </div>
                 </div>
-                <div className="kpi-item-sub">{fmtPercent(metrics?.likeRate, 1)}</div>
               </div>
               <div className="kpi-item">
-                <div className="kpi-item-label">关注</div>
-                <div className="kpi-item-value">{fmtNum(metrics?.newFollowers)}</div>
-                <div className={`kpi-item-delta ${toPercentValue(changes?.newFollowers) >= 0 ? 'delta-up' : 'delta-down'}`}>
-                  {fmtDeltaPercent(changes?.newFollowers, 0)}
+                <div className="kpi-item-main">
+                  <div className="kpi-item-left">
+                    <div className="kpi-item-label">关注</div>
+                    <div className="kpi-item-sub">转化 {fmtPercent(metrics?.followRate, 1)}</div>
+                  </div>
+                  <div className="kpi-item-right">
+                    <div className="kpi-item-value">{fmtNum(metrics?.newFollowers)}</div>
+                    <div className={`kpi-item-delta ${toPercentValue(changes?.newFollowers) >= 0 ? 'delta-up' : 'delta-down'}`}>
+                      {fmtDeltaPercent(changes?.newFollowers, 0)}
+                    </div>
+                  </div>
                 </div>
-                <div className="kpi-item-sub">{fmtPercent(metrics?.followRate, 1)}</div>
               </div>
             </div>
 
@@ -624,40 +804,23 @@ export default function GzhWorkspacePage() {
               <div className="rec-bar">
                 <div className="rec-fill" style={{ width: `${Math.max(6, recommendPercent)}%` }} />
               </div>
-              <div className="rec-sub">以实际分发表现为准，建议见右侧千问分析</div>
             </div>
 
-            <details className="interact-details" open>
-              <summary>互动详情</summary>
-              <div className="interact-row">
-                <div className="interact-chip">分享 {fmtNum(metrics?.totalShare)}（{interactionRates.share.toFixed(1)}%）</div>
-                <div className="interact-chip">在看 {fmtNum(metrics?.totalWow)}（{interactionRates.wow.toFixed(1)}%）</div>
-                <div className="interact-chip">留言 {fmtNum(metrics?.totalComment)}（{interactionRates.comment.toFixed(1)}%）</div>
+            <div className="interact-row interact-row-plain">
+              <div className="interact-chip">分享 {fmtNum(metrics?.totalShare)}（{interactionRates.share.toFixed(1)}%）</div>
+              <div className="interact-chip">在看 {fmtNum(metrics?.totalWow)}（{interactionRates.wow.toFixed(1)}%）</div>
+              <div className="interact-chip">留言 {fmtNum(metrics?.totalComment)}（{interactionRates.comment.toFixed(1)}%）</div>
+            </div>
+
+            <div className="ctx-bottom-actions">
+              <div className="ctx-actions">
+                <button className="btn btn-primary" type="button" onClick={runAnalysis} disabled={analysisGenerating}>
+                  {analysisGenerating ? '分析中...' : '生成分析'}
+                </button>
               </div>
-            </details>
 
-            <div className="sparkline-wrap">
-              <div className="sparkline-label">阅读趋势近30天</div>
-              <svg width="100%" height="52" viewBox="0 0 300 52" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="sparkGradWs" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#17B89A" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#17B89A" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d={sparkline.area} fill="url(#sparkGradWs)" />
-                <polyline points={sparkline.polyline} fill="none" stroke="#17B89A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx={sparkline.end.x} cy={sparkline.end.y} r="3" fill="#17B89A" />
-              </svg>
-            </div>
-
-            <button className="ctx-link" type="button" onClick={gotoDetailPage}>
-              查看文章详情 →
-            </button>
-
-            <div className="ctx-actions">
-              <button className="btn btn-primary" type="button" onClick={runAnalysis} disabled={analysisGenerating}>
-                {analysisGenerating ? '分析中...' : '生成分析'}
+              <button className="ctx-link" type="button" onClick={gotoDetailPage}>
+                查看文章详情 →
               </button>
             </div>
 
@@ -727,9 +890,7 @@ export default function GzhWorkspacePage() {
 
             {chatMessages.map((msg) => (
               <div key={msg.id} className={msg.role === 'assistant' ? 'msg-ai' : 'msg-user'}>
-                <div className={msg.role === 'assistant' ? 'bubble-ai' : 'bubble-user'}>
-                  {msg.streaming && !msg.content ? '正在分析数据…' : msg.content}
-                </div>
+                <div className={msg.role === 'assistant' ? 'bubble-ai' : 'bubble-user'}>{msg.content}</div>
                 {msg.meta ? <div className="bubble-meta">{msg.meta}</div> : null}
               </div>
             ))}
