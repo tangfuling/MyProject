@@ -72,6 +72,15 @@ function mapChannel(channel: string) {
   return channel || '--';
 }
 
+function mapPaymentStatus(status: string) {
+  const value = (status || '').toUpperCase();
+  if (value === 'PAID') return '支付成功';
+  if (value === 'PENDING') return '待支付';
+  if (value === 'EXPIRED') return '已过期';
+  if (value === 'CLOSED') return '已关闭';
+  return status || '--';
+}
+
 function resolveAvatarUrl(rawUrl?: string) {
   const url = (rawUrl || '').trim();
   if (!url) return '';
@@ -407,12 +416,13 @@ export default function GzhProfilePage() {
                   <th>时间</th>
                   <th>渠道</th>
                   <th>金额</th>
+                  <th>支付状态</th>
                 </tr>
               </thead>
               <tbody>
                 {paymentOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={3}>暂无记录</td>
+                    <td colSpan={4}>暂无记录</td>
                   </tr>
                 ) : (
                   paymentOrders.map((item) => (
@@ -420,6 +430,7 @@ export default function GzhProfilePage() {
                       <td>{formatDateTime(item.createdAt)}</td>
                       <td>{mapChannel(item.channel)}</td>
                       <td className="amt-positive">+¥{(item.amountCent / 100).toFixed(2)}</td>
+                      <td>{mapPaymentStatus(item.status)}</td>
                     </tr>
                   ))
                 )}
