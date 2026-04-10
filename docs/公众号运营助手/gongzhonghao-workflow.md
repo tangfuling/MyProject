@@ -137,6 +137,24 @@ GET https://mp.weixin.qq.com/s/{article_id}
 - **发布时间戳**: `var ct = "..."`（转为 `YYYY-MM-DD`）
 - **正文**: `id="js_content"` 内的HTML内容
 
+#### 插件正文提取口径（已修正）
+
+为避免提取到菜单、评论区、工具栏等噪声，正文提取必须遵循：
+
+1. 优先定位正文容器（按顺序）：
+   - `#js_content`
+   - `#img-content #js_content`
+   - `#img-content .rich_media_content`
+   - `.rich_media_content#js_content`
+   - `.rich_media_content`
+2. 仅在正文容器内提取文本，不再使用整页 `document.body.innerText`。
+3. 清理无关节点后再输出纯文本（去脚本/样式/工具条/推荐区/二维码区等）。
+4. 统一换行与空白：连续空行折叠，输出纯正文文本（可直接用于后续分析或转 Markdown）。
+
+> 说明：你提供的这类请求
+> `chrome-extension://.../content-script.css`
+> 是扩展静态资源请求，不是公众号文章正文数据来源，不能用于正文提取。
+
 ---
 
 ## 四、获取单篇文章阅读数据

@@ -15,6 +15,19 @@ type TrendPoint = {
   value: number;
 };
 
+type WritableLike = {
+  write(data: string): Promise<void>;
+  close(): Promise<void>;
+};
+
+type FileHandleLike = {
+  createWritable(options?: { keepExistingData?: boolean }): Promise<WritableLike>;
+};
+
+type DirectoryHandleLike = {
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileHandleLike>;
+};
+
 const PAGE_SIZE = 20;
 const SOURCE_COLORS = ['#17B89A', '#5B8FD6', '#10b981', '#D5DEEB'];
 
@@ -580,6 +593,126 @@ function buildTrendChart(points: TrendPoint[]) {
   };
 }
 
+function formatDateForFile(v?: string | Date) {
+  if (!v) return 'unknown-date';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return 'unknown-date';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function sanitizeFileName(raw: string) {
+  return raw
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+function escapeMarkdownCell(value: string) {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+}
+
+function buildTrafficMarkdownTable(article: WorkspaceArticleCard) {
+  const sourceCounts = normalizeSourceMap(article.trafficSources);
+  const sourceRates = buildSourceRateMapForDisplay(article.trafficSourceRates, article.trafficSources);
+  const rows = SOURCE_ORDER.filter((label) => (sourceCounts[label] || 0) > 0 || (sourceRates[label] || 0) > 0);
+  if (rows.length === 0) {
+    return ['| 来源 | 访问量 | 占比 |', '| --- | ---: | ---: |', '| -- | 0 | 0.0% |'].join('\n');
+  }
+  return [
+    '| 来源 | 访问量 | 占比 |',
+    '| --- | ---: | ---: |',
+    ...rows.map((label) => `| ${escapeMarkdownCell(label)} | ${fmtNum(sourceCounts[label] || 0)} | ${(sourceRates[label] || 0).toFixed(1)}% |`),
+  ].join('\n');
+}
+
+function buildArticleMarkdown(article: WorkspaceArticleCard, rangeText: string) {
+  const body = (article.content || '').trim();
+  return [
+    `# ${article.title || `文章-${article.id}`}`,
+    '',
+    `- 导出时间：${fmtDateTime(new Date())}`,
+    `- 统计范围：${rangeText}`,
+    `- 发布时间：${fmtDateTime(article.publishTime)}`,
+    `- 文章ID：${article.id}`,
+    `- 微信文章ID：${article.wxArticleId || '--'}`,
+    '',
+    '## 核心数据',
+    '| 指标 | 值 |',
+    '| --- | ---: |',
+    `| 阅读人数 | ${fmtNum(article.readCount)} |`,
+    `| 送达人数 | ${fmtNum(article.sendCount)} |`,
+    `| 完读率 | ${fmtPercent(article.completionRate, 1)} |`,
+    `| 分享数 | ${fmtNum(article.shareCount)} |`,
+    `| 点赞数 | ${fmtNum(article.likeCount)} |`,
+    `| 在看数 | ${fmtNum(article.wowCount)} |`,
+    `| 留言数 | ${fmtNum(article.commentCount)} |`,
+    `| 收藏数 | ${fmtNum(article.saveCount)} |`,
+    `| 新增关注 | ${fmtNum(article.newFollowers)} |`,
+    `| 平均阅读时长 | ${fmtDuration(article.avgReadTimeSec)} |`,
+    `| 推荐率 | ${fmtPercent(recommendRateByArticle(article), 1)} |`,
+    '',
+    '## 流量来源',
+    buildTrafficMarkdownTable(article),
+    '',
+    '## 正文',
+    body || '_暂无正文内容_',
+    '',
+  ].join('\n');
+}
+
+function buildSummaryMarkdown(rangeText: string, articles: WorkspaceArticleCard[], fileNamesById: Map<number, string>) {
+  const metrics = buildBatchAverageMetrics(articles);
+  const sorted = [...articles].sort((a, b) => sortValue(b, 'publish') - sortValue(a, 'publish'));
+  return [
+    `# 文章导出汇总（${rangeText}）`,
+    '',
+    `- 导出时间：${fmtDateTime(new Date())}`,
+    `- 文章数量：${articles.length}`,
+    '',
+    '## 汇总指标（当前时间范围）',
+    '| 指标 | 值 |',
+    '| --- | ---: |',
+    `| 平均阅读 | ${fmtNum1(metrics.avgReadValue)} |`,
+    `| 平均完读率 | ${fmtPercent(metrics.completionRate, 1)} |`,
+    `| 平均推荐率 | ${fmtPercent(metrics.recommendRate, 1)} |`,
+    `| 平均分享 | ${fmtNum1(metrics.shareValue)} |`,
+    `| 平均点赞 | ${fmtNum1(metrics.likeValue)} |`,
+    `| 平均留言 | ${fmtNum1(metrics.commentValue)} |`,
+    `| 平均新增关注 | ${fmtNum1(metrics.newFollowersValue)} |`,
+    '',
+    '## 文章文件清单',
+    '| 文件名 | 发布时间 | 标题 | 阅读 | 完读率 | 推荐率 | 分享 | 新增关注 |',
+    '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |',
+    ...sorted.map((article) => `| ${escapeMarkdownCell(fileNamesById.get(article.id) || '--')} | ${fmtDateTime(article.publishTime)} | ${escapeMarkdownCell(article.title || '--')} | ${fmtNum(article.readCount)} | ${fmtPercent(article.completionRate, 1)} | ${fmtPercent(recommendRateByArticle(article), 1)} | ${fmtNum(article.shareCount)} | ${fmtNum(article.newFollowers)} |`),
+    '',
+  ].join('\n');
+}
+
+async function writeMarkdownFile(directory: DirectoryHandleLike, fileName: string, content: string) {
+  const fileHandle = await directory.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable({ keepExistingData: false });
+  await writable.write(content);
+  await writable.close();
+}
+
+async function listAllArticlesByRange(range: RangeCode) {
+  const result = new Map<number, WorkspaceArticleCard>();
+  let page = 1;
+  const size = 100;
+  while (true) {
+    const response = await WorkspaceApi.articles(range, page, size);
+    response.records.forEach((item) => {
+      result.set(item.id, item);
+    });
+    if (result.size >= response.total || response.records.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+  return Array.from(result.values()).sort((a, b) => sortValue(b, 'publish') - sortValue(a, 'publish'));
+}
+
 export default function GzhDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -589,6 +722,8 @@ export default function GzhDetailPage() {
   const [sortKey, setSortKey] = useState<SortKey>('publish');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
 
   useEffect(() => {
     document.title = '\u516c\u4f17\u53f7\u8fd0\u8425\u52a9\u624b \u00b7 \u6570\u636e\u8be6\u60c5';
@@ -721,6 +856,63 @@ export default function GzhDetailPage() {
   const panelHint = panelMode === 'article'
     ? `已选文章：${selectedArticleName}`
     : `当前筛选样本：${shownArticles.length} 篇`;
+
+  const handleExportData = async () => {
+    if (exporting) return;
+    const picker = (window as Window & { showDirectoryPicker?: () => Promise<DirectoryHandleLike> }).showDirectoryPicker;
+    if (!picker) {
+      setExportStatus('当前浏览器不支持目录导出，请使用最新版 Chrome。');
+      return;
+    }
+
+    try {
+      setExporting(true);
+      setExportStatus('');
+
+      const directory = await picker();
+
+      const buildArticleFileName = (article: WorkspaceArticleCard) => {
+        const titlePart = sanitizeFileName(article.title || `article-${article.id}`) || `article-${article.id}`;
+        const publishPart = formatDateForFile(article.publishTime);
+        return `${publishPart}_${titlePart}_${article.id}.md`;
+      };
+
+      if (selectedArticle) {
+        const fileName = buildArticleFileName(selectedArticle);
+        await writeMarkdownFile(directory, fileName, buildArticleMarkdown(selectedArticle, rangeText));
+        setExportStatus(`导出完成：${fileName}`);
+        return;
+      }
+
+      const rangeArticles = await listAllArticlesByRange(range);
+      if (rangeArticles.length === 0) {
+        setExportStatus('当前时间范围暂无可导出的文章。');
+        return;
+      }
+
+      const fileNamesById = new Map<number, string>();
+      for (const article of rangeArticles) {
+        const fileName = buildArticleFileName(article);
+        await writeMarkdownFile(directory, fileName, buildArticleMarkdown(article, rangeText));
+        fileNamesById.set(article.id, fileName);
+      }
+
+      const summaryName = `summary_${range}_${formatDateForFile(new Date())}.md`;
+      const summaryMarkdown = buildSummaryMarkdown(rangeText, rangeArticles, fileNamesById);
+      await writeMarkdownFile(directory, summaryName, summaryMarkdown);
+
+      setExportStatus(`导出完成：${rangeArticles.length} 篇文章 + 1 个汇总文件`);
+    } catch (error) {
+      const err = error as { name?: string; message?: string };
+      if (err?.name === 'AbortError') {
+        setExportStatus('已取消导出。');
+      } else {
+        setExportStatus(`导出失败：${err?.message || '未知错误'}`);
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="gzh-v2-root gzh-v2-detail">
@@ -861,11 +1053,18 @@ export default function GzhDetailPage() {
           <div className="period-card">
             <div className="period-head">
               <div className="period-title">{panelTitle}</div>
-              <button className="btn btn-ghost" type="button" style={{ height: '30px', fontSize: '11px', padding: '0 12px' }}>
-                导出数据
+              <button
+                className="btn btn-ghost"
+                type="button"
+                style={{ height: '30px', fontSize: '11px', padding: '0 12px' }}
+                onClick={() => void handleExportData()}
+                disabled={exporting}
+              >
+                {exporting ? '导出中...' : '导出数据'}
               </button>
             </div>
             <div className="metric-sub" style={{ marginTop: '-6px', marginBottom: '10px' }}>{panelHint}</div>
+            {exportStatus ? <div className="metric-sub" style={{ marginTop: '-4px', marginBottom: '10px' }}>{exportStatus}</div> : null}
             <div className="kpi-3grid">
               <div className="kpi-3item key">
                 <div className="kpi-3label" style={{ color: '#139D84' }}>推荐率（主决策指标）</div>

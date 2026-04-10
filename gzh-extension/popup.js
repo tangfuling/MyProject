@@ -11,6 +11,7 @@ const statusText = document.getElementById('statusText');
 const countText = document.getElementById('countText');
 const stepText = document.getElementById('stepText');
 const summaryText = document.getElementById('summaryText');
+const syncRangeSelect = document.getElementById('syncRange');
 const primaryBtn = document.getElementById('primaryBtn');
 const secondaryBtn = document.getElementById('secondaryBtn');
 const HTTP_CONFIG = globalThis.GzhHttpConfig;
@@ -21,11 +22,29 @@ const API_BASE_URL = HTTP_CONFIG.getBaseUrl();
 const STAGE_LABELS = HTTP_CONFIG.stageLabels;
 const RUNNING_STAGES = new Set(HTTP_CONFIG.runningStages);
 const DEFAULT_WEB_BASE = HTTP_CONFIG.getDefaultWebBase();
+const DEFAULT_SYNC_RANGE_CODE = '30d';
+const SYNC_RANGE_OPTIONS = [
+  { code: '30d', label: '最近30天' },
+  { code: '60d', label: '最近60天' },
+  { code: '90d', label: '最近90天' },
+  { code: 'all', label: '全部' },
+];
 
 let latestAuthToken = '';
 let latestLastSync = null;
 let currentState = null;
 let webBase = DEFAULT_WEB_BASE;
+let selectedSyncRangeCode = DEFAULT_SYNC_RANGE_CODE;
+
+function normalizeSyncRangeCode(rawCode) {
+  const code = String(rawCode || '').trim().toLowerCase();
+  return SYNC_RANGE_OPTIONS.some((item) => item.code === code) ? code : DEFAULT_SYNC_RANGE_CODE;
+}
+
+function syncRangeLabelByCode(rawCode) {
+  const code = normalizeSyncRangeCode(rawCode);
+  return (SYNC_RANGE_OPTIONS.find((item) => item.code === code) || SYNC_RANGE_OPTIONS[0]).label;
+}
 
 function normalizeWebBase(raw) {
   if (HTTP_CONFIG.isDebug) {
@@ -63,7 +82,9 @@ function withDefaultState(state) {
   }
   return {
     stage: 'ready',
-    message: latestLastSync ? `上次同步：${formatTime(latestLastSync.updatedAt)}` : '已登录，可开始同步',
+    message: latestLastSync
+      ? `上次同步：${formatTime(latestLastSync.updatedAt)} · 当前范围：${syncRangeLabelByCode(selectedSyncRangeCode)}`
+      : `已登录，可开始同步（${syncRangeLabelByCode(selectedSyncRangeCode)}）`,
     progress: 0,
     synced: 0,
     total: latestLastSync?.total || 0,
@@ -272,6 +293,10 @@ function renderButtons(state) {
 
   secondaryBtn.dataset.action = secondaryAction;
   secondaryBtn.textContent = secondaryText;
+
+  if (syncRangeSelect instanceof HTMLSelectElement) {
+    syncRangeSelect.disabled = RUNNING_STAGES.has(state.stage);
+  }
 }
 
 function renderState(rawState) {
@@ -301,6 +326,9 @@ function openWeb(needLogin) {
 }
 
 function triggerSync() {
+  if (syncRangeSelect instanceof HTMLSelectElement) {
+    syncRangeSelect.disabled = true;
+  }
   chrome.runtime.sendMessage({ type: 'trigger-sync' }, (result) => {
     if (!result?.ok) {
       renderState({ stage: 'error', message: `无法开始同步: ${result?.error || '未知错误'}`, progress: 0 });
@@ -342,15 +370,19 @@ function handleAction(action) {
 }
 
 function loadConfig() {
-  chrome.storage.local.get(['gzhAuthToken', 'gzhWebBase', 'gzhLastSync'], (result) => {
+  chrome.storage.local.get(['gzhAuthToken', 'gzhWebBase', 'gzhLastSync', 'gzhSyncRangeCode'], (result) => {
     latestAuthToken = result.gzhAuthToken || '';
     latestLastSync = result.gzhLastSync || null;
     webBase = normalizeWebBase(result.gzhWebBase || DEFAULT_WEB_BASE);
+    selectedSyncRangeCode = normalizeSyncRangeCode(result.gzhSyncRangeCode);
 
     authTokenInput.value = latestAuthToken;
     apiBaseInput.value = API_BASE_URL;
     apiBaseInput.disabled = true;
     webBaseInput.value = webBase;
+    if (syncRangeSelect instanceof HTMLSelectElement) {
+      syncRangeSelect.value = selectedSyncRangeCode;
+    }
 
     chrome.runtime.sendMessage({ type: 'get-state' }, (state) => {
       renderState(state);
@@ -360,10 +392,14 @@ function loadConfig() {
 
 saveBtn.addEventListener('click', () => {
   latestAuthToken = authTokenInput.value.trim();
+  if (syncRangeSelect instanceof HTMLSelectElement) {
+    selectedSyncRangeCode = normalizeSyncRangeCode(syncRangeSelect.value);
+  }
   chrome.storage.local.set(
     {
       gzhAuthToken: latestAuthToken,
       gzhWebBase: normalizeWebBase(webBaseInput.value || DEFAULT_WEB_BASE),
+      gzhSyncRangeCode: selectedSyncRangeCode,
     },
     () => {
       webBase = normalizeWebBase(webBaseInput.value || DEFAULT_WEB_BASE);
@@ -371,6 +407,15 @@ saveBtn.addEventListener('click', () => {
     }
   );
 });
+
+if (syncRangeSelect instanceof HTMLSelectElement) {
+  syncRangeSelect.addEventListener('change', () => {
+    selectedSyncRangeCode = normalizeSyncRangeCode(syncRangeSelect.value);
+    chrome.storage.local.set({ gzhSyncRangeCode: selectedSyncRangeCode }, () => {
+      renderState(currentState);
+    });
+  });
+}
 
 primaryBtn.addEventListener('click', () => handleAction(primaryBtn.dataset.action || 'start'));
 secondaryBtn.addEventListener('click', () => handleAction(secondaryBtn.dataset.action || 'open-web'));
@@ -387,6 +432,19 @@ chrome.runtime.onMessage.addListener((message) => {
       };
     }
     renderState(message.payload);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') {
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(changes, 'gzhSyncRangeCode')) {
+    selectedSyncRangeCode = normalizeSyncRangeCode(changes.gzhSyncRangeCode?.newValue);
+    if (syncRangeSelect instanceof HTMLSelectElement) {
+      syncRangeSelect.value = selectedSyncRangeCode;
+    }
+    renderState(currentState);
   }
 });
 

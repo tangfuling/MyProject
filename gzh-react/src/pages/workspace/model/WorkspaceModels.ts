@@ -75,6 +75,8 @@ export type WorkspaceArticleCard = {
   id: number;
   wxArticleId: string;
   title: string;
+  content?: string;
+  wordCount?: number;
   publishTime?: string;
   readCount: number;
   sendCount: number;

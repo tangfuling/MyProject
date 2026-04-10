@@ -45,6 +45,33 @@
   const MAX_ARTICLES_PER_RUN = 300;
   const ARTICLE_PAGE_CACHE_MAX = 320;
   const ARTICLE_CONTENT_MAX_LENGTH = 20000;
+  const ARTICLE_CONTENT_SELECTORS = [
+    '#js_content',
+    '#img-content #js_content',
+    '#img-content .rich_media_content',
+    '.rich_media_content#js_content',
+    '.rich_media_content',
+  ];
+  const ARTICLE_CONTENT_REMOVE_SELECTORS = [
+    'script',
+    'style',
+    'noscript',
+    'iframe',
+    'object',
+    'embed',
+    'form',
+    '#js_toobar3',
+    '#js_report_article3',
+    '#js_recommend_list',
+    '#js_pc_qr_code',
+    '.qr_code_pc_outer',
+    '.rich_media_tool',
+    '.reward_area',
+    '.js_not_in_mm',
+    '.js_product_section',
+    '.js_video_channel_card_container',
+    '.js_related_article',
+  ];
   const UPLOAD_BATCH_SIZE = 10;
 
   let latestAuthToken = '';
@@ -1193,10 +1220,56 @@
     });
   }
 
+  function normalizeArticleContentText(rawText) {
+    return String(rawText || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, ARTICLE_CONTENT_MAX_LENGTH);
+  }
+
+  function findArticleContentNode(doc) {
+    if (!doc) {
+      return null;
+    }
+    for (const selector of ARTICLE_CONTENT_SELECTORS) {
+      const one = doc.querySelector(selector);
+      if (!one) {
+        continue;
+      }
+      if (String(one.textContent || '').trim()) {
+        return one;
+      }
+    }
+    return null;
+  }
+
+  function stripNoiseNodes(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') {
+      return;
+    }
+    ARTICLE_CONTENT_REMOVE_SELECTORS.forEach((selector) => {
+      root.querySelectorAll(selector).forEach((node) => node.remove());
+    });
+  }
+
   function extractArticleTextFromHtml(html) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(String(html || ''), 'text/html');
-    return (doc.body?.innerText || '').trim().slice(0, ARTICLE_CONTENT_MAX_LENGTH);
+    const contentNode = findArticleContentNode(doc);
+    const target = contentNode ? contentNode.cloneNode(true) : doc.body?.cloneNode(true);
+    if (!target) {
+      return '';
+    }
+    stripNoiseNodes(target);
+    const contentText = normalizeArticleContentText(target.innerText || target.textContent || '');
+    if (contentText) {
+      return contentText;
+    }
+    return normalizeArticleContentText(doc.body?.innerText || '');
   }
 
   async function fetchArticlePageData(secureUrl) {

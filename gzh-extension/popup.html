@@ -36,6 +36,16 @@
         <div id="summaryText" class="summary-text"></div>
       </div>
 
+      <div class="range-row">
+        <label class="range-label" for="syncRange">同步范围</label>
+        <select id="syncRange" class="field-input range-select">
+          <option value="30d">最近30天</option>
+          <option value="60d">最近60天</option>
+          <option value="90d">最近90天</option>
+          <option value="all">全部</option>
+        </select>
+      </div>
+
       <div class="action-row">
         <button id="primaryBtn" class="btn btn-primary" type="button">开始同步</button>
         <button id="secondaryBtn" class="btn btn-outline" type="button">前往运营助手</button>

@@ -310,6 +310,23 @@ body {
   line-height: 1.5;
 }
 
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 10px;
+}
+
+.range-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.range-select {
+  height: 34px;
+}
+
 .action-row {
   display: flex;
   gap: 8px;
