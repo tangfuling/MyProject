@@ -51,6 +51,14 @@ function syncRangeLabelByCode(rawCode) {
   ).label;
 }
 
+function buildWorkspacePath() {
+  const query = new URLSearchParams();
+  query.set('range', normalizeSyncRangeCode(selectedSyncRangeCode));
+  query.set('from', 'plugin');
+  query.set('autoAnalysis', '1');
+  return `/gzh/workspace?${query.toString()}`;
+}
+
 function normalizeWebBase(raw) {
   if (HTTP_CONFIG.isDebug) {
     return DEFAULT_WEB_BASE;
@@ -372,9 +380,10 @@ function renderState(rawState) {
 
 function openWeb(needLogin) {
   const base = normalizeWebBase(webBase);
+  const workspacePath = buildWorkspacePath();
   const url = needLogin
-    ? `${base}/gzh?openLogin=1&redirect=%2Fgzh%2Fworkspace`
-    : `${base}/gzh/workspace`;
+    ? `${base}/gzh?openLogin=1&redirect=${encodeURIComponent(workspacePath)}`
+    : `${base}${workspacePath}`;
   chrome.tabs.create({ url });
 }
 
@@ -453,7 +462,7 @@ function handleAction(action) {
     return;
   }
   if (action === 'open-workspace') {
-    chrome.tabs.create({ url: `${normalizeWebBase(webBase)}/gzh/workspace` });
+    chrome.tabs.create({ url: `${normalizeWebBase(webBase)}${buildWorkspacePath()}` });
     return;
   }
   if (action === 'refresh-mp') {

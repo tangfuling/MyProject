@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { RoutePath } from '../../../common/router/RoutePath';
@@ -14,6 +14,13 @@ import WorkspaceApi from '../../workspace/api/WorkspaceApi';
 import './GzhPages.css';
 
 type RangeCode = '7d' | '30d' | '60d' | '90d' | 'all';
+
+function parseRangeCode(raw: string | null): RangeCode {
+  if (raw === '7d' || raw === '30d' || raw === '60d' || raw === '90d' || raw === 'all') {
+    return raw;
+  }
+  return '30d';
+}
 
 type UiMessage = {
   id: string;
@@ -256,11 +263,12 @@ function mapHistory(msg: ChatMessage): UiMessage {
 
 export default function GzhWorkspacePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const profile = useAuthStore((s) => s.profile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
 
-  const [range, setRange] = useState<RangeCode>('30d');
+  const [range, setRange] = useState<RangeCode>(() => parseRangeCode(searchParams.get('range')));
   const [modelOpen, setModelOpen] = useState(false);
 
   const [analysisDetail, setAnalysisDetail] = useState<AnalysisReport | null>(null);
@@ -284,10 +292,15 @@ export default function GzhWorkspacePage() {
   const analysisAbortRef = useRef<AbortController | null>(null);
   const analysisLiveRef = useRef('');
   const analysisTickerRef = useRef<number | null>(null);
+  const pluginAutoAnalysisTriggeredRef = useRef(false);
+  const autoAnalysisCleanupTimerRef = useRef<number | null>(null);
   const chatTypingTargetIdRef = useRef<string | null>(null);
   const chatTypingBufferRef = useRef('');
   const chatTypingDoneRef = useRef(false);
   const chatTypingTimerRef = useRef<number | null>(null);
+
+  const fromPlugin = searchParams.get('from') === 'plugin';
+  const needAutoAnalysis = searchParams.get('autoAnalysis') === '1';
 
   const overviewQuery = useQuery({
     queryKey: ['workspace-overview', range],
@@ -466,6 +479,21 @@ export default function GzhWorkspacePage() {
   }, []);
 
   useEffect(() => {
+    const nextRange = parseRangeCode(searchParams.get('range'));
+    setRange((prev) => (prev === nextRange ? prev : nextRange));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const currentRange = parseRangeCode(searchParams.get('range'));
+    if (currentRange === range) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('range', range);
+    setSearchParams(nextParams, { replace: true });
+  }, [range, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (!historyQuery.data || chatMessages.length > 0) return;
     setChatMessages(historyQuery.data.map(mapHistory));
   }, [historyQuery.data, chatMessages.length]);
@@ -482,6 +510,10 @@ export default function GzhWorkspacePage() {
       analysisAbortRef.current?.abort();
       stopAnalysisTicker();
       stopChatTyping(false);
+      if (autoAnalysisCleanupTimerRef.current !== null) {
+        window.clearTimeout(autoAnalysisCleanupTimerRef.current);
+        autoAnalysisCleanupTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -568,6 +600,29 @@ export default function GzhWorkspacePage() {
       }
     );
   };
+
+  useEffect(() => {
+    if (!fromPlugin || !needAutoAnalysis) {
+      return;
+    }
+    if (!overviewQuery.isSuccess) {
+      return;
+    }
+    if (pluginAutoAnalysisTriggeredRef.current || analysisGenerating) {
+      return;
+    }
+    pluginAutoAnalysisTriggeredRef.current = true;
+    runAnalysis();
+    if (autoAnalysisCleanupTimerRef.current !== null) {
+      window.clearTimeout(autoAnalysisCleanupTimerRef.current);
+    }
+    autoAnalysisCleanupTimerRef.current = window.setTimeout(() => {
+      const nextParams = new URLSearchParams(window.location.search);
+      nextParams.delete('autoAnalysis');
+      setSearchParams(nextParams, { replace: true });
+      autoAnalysisCleanupTimerRef.current = null;
+    }, 1200);
+  }, [analysisGenerating, fromPlugin, needAutoAnalysis, overviewQuery.isSuccess, runAnalysis, setSearchParams]);
 
   const submitPrompt = (text: string) => {
     const content = text.trim();

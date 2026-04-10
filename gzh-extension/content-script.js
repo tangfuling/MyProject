@@ -291,6 +291,14 @@
     return syncRangeOptionByCode(rawCode).label;
   }
 
+  function buildWorkspacePath() {
+    const query = new URLSearchParams();
+    query.set('range', normalizeSyncRangeCode(selectedSyncRangeCode));
+    query.set('from', 'plugin');
+    query.set('autoAnalysis', '1');
+    return `/gzh/workspace?${query.toString()}`;
+  }
+
   function buildSyncRangeOptionsHtml() {
     return SYNC_RANGE_OPTIONS
       .map((item) => `<option value="${item.code}">${item.label}</option>`)
@@ -713,7 +721,8 @@
   async function handlePanelAction(action) {
     const webBase = await getWebBase();
     const webHome = `${webBase}/gzh`;
-    const workspace = `${webBase}/gzh/workspace`;
+    const workspacePath = buildWorkspacePath();
+    const workspace = `${webBase}${workspacePath}`;
 
     if (action === 'start') {
       openPanel();
@@ -739,10 +748,10 @@
       try {
         const url = new URL(webHome);
         url.searchParams.set('openLogin', '1');
-        url.searchParams.set('redirect', '/gzh/workspace');
+        url.searchParams.set('redirect', workspacePath);
         window.open(url.toString(), '_blank', 'noopener,noreferrer');
       } catch {
-        window.open(`${webHome}?openLogin=1&redirect=%2Fgzh%2Fworkspace`, '_blank', 'noopener,noreferrer');
+        window.open(`${webHome}?openLogin=1&redirect=${encodeURIComponent(workspacePath)}`, '_blank', 'noopener,noreferrer');
       }
       return;
     }
