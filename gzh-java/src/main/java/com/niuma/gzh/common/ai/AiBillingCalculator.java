@@ -81,6 +81,29 @@ public class AiBillingCalculator {
         return charge.intValue();
     }
 
-    public record TokenUsage(int inputTokens, int outputTokens) {
+    public static class TokenUsage {
+        private final int inputTokens;
+        private final int outputTokens;
+
+        public TokenUsage(int inputTokens, int outputTokens) {
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
+        }
+
+        public int inputTokens() {
+            return inputTokens;
+        }
+
+        public int outputTokens() {
+            return outputTokens;
+        }
+
+        public int getInputTokens() {
+            return inputTokens;
+        }
+
+        public int getOutputTokens() {
+            return outputTokens;
+        }
     }
 }

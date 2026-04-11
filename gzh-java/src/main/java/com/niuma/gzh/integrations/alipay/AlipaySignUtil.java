@@ -2,6 +2,7 @@ package com.niuma.gzh.integrations.alipay;
 
 import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
@@ -74,7 +75,7 @@ public final class AlipaySignUtil {
         for (Map.Entry<String, String> entry : entries) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (value == null || value.isBlank() || "sign".equals(key)) {
+            if (value == null || value.trim().isEmpty() || "sign".equals(key)) {
                 continue;
             }
             if (!includeSignType && "sign_type".equals(key)) {
@@ -107,9 +108,17 @@ public final class AlipaySignUtil {
                 sb.append('&');
             }
             sb.append(entry.getKey()).append('=')
-                .append(URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8));
+                .append(encodeUtf8(entry.getValue()));
         }
         return sb.toString();
+    }
+
+    private static String encodeUtf8(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("UTF-8 not supported", e);
+        }
     }
 
     private static PrivateKey loadPrivateKey(String privateKeyPem) throws Exception {

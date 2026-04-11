@@ -12,7 +12,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class TokenAuthInterceptor implements HandlerInterceptor {
 
-    private static final List<String> OPEN_PATH_PREFIX = List.of(
+    private static final List<String> OPEN_PATH_PREFIX = com.niuma.gzh.common.util.J8.listOf(
         "/auth/",
         "/payment/notify",
         "/uploads/",
@@ -38,7 +38,7 @@ public class TokenAuthInterceptor implements HandlerInterceptor {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
         String token = authHeader.substring("Bearer ".length()).trim();
-        if (token.isBlank()) {
+        if (token.trim().isEmpty()) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
         try {

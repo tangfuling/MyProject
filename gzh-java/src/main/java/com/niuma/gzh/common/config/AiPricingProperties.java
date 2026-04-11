@@ -34,7 +34,7 @@ public class AiPricingProperties {
         Map<String, ModelPricing> normalized = new LinkedHashMap<>();
         for (Map.Entry<String, ModelPricing> entry : models.entrySet()) {
             String modelCode = normalizeModelCode(entry.getKey());
-            if (modelCode.isBlank() || entry.getValue() == null) {
+            if (modelCode.trim().isEmpty() || entry.getValue() == null) {
                 continue;
             }
             ModelPricing pricing = entry.getValue();
@@ -80,7 +80,7 @@ public class AiPricingProperties {
 
     private static ModelPricing defaultQwen35Pricing() {
         ModelPricing pricing = new ModelPricing();
-        pricing.setTiers(new ArrayList<>(List.of(
+        pricing.setTiers(new ArrayList<>(com.niuma.gzh.common.util.J8.listOf(
             tier(131072, 20, 200),
             tier(262144, 80, 800),
             tier(1_000_000, 120, 1200)
@@ -90,7 +90,7 @@ public class AiPricingProperties {
 
     private static ModelPricing defaultQwen36Pricing() {
         ModelPricing pricing = new ModelPricing();
-        pricing.setTiers(new ArrayList<>(List.of(
+        pricing.setTiers(new ArrayList<>(com.niuma.gzh.common.util.J8.listOf(
             tier(262144, 200, 1200),
             tier(1_000_000, 800, 4800)
         )));

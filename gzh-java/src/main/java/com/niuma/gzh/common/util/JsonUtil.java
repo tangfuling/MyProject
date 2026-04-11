@@ -34,7 +34,7 @@ public class JsonUtil {
     }
 
     public Map<String, Integer> toIntMap(String json) {
-        if (json == null || json.isBlank()) {
+        if (json == null || json.trim().isEmpty()) {
             return Collections.emptyMap();
         }
         try {
@@ -45,7 +45,7 @@ public class JsonUtil {
     }
 
     public Map<String, Double> toDoubleMap(String json) {
-        if (json == null || json.isBlank()) {
+        if (json == null || json.trim().isEmpty()) {
             return Collections.emptyMap();
         }
         try {

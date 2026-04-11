@@ -42,7 +42,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class UserServiceImpl extends BaseService implements UserService {
     private static final long MAX_AVATAR_BYTES = 2L * 1024 * 1024;
-    private static final Set<String> ALLOWED_IMAGE_EXT = Set.of(
+    private static final Set<String> ALLOWED_IMAGE_EXT = com.niuma.gzh.common.util.J8.setOf(
         "jpg", "jpeg", "png", "gif", "webp", "bmp"
     );
     private static final Pattern TECHNICAL_MP_ID_PATTERN = Pattern.compile("^(gh_|wxid_)[a-z0-9_]{4,}$", Pattern.CASE_INSENSITIVE);
@@ -198,7 +198,7 @@ public class UserServiceImpl extends BaseService implements UserService {
             vo.setCostCent(record.getCostCent());
             vo.setCreatedAt(record.getCreatedAt());
             return vo;
-        }).toList();
+        }).collect(java.util.stream.Collectors.toList());
         return new PageResult<>(page, size, result.getTotal(), items);
     }
 
@@ -267,14 +267,14 @@ public class UserServiceImpl extends BaseService implements UserService {
     }
 
     private String resolveDisplayName(UserEntity user) {
-        if (user != null && user.getDisplayName() != null && !user.getDisplayName().isBlank()) {
+        if (user != null && user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
             return user.getDisplayName().trim();
         }
         return defaultDisplayNameByPhone(user == null ? null : user.getPhone());
     }
 
     private String resolveMpAccountName(UserEntity user) {
-        if (user != null && user.getMpAccountName() != null && !user.getMpAccountName().isBlank()) {
+        if (user != null && user.getMpAccountName() != null && !user.getMpAccountName().trim().isEmpty()) {
             String normalized = user.getMpAccountName().trim();
             if (!isTechnicalMpId(normalized)) {
                 return normalized;
@@ -284,7 +284,7 @@ public class UserServiceImpl extends BaseService implements UserService {
     }
 
     private String defaultDisplayNameByPhone(String phone) {
-        if (phone == null || phone.isBlank()) {
+        if (phone == null || phone.trim().isEmpty()) {
             return "\u516c\u4f17\u53f7\u8d26\u53f7";
         }
         String normalized = phone.trim();
@@ -360,7 +360,7 @@ public class UserServiceImpl extends BaseService implements UserService {
     }
 
     private boolean isTechnicalMpId(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.trim().isEmpty()) {
             return false;
         }
         return TECHNICAL_MP_ID_PATTERN.matcher(value.trim()).matches();

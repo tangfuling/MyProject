@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class AiClientFactory {
-    private static final Set<AiModelProvider> SUPPORTED_QWEN_MODELS = Set.of(
+    private static final Set<AiModelProvider> SUPPORTED_QWEN_MODELS = com.niuma.gzh.common.util.J8.setOf(
         AiModelProvider.QWEN_3_5,
         AiModelProvider.QWEN_3_6
     );
@@ -49,7 +49,7 @@ public class AiClientFactory {
     }
 
     private AiModelProvider resolveProvider(String modelCode) {
-        if (modelCode == null || modelCode.isBlank()) {
+        if (modelCode == null || modelCode.trim().isEmpty()) {
             return defaultProvider;
         }
         AiModelProvider provider = AiModelProvider.fromCode(modelCode);

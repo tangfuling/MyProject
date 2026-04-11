@@ -18,7 +18,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
         String headerTraceId = request.getHeader("X-Trace-Id");
-        String traceId = (headerTraceId == null || headerTraceId.isBlank())
+        String traceId = (headerTraceId == null || headerTraceId.trim().isEmpty())
             ? UUID.randomUUID().toString().replace("-", "")
             : headerTraceId;
         MDC.put(TRACE_ID, traceId);

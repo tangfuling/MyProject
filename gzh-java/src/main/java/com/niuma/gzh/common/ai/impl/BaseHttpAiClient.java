@@ -11,12 +11,13 @@ import com.niuma.gzh.common.ai.AiToolCall;
 import com.niuma.gzh.common.ai.AiToolDefinition;
 import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,12 +27,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public abstract class BaseHttpAiClient implements AiClient {
 
-    protected final HttpClient httpClient;
     protected final ObjectMapper objectMapper;
     protected final int timeoutMs;
 
     protected BaseHttpAiClient(ObjectMapper objectMapper, int timeoutMs) {
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         this.objectMapper = objectMapper;
         this.timeoutMs = timeoutMs;
     }
@@ -46,7 +45,7 @@ public abstract class BaseHttpAiClient implements AiClient {
         try {
             List<Map<String, Object>> messages = buildOpenAiMessages(request);
 
-            Map<String, Object> body = new LinkedHashMap<>();
+            Map<String, Object> body = new LinkedHashMap<String, Object>();
             body.put("model", model);
             body.put("messages", messages);
             body.put("temperature", 0.7);
@@ -58,35 +57,31 @@ public abstract class BaseHttpAiClient implements AiClient {
             }
 
             String payload = objectMapper.writeValueAsString(body);
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint))
-                .timeout(Duration.ofMillis(timeoutMs))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(payload));
-            for (Map.Entry<String, String> header : extraHeaders.entrySet()) {
-                builder.header(header.getKey(), header.getValue());
+            Map<String, String> headers = new LinkedHashMap<String, String>();
+            headers.put("Authorization", "Bearer " + apiKey);
+            if (extraHeaders != null) {
+                headers.putAll(extraHeaders);
             }
 
-            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResult response = postJson(endpoint, payload, headers);
             long elapsedMs = System.currentTimeMillis() - startedAt;
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            if (response.statusCode < 200 || response.statusCode >= 300) {
                 log.warn("[tfling][ai.http] failed provider=openai-compatible, model={}, endpoint={}, status={}, elapsedMs={}, body={}",
                     model,
                     endpoint,
-                    response.statusCode(),
+                    response.statusCode,
                     elapsedMs,
-                    trimForLog(response.body(), 600));
-                throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "模型调用失败: " + response.body());
+                    trimForLog(response.body, 600));
+                throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "模型调用失败: " + response.body);
             }
 
-            JsonNode json = objectMapper.readTree(response.body());
+            JsonNode json = objectMapper.readTree(response.body);
             JsonNode messageNode = json.path("choices").path(0).path("message");
             String content = messageNode.path("content").isMissingNode() || messageNode.path("content").isNull()
                 ? ""
                 : messageNode.path("content").asText("");
 
-            List<AiToolCall> toolCalls = new ArrayList<>();
+            List<AiToolCall> toolCalls = new ArrayList<AiToolCall>();
             JsonNode toolCallsNode = messageNode.path("tool_calls");
             if (toolCallsNode.isArray()) {
                 for (JsonNode call : toolCallsNode) {
@@ -95,7 +90,7 @@ public abstract class BaseHttpAiClient implements AiClient {
                     String args = function.path("arguments").isMissingNode()
                         ? "{}"
                         : function.path("arguments").asText("{}");
-                    if (!name.isBlank()) {
+                    if (!isBlank(name)) {
                         toolCalls.add(new AiToolCall(name, args));
                     }
                 }
@@ -104,10 +99,7 @@ public abstract class BaseHttpAiClient implements AiClient {
             int inputTokens = json.path("usage").path("prompt_tokens").asInt(estimateTokens(request.userPrompt()));
             int outputTokens = json.path("usage").path("completion_tokens").asInt(estimateTokens(content));
             return new AiGenerateResult(content, inputTokens, outputTokens, toolCalls);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (IOException e) {
             log.error("[tfling][ai.http] exception provider=openai-compatible, model={}, endpoint={}, elapsedMs={}, message={}",
                 model,
                 endpoint,
@@ -126,7 +118,7 @@ public abstract class BaseHttpAiClient implements AiClient {
         try {
             List<Map<String, Object>> messages = buildClaudeMessages(request);
 
-            Map<String, Object> body = new LinkedHashMap<>();
+            Map<String, Object> body = new LinkedHashMap<String, Object>();
             body.put("model", model);
             body.put("system", request.systemPrompt());
             body.put("messages", messages);
@@ -135,33 +127,30 @@ public abstract class BaseHttpAiClient implements AiClient {
             List<Map<String, Object>> tools = buildClaudeTools(request.safeTools());
             if (!tools.isEmpty()) {
                 body.put("tools", tools);
-                body.put("tool_choice", Map.of("type", "auto"));
+                Map<String, Object> toolChoice = new LinkedHashMap<String, Object>();
+                toolChoice.put("type", "auto");
+                body.put("tool_choice", toolChoice);
             }
 
             String payload = objectMapper.writeValueAsString(body);
-            HttpRequest requestObj = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint))
-                .timeout(Duration.ofMillis(timeoutMs))
-                .header("Content-Type", "application/json")
-                .header("x-api-key", apiKey)
-                .header("anthropic-version", "2023-06-01")
-                .POST(HttpRequest.BodyPublishers.ofString(payload))
-                .build();
+            Map<String, String> headers = new LinkedHashMap<String, String>();
+            headers.put("x-api-key", apiKey);
+            headers.put("anthropic-version", "2023-06-01");
+            HttpResult response = postJson(endpoint, payload, headers);
 
-            HttpResponse<String> response = httpClient.send(requestObj, HttpResponse.BodyHandlers.ofString());
             long elapsedMs = System.currentTimeMillis() - startedAt;
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            if (response.statusCode < 200 || response.statusCode >= 300) {
                 log.warn("[tfling][ai.http] failed provider=claude, model={}, endpoint={}, status={}, elapsedMs={}, body={}",
                     model,
                     endpoint,
-                    response.statusCode(),
+                    response.statusCode,
                     elapsedMs,
-                    trimForLog(response.body(), 600));
-                throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "Claude 调用失败: " + response.body());
+                    trimForLog(response.body, 600));
+                throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "Claude 调用失败: " + response.body);
             }
 
-            JsonNode json = objectMapper.readTree(response.body());
-            List<AiToolCall> toolCalls = new ArrayList<>();
+            JsonNode json = objectMapper.readTree(response.body);
+            List<AiToolCall> toolCalls = new ArrayList<AiToolCall>();
             StringBuilder contentBuilder = new StringBuilder();
             JsonNode contentNodes = json.path("content");
             if (contentNodes.isArray()) {
@@ -175,7 +164,7 @@ public abstract class BaseHttpAiClient implements AiClient {
                         String inputJson = item.path("input").isMissingNode()
                             ? "{}"
                             : objectMapper.writeValueAsString(item.path("input"));
-                        if (!name.isBlank()) {
+                        if (!isBlank(name)) {
                             toolCalls.add(new AiToolCall(name, inputJson));
                         }
                     }
@@ -186,10 +175,7 @@ public abstract class BaseHttpAiClient implements AiClient {
             int inputTokens = json.path("usage").path("input_tokens").asInt(estimateTokens(request.userPrompt()));
             int outputTokens = json.path("usage").path("output_tokens").asInt(estimateTokens(content));
             return new AiGenerateResult(content, inputTokens, outputTokens, toolCalls);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (IOException e) {
             log.error("[tfling][ai.http] exception provider=claude, model={}, endpoint={}, elapsedMs={}, message={}",
                 model,
                 endpoint,
@@ -200,45 +186,46 @@ public abstract class BaseHttpAiClient implements AiClient {
     }
 
     private List<Map<String, Object>> buildOpenAiMessages(AiGenerateRequest request) {
-        List<Map<String, Object>> messages = new ArrayList<>();
-        if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
-            messages.add(Map.of("role", "system", "content", request.systemPrompt()));
+        List<Map<String, Object>> messages = new ArrayList<Map<String, Object>>();
+        if (request.systemPrompt() != null && !isBlank(request.systemPrompt())) {
+            messages.add(mapOf("role", "system", "content", request.systemPrompt()));
         }
         for (AiMessage item : request.safeHistory()) {
-            messages.add(Map.of("role", item.role(), "content", item.content()));
+            messages.add(mapOf("role", item.role(), "content", item.content()));
         }
-        messages.add(Map.of("role", "user", "content", request.userPrompt()));
+        messages.add(mapOf("role", "user", "content", request.userPrompt()));
         return messages;
     }
 
     private List<Map<String, Object>> buildClaudeMessages(AiGenerateRequest request) {
-        List<Map<String, Object>> messages = new ArrayList<>();
+        List<Map<String, Object>> messages = new ArrayList<Map<String, Object>>();
         for (AiMessage item : request.safeHistory()) {
-            messages.add(Map.of("role", item.role(), "content", item.content()));
+            messages.add(mapOf("role", item.role(), "content", item.content()));
         }
-        messages.add(Map.of("role", "user", "content", request.userPrompt()));
+        messages.add(mapOf("role", "user", "content", request.userPrompt()));
         return messages;
     }
 
     private List<Map<String, Object>> buildOpenAiTools(List<AiToolDefinition> defs) {
-        List<Map<String, Object>> tools = new ArrayList<>();
+        List<Map<String, Object>> tools = new ArrayList<Map<String, Object>>();
         for (AiToolDefinition def : defs) {
-            tools.add(Map.of(
+            Map<String, Object> function = mapOf(
+                "name", def.name(),
+                "description", def.description(),
+                "parameters", def.jsonSchema()
+            );
+            tools.add(mapOf(
                 "type", "function",
-                "function", Map.of(
-                    "name", def.name(),
-                    "description", def.description(),
-                    "parameters", def.jsonSchema()
-                )
+                "function", function
             ));
         }
         return tools;
     }
 
     private List<Map<String, Object>> buildClaudeTools(List<AiToolDefinition> defs) {
-        List<Map<String, Object>> tools = new ArrayList<>();
+        List<Map<String, Object>> tools = new ArrayList<Map<String, Object>>();
         for (AiToolDefinition def : defs) {
-            tools.add(Map.of(
+            tools.add(mapOf(
                 "name", def.name(),
                 "description", def.description(),
                 "input_schema", def.jsonSchema()
@@ -248,7 +235,7 @@ public abstract class BaseHttpAiClient implements AiClient {
     }
 
     protected int estimateTokens(String text) {
-        if (text == null || text.isBlank()) {
+        if (isBlank(text)) {
             return 0;
         }
         return Math.max(1, text.length() / 2);
@@ -263,13 +250,13 @@ public abstract class BaseHttpAiClient implements AiClient {
     }
 
     private void ensureApiKey(String apiKey) {
-        if (apiKey == null || apiKey.isBlank()) {
+        if (isBlank(apiKey)) {
             throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "AI API Key 未配置");
         }
     }
 
     private String trimForLog(String text, int maxChars) {
-        if (text == null || text.isBlank()) {
+        if (isBlank(text)) {
             return "";
         }
         String normalized = text.replace('\n', ' ').replace('\r', ' ').trim();
@@ -277,5 +264,80 @@ public abstract class BaseHttpAiClient implements AiClient {
             return normalized;
         }
         return normalized.substring(0, maxChars) + "...";
+    }
+
+    private HttpResult postJson(String endpoint, String payload, Map<String, String> headers) throws IOException {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(timeoutMs);
+            connection.setReadTimeout(timeoutMs);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            if (headers != null) {
+                for (Map.Entry<String, String> header : headers.entrySet()) {
+                    connection.setRequestProperty(header.getKey(), header.getValue());
+                }
+            }
+
+            byte[] bytes = payload == null ? new byte[0] : payload.getBytes(StandardCharsets.UTF_8);
+            connection.setRequestProperty("Content-Length", String.valueOf(bytes.length));
+            OutputStream outputStream = connection.getOutputStream();
+            try {
+                outputStream.write(bytes);
+                outputStream.flush();
+            } finally {
+                outputStream.close();
+            }
+
+            int statusCode = connection.getResponseCode();
+            String body = readResponseBody(connection, statusCode);
+            return new HttpResult(statusCode, body);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private String readResponseBody(HttpURLConnection connection, int statusCode) throws IOException {
+        InputStream stream = statusCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
+        if (stream == null) {
+            return "";
+        }
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = stream.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            return output.toString(StandardCharsets.UTF_8.name());
+        } finally {
+            stream.close();
+        }
+    }
+
+    private boolean isBlank(String text) {
+        return text == null || text.trim().isEmpty();
+    }
+
+    private Map<String, Object> mapOf(Object... pairs) {
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            map.put(String.valueOf(pairs[i]), pairs[i + 1]);
+        }
+        return map;
+    }
+
+    private static final class HttpResult {
+        private final int statusCode;
+        private final String body;
+
+        private HttpResult(int statusCode, String body) {
+            this.statusCode = statusCode;
+            this.body = body;
+        }
     }
 }

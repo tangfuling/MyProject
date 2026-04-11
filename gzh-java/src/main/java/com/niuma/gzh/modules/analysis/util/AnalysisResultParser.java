@@ -1,6 +1,7 @@
 package com.niuma.gzh.modules.analysis.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -10,7 +11,7 @@ public final class AnalysisResultParser {
     }
 
     public static Parsed parse(String content) {
-        if (content == null || content.isBlank()) {
+        if (isBlank(content)) {
             return Parsed.empty();
         }
 
@@ -18,9 +19,9 @@ public final class AnalysisResultParser {
         String stage = "";
         String rhythm = "";
         String riskHint = "";
-        List<String> findings = new ArrayList<>();
-        List<String> actions = new ArrayList<>();
-        List<String> questions = new ArrayList<>();
+        List<String> findings = new ArrayList<String>();
+        List<String> actions = new ArrayList<String>();
+        List<String> questions = new ArrayList<String>();
 
         Section section = Section.NONE;
         String[] lines = content.split("\\R");
@@ -37,53 +38,59 @@ public final class AnalysisResultParser {
             }
 
             switch (section) {
-                case SIGNAL -> {
-                    if (signalOverview.isBlank()) {
+                case SIGNAL:
+                    if (isBlank(signalOverview)) {
                         signalOverview = line;
                     }
-                }
-                case STAGE -> {
-                    if (stage.isBlank()) {
+                    break;
+                case STAGE:
+                    if (isBlank(stage)) {
                         stage = line;
                     }
-                }
-                case FINDINGS -> findings.add(line);
-                case ACTIONS -> actions.add(line);
-                case RHYTHM -> {
-                    if (rhythm.isBlank()) {
+                    break;
+                case FINDINGS:
+                    findings.add(line);
+                    break;
+                case ACTIONS:
+                    actions.add(line);
+                    break;
+                case RHYTHM:
+                    if (isBlank(rhythm)) {
                         rhythm = line;
                     }
-                }
-                case RISK -> {
-                    if (riskHint.isBlank()) {
+                    break;
+                case RISK:
+                    if (isBlank(riskHint)) {
                         riskHint = line;
                     }
-                }
-                case QUESTIONS -> {
+                    break;
+                case QUESTIONS:
                     String question = normalizeQuestion(line);
-                    if (!question.isBlank()) {
+                    if (!isBlank(question)) {
                         questions.add(question);
                     }
-                }
-                case NONE -> {
-                    if (signalOverview.isBlank() && likelySignalSentence(line)) {
+                    break;
+                case NONE:
+                    if (isBlank(signalOverview) && likelySignalSentence(line)) {
                         signalOverview = line;
                     }
-                    if (stage.isBlank() && likelyStageSentence(line)) {
+                    if (isBlank(stage) && likelyStageSentence(line)) {
                         stage = line;
                     }
-                    String question = normalizeQuestion(line);
-                    if (!question.isBlank()) {
-                        questions.add(question);
+                    String guessedQuestion = normalizeQuestion(line);
+                    if (!isBlank(guessedQuestion)) {
+                        questions.add(guessedQuestion);
                     }
-                    if (line.contains("风险") && riskHint.isBlank()) {
+                    if (line.contains("风险") && isBlank(riskHint)) {
                         riskHint = line;
                     }
-                }
+                    break;
+                default:
+                    break;
             }
         }
 
-        if (riskHint.isBlank()) {
+        if (isBlank(riskHint)) {
             for (String rawLine : lines) {
                 String line = normalizeLine(rawLine);
                 if (line.contains("风险")) {
@@ -93,7 +100,7 @@ public final class AnalysisResultParser {
             }
         }
 
-        if (signalOverview.isBlank() && !findings.isEmpty()) {
+        if (isBlank(signalOverview) && !findings.isEmpty()) {
             signalOverview = findings.get(0);
         }
 
@@ -105,7 +112,7 @@ public final class AnalysisResultParser {
     }
 
     public static String toSummary(String content) {
-        if (content == null || content.isBlank()) {
+        if (isBlank(content)) {
             return "暂无分析摘要";
         }
         String text = content.replace('\n', ' ').replace('\r', ' ').replaceAll("\\s+", " ").trim();
@@ -189,7 +196,7 @@ public final class AnalysisResultParser {
     }
 
     private static String normalizeQuestion(String line) {
-        if (line == null || line.isBlank()) {
+        if (isBlank(line)) {
             return "";
         }
         String text = line.trim();
@@ -210,7 +217,7 @@ public final class AnalysisResultParser {
     }
 
     private static List<String> uniqueLimited(List<String> values, int maxSize) {
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        LinkedHashSet<String> unique = new LinkedHashSet<String>();
         for (String value : values) {
             if (value == null) {
                 continue;
@@ -224,7 +231,11 @@ public final class AnalysisResultParser {
                 break;
             }
         }
-        return List.copyOf(unique);
+        return Collections.unmodifiableList(new ArrayList<String>(unique));
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private enum Section {
@@ -238,17 +249,89 @@ public final class AnalysisResultParser {
         QUESTIONS
     }
 
-    public record Parsed(
-        String signalOverview,
-        String stage,
-        List<String> findings,
-        List<String> actionSuggestions,
-        String rhythm,
-        String riskHint,
-        List<String> suggestedQuestions
-    ) {
+    public static class Parsed {
+        private final String signalOverview;
+        private final String stage;
+        private final List<String> findings;
+        private final List<String> actionSuggestions;
+        private final String rhythm;
+        private final String riskHint;
+        private final List<String> suggestedQuestions;
+
+        public Parsed(String signalOverview,
+                      String stage,
+                      List<String> findings,
+                      List<String> actionSuggestions,
+                      String rhythm,
+                      String riskHint,
+                      List<String> suggestedQuestions) {
+            this.signalOverview = signalOverview;
+            this.stage = stage;
+            this.findings = findings;
+            this.actionSuggestions = actionSuggestions;
+            this.rhythm = rhythm;
+            this.riskHint = riskHint;
+            this.suggestedQuestions = suggestedQuestions;
+        }
+
         public static Parsed empty() {
-            return new Parsed("", "", List.of(), List.of(), "", "", List.of());
+            return new Parsed("", "", Collections.<String>emptyList(), Collections.<String>emptyList(), "", "", Collections.<String>emptyList());
+        }
+
+        public String signalOverview() {
+            return signalOverview;
+        }
+
+        public String stage() {
+            return stage;
+        }
+
+        public List<String> findings() {
+            return findings;
+        }
+
+        public List<String> actionSuggestions() {
+            return actionSuggestions;
+        }
+
+        public String rhythm() {
+            return rhythm;
+        }
+
+        public String riskHint() {
+            return riskHint;
+        }
+
+        public List<String> suggestedQuestions() {
+            return suggestedQuestions;
+        }
+
+        public String getSignalOverview() {
+            return signalOverview;
+        }
+
+        public String getStage() {
+            return stage;
+        }
+
+        public List<String> getFindings() {
+            return findings;
+        }
+
+        public List<String> getActionSuggestions() {
+            return actionSuggestions;
+        }
+
+        public String getRhythm() {
+            return rhythm;
+        }
+
+        public String getRiskHint() {
+            return riskHint;
+        }
+
+        public List<String> getSuggestedQuestions() {
+            return suggestedQuestions;
         }
     }
 }

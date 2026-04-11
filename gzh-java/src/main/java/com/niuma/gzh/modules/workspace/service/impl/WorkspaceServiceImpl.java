@@ -62,7 +62,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
             AnalysisReportEntity latestReport = analysisReportRepository.latestByUser(userId);
             WorkspaceOverviewVO.AnalysisPanel analysisPanel = buildAnalysisPanel(latestReport);
             vo.setAnalysisPanel(analysisPanel);
-            vo.setQuickQuestions(analysisPanel.getSuggestedQuestions() == null ? List.of() : analysisPanel.getSuggestedQuestions());
+            vo.setQuickQuestions(analysisPanel.getSuggestedQuestions() == null ? com.niuma.gzh.common.util.J8.listOf() : analysisPanel.getSuggestedQuestions());
 
             vo.setArticles(buildArticles(allArticles, 8));
             return vo;
@@ -76,19 +76,19 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     private WorkspaceOverviewVO.Header buildHeader(UserEntity user, UserProfileVO profile) {
         WorkspaceOverviewVO.Header header = new WorkspaceOverviewVO.Header();
         String accountName = normalizeMpAccountName(profile == null ? null : profile.getMpAccountName());
-        if (accountName == null || accountName.isBlank()) {
+        if (accountName == null || accountName.trim().isEmpty()) {
             accountName = normalizeMpAccountName(user == null ? null : user.getMpAccountName());
         }
-        if (accountName == null || accountName.isBlank()) {
+        if (accountName == null || accountName.trim().isEmpty()) {
             accountName = profile == null ? null : normalizeDisplayName(profile.getDisplayName());
         }
-        if (accountName == null || accountName.isBlank()) {
+        if (accountName == null || accountName.trim().isEmpty()) {
             accountName = user == null ? null : normalizeDisplayName(user.getDisplayName());
         }
-        if (accountName == null || accountName.isBlank()) {
+        if (accountName == null || accountName.trim().isEmpty()) {
             String phone = user == null || user.getPhone() == null ? "" : user.getPhone().trim();
             String suffix = phone.length() <= 4 ? phone : phone.substring(phone.length() - 4);
-            accountName = suffix.isBlank() ? "公众号账号" : ("公众号" + suffix);
+            accountName = suffix.trim().isEmpty() ? "公众号账号" : ("公众号" + suffix);
         }
         header.setAccountName(accountName);
         header.setPhoneMasked(profile.getPhone());
@@ -101,7 +101,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     }
 
     private String normalizeMpAccountName(String rawName) {
-        if (rawName == null || rawName.isBlank()) {
+        if (rawName == null || rawName.trim().isEmpty()) {
             return "";
         }
         String normalized = rawName.trim();
@@ -112,7 +112,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     }
 
     private String normalizeDisplayName(String rawName) {
-        if (rawName == null || rawName.isBlank()) {
+        if (rawName == null || rawName.trim().isEmpty()) {
             return "";
         }
         return rawName.trim();
@@ -161,11 +161,11 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
             panel.setArticleCount(0);
             panel.setSignalOverview("等待千问生成信号概览");
             panel.setStage("");
-            panel.setFindings(List.of());
+            panel.setFindings(com.niuma.gzh.common.util.J8.listOf());
             panel.setRhythm("");
             panel.setRiskHint("等待千问生成风险提示");
-            panel.setActionSuggestions(List.of());
-            panel.setSuggestedQuestions(List.of());
+            panel.setActionSuggestions(com.niuma.gzh.common.util.J8.listOf());
+            panel.setSuggestedQuestions(com.niuma.gzh.common.util.J8.listOf());
             panel.setContent("");
             return panel;
         }
@@ -198,7 +198,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     private List<WorkspaceOverviewVO.TrendPoint> buildTrend(List<ArticleVO> allArticles, int maxCount) {
         List<ArticleVO> sorted = allArticles.stream()
             .sorted(Comparator.comparing(ArticleVO::getPublishTime, Comparator.nullsLast(Comparator.naturalOrder())))
-            .toList();
+            .collect(java.util.stream.Collectors.toList());
 
         int start = Math.max(0, sorted.size() - maxCount);
         List<WorkspaceOverviewVO.TrendPoint> trend = new ArrayList<>();
@@ -240,8 +240,8 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
     }
 
     private List<String> parseQuestions(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
+        if (json == null || json.trim().isEmpty()) {
+            return com.niuma.gzh.common.util.J8.listOf();
         }
         try {
             List<?> raw = jsonUtil.fromJson(json, List.class);
@@ -260,7 +260,7 @@ public class WorkspaceServiceImpl extends BaseService implements WorkspaceServic
             }
             return result;
         } catch (Exception ignore) {
-            return List.of();
+            return com.niuma.gzh.common.util.J8.listOf();
         }
     }
 

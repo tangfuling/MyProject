@@ -62,7 +62,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     private static final String SOURCE_CHAT = "\u804a\u5929\u4f1a\u8bdd";
     private static final String SOURCE_SEARCH = "\u641c\u4e00\u641c";
     private static final String SOURCE_OTHER = "\u5176\u5b83";
-    private static final List<String> SOURCE_ORDER = List.of(
+    private static final List<String> SOURCE_ORDER = com.niuma.gzh.common.util.J8.listOf(
         SOURCE_FRIEND,
         SOURCE_MESSAGE,
         SOURCE_RECOMMEND,
@@ -72,13 +72,13 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         SOURCE_OTHER
     );
 
-    private static final List<DateTimeFormatter> LOCAL_DATE_TIME_FORMATTERS = List.of(
+    private static final List<DateTimeFormatter> LOCAL_DATE_TIME_FORMATTERS = com.niuma.gzh.common.util.J8.listOf(
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
     );
-    private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = List.of(
+    private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = com.niuma.gzh.common.util.J8.listOf(
         DateTimeFormatter.ISO_LOCAL_DATE,
         DateTimeFormatter.ofPattern("yyyy/MM/dd")
     );
@@ -139,7 +139,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
                 newCount++;
             } else {
                 existed.setTitle(item.getTitle());
-                if (item.getContent() != null && !item.getContent().isBlank()) {
+                if (item.getContent() != null && !item.getContent().trim().isEmpty()) {
                     existed.setContent(item.getContent());
                 }
                 existed.setWordCount(item.getWordCount() == null ? existed.getWordCount() : item.getWordCount());
@@ -222,11 +222,11 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             }
         }
 
-        List<SyncArticlesDTO.SyncIssueItem> syncIssues = dto.getSyncIssues() == null ? List.of() : dto.getSyncIssues();
+        List<SyncArticlesDTO.SyncIssueItem> syncIssues = dto.getSyncIssues() == null ? com.niuma.gzh.common.util.J8.listOf() : dto.getSyncIssues();
         int syncIssueLimit = Math.min(syncIssues.size(), MAX_SYNC_ISSUES_PER_REQUEST);
         for (int i = 0; i < syncIssueLimit; i++) {
             SyncArticlesDTO.SyncIssueItem issueItem = syncIssues.get(i);
-            if (issueItem == null || issueItem.getIssueType() == null || issueItem.getIssueType().isBlank()) {
+            if (issueItem == null || issueItem.getIssueType() == null || issueItem.getIssueType().trim().isEmpty()) {
                 continue;
             }
             SyncIssueLogEntity issueLog = new SyncIssueLogEntity();
@@ -278,14 +278,14 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
         long pageSize = query.getSize() == null || query.getSize() <= 0 ? 20L : query.getSize();
         Page<ArticleEntity> page = articleRepository.pageByUserAndRange(userId, start, end, pageNo, pageSize);
 
-        List<ArticleVO> list = page.getRecords().stream().map(this::toArticleVO).toList();
+        List<ArticleVO> list = page.getRecords().stream().map(this::toArticleVO).collect(java.util.stream.Collectors.toList());
         return new PageResult<>(pageNo, pageSize, page.getTotal(), list);
     }
 
     @Override
     public OverviewVO overview(String range) {
         Long userId = AuthContext.requiredUserId();
-        String realRange = range == null || range.isBlank() ? "all" : range;
+        String realRange = range == null || range.trim().isEmpty() ? "all" : range;
         log.info("[tfling][article.overview] start userId={}, inputRange={}, realRange={}", userId, range, realRange);
 
         int days = RangeUtil.toDays(realRange);
@@ -337,7 +337,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     @Override
     public List<ArticleVO> listRangeArticles(String range, int limit) {
         Long userId = AuthContext.requiredUserId();
-        String realRange = range == null || range.isBlank() ? "all" : range;
+        String realRange = range == null || range.trim().isEmpty() ? "all" : range;
         LocalDateTime start = RangeUtil.rangeStart(realRange);
         LocalDateTime end = LocalDateTime.now();
         List<ArticleEntity> list = articleRepository.listByUserAndRange(userId, start, end);
@@ -708,7 +708,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
 
     private Map<String, Object> compactIssueDetails(Map<String, Object> details) {
         if (details == null || details.isEmpty()) {
-            return Map.of();
+            return com.niuma.gzh.common.util.J8.mapOf();
         }
         Map<String, Object> compact = new LinkedHashMap<>();
         int kept = 0;
@@ -771,7 +771,7 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
     }
 
     private LocalDateTime parseDateTime(String text) {
-        if (text == null || text.isBlank()) {
+        if (text == null || text.trim().isEmpty()) {
             return null;
         }
         String trimmed = text.trim();
@@ -828,23 +828,59 @@ public class ArticleServiceImpl extends BaseService implements ArticleService {
             || normalized.contains("（已删除）");
     }
 
-    private record MetricsBundle(
-        int articleCount,
-        int totalRead,
-        int totalSend,
-        int avgRead,
-        double completionRate,
-        int totalShare,
-        int totalLike,
-        int totalWow,
-        int totalComment,
-        int newFollowers,
-        int avgReadTimeSec,
-        double followRate,
-        double shareRate,
-        double likeRate,
-        double wowRate,
-        double commentRate,
-        Map<String, Integer> trafficPercent
-    ) {}
+    private static final class MetricsBundle {
+        private final int articleCount;
+        private final int totalRead;
+        private final int totalSend;
+        private final int avgRead;
+        private final double completionRate;
+        private final int totalShare;
+        private final int totalLike;
+        private final int totalWow;
+        private final int totalComment;
+        private final int newFollowers;
+        private final int avgReadTimeSec;
+        private final double followRate;
+        private final double shareRate;
+        private final double likeRate;
+        private final double wowRate;
+        private final double commentRate;
+        private final Map<String, Integer> trafficPercent;
+
+        private MetricsBundle(int articleCount,
+                              int totalRead,
+                              int totalSend,
+                              int avgRead,
+                              double completionRate,
+                              int totalShare,
+                              int totalLike,
+                              int totalWow,
+                              int totalComment,
+                              int newFollowers,
+                              int avgReadTimeSec,
+                              double followRate,
+                              double shareRate,
+                              double likeRate,
+                              double wowRate,
+                              double commentRate,
+                              Map<String, Integer> trafficPercent) {
+            this.articleCount = articleCount;
+            this.totalRead = totalRead;
+            this.totalSend = totalSend;
+            this.avgRead = avgRead;
+            this.completionRate = completionRate;
+            this.totalShare = totalShare;
+            this.totalLike = totalLike;
+            this.totalWow = totalWow;
+            this.totalComment = totalComment;
+            this.newFollowers = newFollowers;
+            this.avgReadTimeSec = avgReadTimeSec;
+            this.followRate = followRate;
+            this.shareRate = shareRate;
+            this.likeRate = likeRate;
+            this.wowRate = wowRate;
+            this.commentRate = commentRate;
+            this.trafficPercent = trafficPercent;
+        }
+    }
 }

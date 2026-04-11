@@ -32,6 +32,6 @@ public class GptAiClient extends BaseHttpAiClient {
 
     @Override
     public AiGenerateResult generate(AiGenerateRequest request) {
-        return callOpenAiCompatible(endpoint, apiKey, model, request, Map.of());
+        return callOpenAiCompatible(endpoint, apiKey, model, request, com.niuma.gzh.common.util.J8.mapOf());
     }
 }

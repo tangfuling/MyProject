@@ -67,7 +67,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     @Override
     public SseEmitter generate(GenerateAnalysisDTO dto) {
         Long userId = AuthContext.requiredUserId();
-        String range = dto.getRange() == null || dto.getRange().isBlank() ? "30d" : dto.getRange();
+        String range = dto.getRange() == null || dto.getRange().trim().isEmpty() ? "30d" : dto.getRange();
 
         SseEmitter emitter = new SseEmitter(0L);
         CompletableFuture.runAsync(() -> runGenerate(userId, range, emitter));
@@ -115,7 +115,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     public PageResult<AnalysisReportVO> reports(long page, long size) {
         Long userId = AuthContext.requiredUserId();
         Page<AnalysisReportEntity> result = analysisReportRepository.pageByUser(userId, page, size);
-        List<AnalysisReportVO> records = result.getRecords().stream().map(this::toVO).toList();
+        List<AnalysisReportVO> records = result.getRecords().stream().map(this::toVO).collect(java.util.stream.Collectors.toList());
         return new PageResult<>(page, size, result.getTotal(), records);
     }
 
@@ -147,7 +147,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             AiClient client = aiClientFactory.getByModelCode(user.getAiModel());
             AiModelProvider provider = aiClientFactory.getProvider(user.getAiModel());
             sendStatusQuietly(emitter, "calling_model", "正在调用千问生成分析");
-            AiGenerateResult aiResult = client.generate(new AiGenerateRequest(systemPrompt, userPrompt, List.of()));
+            AiGenerateResult aiResult = client.generate(new AiGenerateRequest(systemPrompt, userPrompt, com.niuma.gzh.common.util.J8.listOf()));
             String content = normalizeMarkdownSpacing(aiResult.content());
 
             sendStatusQuietly(emitter, "streaming", "主分析完成，正在回传内容");
@@ -160,7 +160,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             List<String> suggestedQuestions = structured.suggestedQuestions();
             int totalInputTokens = aiResult.inputTokens() + structuredResult.extraInputTokens;
             int totalOutputTokens = aiResult.outputTokens() + structuredResult.extraOutputTokens;
-            int costCent = aiBillingCalculator.calcTotalCostCent(provider, List.of(
+            int costCent = aiBillingCalculator.calcTotalCostCent(provider, com.niuma.gzh.common.util.J8.listOf(
                 new AiBillingCalculator.TokenUsage(aiResult.inputTokens(), aiResult.outputTokens()),
                 new AiBillingCalculator.TokenUsage(structuredResult.extraInputTokens, structuredResult.extraOutputTokens)
             ));
@@ -205,7 +205,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 ex.getMessage(),
                 ex);
             try {
-                sendEvent(emitter, Map.of("type", "error", "message", friendlyErrorMessage(ex)));
+                sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf("type", "error", "message", friendlyErrorMessage(ex)));
             } catch (IOException ignored) {
             }
             emitter.complete();
@@ -216,7 +216,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
 
     private void sendStatusQuietly(SseEmitter emitter, String phase, String message) {
         try {
-            sendEvent(emitter, Map.of(
+            sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf(
                 "type", "status",
                 "phase", phase,
                 "message", message
@@ -282,8 +282,8 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     }
 
     private List<String> parseQuestions(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
+        if (json == null || json.trim().isEmpty()) {
+            return com.niuma.gzh.common.util.J8.listOf();
         }
         try {
             List<?> raw = jsonUtil.fromJson(json, List.class);
@@ -300,9 +300,9 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                     break;
                 }
             }
-            return List.copyOf(result);
+            return com.niuma.gzh.common.util.J8.listCopyOf(result);
         } catch (Exception ignored) {
-            return List.of();
+            return com.niuma.gzh.common.util.J8.listOf();
         }
     }
 
@@ -354,7 +354,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
             AiGenerateResult extractResult = client.generate(new AiGenerateRequest(
                 "你是严格的 JSON 提取器。你只能输出 JSON，不要输出任何解释。",
                 prompt,
-                List.of()
+                com.niuma.gzh.common.util.J8.listOf()
             ));
             StructuredExtract payload = parseStructuredExtract(extractResult.content());
             if (payload == null) {
@@ -372,11 +372,11 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
 
     private boolean isStructuredComplete(AnalysisResultParser.Parsed parsed) {
         return parsed != null
-            && parsed.signalOverview() != null && !parsed.signalOverview().isBlank()
-            && parsed.stage() != null && !parsed.stage().isBlank()
+            && parsed.signalOverview() != null && !parsed.signalOverview().trim().isEmpty()
+            && parsed.stage() != null && !parsed.stage().trim().isEmpty()
             && parsed.findings() != null && !parsed.findings().isEmpty()
             && parsed.actionSuggestions() != null && !parsed.actionSuggestions().isEmpty()
-            && parsed.riskHint() != null && !parsed.riskHint().isBlank()
+            && parsed.riskHint() != null && !parsed.riskHint().trim().isEmpty()
             && parsed.suggestedQuestions() != null && parsed.suggestedQuestions().size() >= 3;
     }
 
@@ -394,11 +394,11 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     }
 
     private StructuredExtract parseStructuredExtract(String text) {
-        if (text == null || text.isBlank()) {
+        if (text == null || text.trim().isEmpty()) {
             return null;
         }
         String json = extractFirstJsonObject(text);
-        if (json == null || json.isBlank()) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
         try {
@@ -436,13 +436,14 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
 
     private List<String> firstStringList(Map<String, Object> map, String... keys) {
         if (map == null || map.isEmpty()) {
-            return List.of();
+            return com.niuma.gzh.common.util.J8.listOf();
         }
         for (String key : keys) {
             Object value = map.get(key);
-            if (!(value instanceof List<?> raw)) {
+            if (!(value instanceof List<?>)) {
                 continue;
             }
+            List<?> raw = (List<?>) value;
             List<String> result = new ArrayList<>();
             for (Object item : raw) {
                 if (item == null) {
@@ -454,10 +455,10 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
                 }
             }
             if (!result.isEmpty()) {
-                return List.copyOf(result);
+                return com.niuma.gzh.common.util.J8.listCopyOf(result);
             }
         }
-        return List.of();
+        return com.niuma.gzh.common.util.J8.listOf();
     }
 
     private String extractFirstJsonObject(String text) {
@@ -491,23 +492,23 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         return new AnalysisResultParser.Parsed(
             signalOverview,
             stage,
-            findings == null ? List.of() : findings,
-            actions == null ? List.of() : actions,
+            findings == null ? com.niuma.gzh.common.util.J8.listOf() : findings,
+            actions == null ? com.niuma.gzh.common.util.J8.listOf() : actions,
             rhythm,
             riskHint,
-            questions == null ? List.of() : questions
+            questions == null ? com.niuma.gzh.common.util.J8.listOf() : questions
         );
     }
 
     private String mergeText(String parsedText, String extractedText) {
-        if (parsedText != null && !parsedText.isBlank()) {
+        if (parsedText != null && !parsedText.trim().isEmpty()) {
             return parsedText;
         }
         return extractedText == null ? "" : extractedText.trim();
     }
 
     private String normalizeMarkdownSpacing(String text) {
-        if (text == null || text.isBlank()) {
+        if (text == null || text.trim().isEmpty()) {
             return "";
         }
         String normalized = text
@@ -526,11 +527,11 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     private static class StructuredExtract {
         private String signalOverview = "";
         private String stage = "";
-        private List<String> findings = List.of();
-        private List<String> actionSuggestions = List.of();
+        private List<String> findings = com.niuma.gzh.common.util.J8.listOf();
+        private List<String> actionSuggestions = com.niuma.gzh.common.util.J8.listOf();
         private String rhythm = "";
         private String riskHint = "";
-        private List<String> suggestedQuestions = List.of();
+        private List<String> suggestedQuestions = com.niuma.gzh.common.util.J8.listOf();
     }
 
     private static class StructuredResult {
@@ -546,15 +547,18 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
     }
 
     private String friendlyErrorMessage(Exception ex) {
-        if (ex instanceof BizException bizException && bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
-            String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-            if (message.contains("timed out") || message.contains("timeout")) {
-                return "千问响应超时，请稍后重试或切换千问版本";
+        if (ex instanceof BizException) {
+            BizException bizException = (BizException) ex;
+            if (bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
+                String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+                if (message.contains("timed out") || message.contains("timeout")) {
+                    return "千问响应超时，请稍后重试或切换千问版本";
+                }
+                return "当前千问模型暂时不可用，请切换千问版本后重试";
             }
-            return "当前千问模型暂时不可用，请切换千问版本后重试";
         }
         String message = ex.getMessage();
-        if (message == null || message.isBlank()) {
+        if (message == null || message.trim().isEmpty()) {
             return "生成失败，请稍后重试";
         }
         return message;
@@ -568,7 +572,7 @@ public class AnalysisServiceImpl extends BaseService implements AnalysisService 
         for (int i = 0; i < content.length(); i += chunkSize) {
             int end = Math.min(content.length(), i + chunkSize);
             String chunk = content.substring(i, end);
-            sendEvent(emitter, Map.of("type", "chunk", "content", chunk));
+            sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf("type", "chunk", "content", chunk));
         }
     }
 

@@ -88,16 +88,16 @@ public class AuthServiceImpl extends BaseService implements AuthService {
     }
 
     private String resolveDisplayName(UserEntity user) {
-        if (user != null && user.getDisplayName() != null && !user.getDisplayName().isBlank()) {
+        if (user != null && user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
             return user.getDisplayName().trim();
         }
         String phone = user == null || user.getPhone() == null ? "" : user.getPhone().trim();
         String suffix = phone.length() <= 4 ? phone : phone.substring(phone.length() - 4);
-        return suffix.isBlank() ? "\u516c\u4f17\u53f7\u8d26\u53f7" : ("\u516c\u4f17\u53f7" + suffix);
+        return suffix.trim().isEmpty() ? "\u516c\u4f17\u53f7\u8d26\u53f7" : ("\u516c\u4f17\u53f7" + suffix);
     }
 
     private String resolveMpAccountName(UserEntity user) {
-        if (user != null && user.getMpAccountName() != null && !user.getMpAccountName().isBlank()) {
+        if (user != null && user.getMpAccountName() != null && !user.getMpAccountName().trim().isEmpty()) {
             String normalized = user.getMpAccountName().trim();
             if (!TECHNICAL_MP_ID_PATTERN.matcher(normalized).matches()) {
                 return normalized;

@@ -68,7 +68,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CreatePaymentVO create(CreatePaymentDTO dto) {
-        if (appId == null || appId.isBlank() || privateKey == null || privateKey.isBlank()) {
+        if (appId == null || appId.trim().isEmpty() || privateKey == null || privateKey.trim().isEmpty()) {
             throw new BizException(ErrorCode.THIRD_PARTY_ERROR.getCode(), "支付宝配置不完整");
         }
         Long userId = AuthContext.requiredUserId();
@@ -80,7 +80,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         order.setAmountCent(dto.getAmountCent());
         order.setChannel("alipay");
         order.setStatus("PENDING");
-        order.setSubject(dto.getSubject() == null || dto.getSubject().isBlank() ? "公众号助手充值" : dto.getSubject());
+        order.setSubject(dto.getSubject() == null || dto.getSubject().trim().isEmpty() ? "公众号助手充值" : dto.getSubject());
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
 
@@ -102,7 +102,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
             page,
             size,
             result.getTotal(),
-            result.getRecords().stream().map(this::toVO).toList()
+            result.getRecords().stream().map(this::toVO).collect(java.util.stream.Collectors.toList())
         );
     }
 
@@ -110,7 +110,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     @Transactional(rollbackFor = Exception.class)
     public String notify(Map<String, String> params) {
         String sign = params.get("sign");
-        if (sign == null || sign.isBlank()) {
+        if (sign == null || sign.trim().isEmpty()) {
             return "failure";
         }
         if (!AlipaySignUtil.verify(params, alipayPublicKey, sign)) {
@@ -123,10 +123,10 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
         String totalAmount = params.get("total_amount");
         String callbackAppId = params.get("app_id");
 
-        if (outTradeNo == null || outTradeNo.isBlank()) {
+        if (outTradeNo == null || outTradeNo.trim().isEmpty()) {
             return "failure";
         }
-        if (callbackAppId != null && !callbackAppId.isBlank() && !callbackAppId.equals(appId)) {
+        if (callbackAppId != null && !callbackAppId.trim().isEmpty() && !callbackAppId.equals(appId)) {
             return "failure";
         }
 
@@ -166,7 +166,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     }
 
     private String buildPayUrl(PaymentOrderEntity order) {
-        String bizContent = jsonUtil.toJson(Map.of(
+        String bizContent = jsonUtil.toJson(com.niuma.gzh.common.util.J8.mapOf(
             "out_trade_no", order.getOrderNo(),
             "product_code", "FAST_INSTANT_TRADE_PAY",
             "total_amount", centToYuan(order.getAmountCent()),
@@ -198,7 +198,7 @@ public class PaymentServiceImpl extends BaseService implements PaymentService {
     }
 
     private Integer parseAmountToCent(String amountText) {
-        if (amountText == null || amountText.isBlank()) {
+        if (amountText == null || amountText.trim().isEmpty()) {
             return null;
         }
         try {

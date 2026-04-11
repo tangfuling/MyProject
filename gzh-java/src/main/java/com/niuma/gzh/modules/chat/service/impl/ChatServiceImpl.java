@@ -76,7 +76,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     @Override
     public SseEmitter send(ChatSendDTO dto) {
         Long userId = AuthContext.requiredUserId();
-        String sessionId = dto.getSessionId() == null || dto.getSessionId().isBlank() ? IdUtil.sessionId() : dto.getSessionId();
+        String sessionId = dto.getSessionId() == null || dto.getSessionId().trim().isEmpty() ? IdUtil.sessionId() : dto.getSessionId();
 
         SseEmitter emitter = new SseEmitter(0L);
         CompletableFuture.runAsync(() -> runChat(userId, sessionId, dto, emitter));
@@ -90,7 +90,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         return messages.stream()
             .sorted(Comparator.comparing(ChatMessageEntity::getCreatedAt))
             .map(this::toVO)
-            .toList();
+            .collect(java.util.stream.Collectors.toList());
     }
 
     private void runChat(Long userId, String sessionId, ChatSendDTO dto, SseEmitter emitter) {
@@ -125,7 +125,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
             if (toolCall != null) {
                 String toolResult = executeTool(toolCall, dto);
                 List<AiMessage> secondHistory = new ArrayList<>(history);
-                if (firstResult.content() != null && !firstResult.content().isBlank()) {
+                if (firstResult.content() != null && !firstResult.content().trim().isEmpty()) {
                     secondHistory.add(new AiMessage("assistant", firstResult.content()));
                 }
                 secondHistory.add(new AiMessage("user", "工具调用结果如下，请直接给最终回答，不要再输出工具调用。\n" + toolResult));
@@ -134,7 +134,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                     chatSystemPrompt(),
                     requestText,
                     secondHistory,
-                    List.of()
+                    com.niuma.gzh.common.util.J8.listOf()
                 ));
                 tokenUsages.add(new AiBillingCalculator.TokenUsage(secondResult.inputTokens(), secondResult.outputTokens()));
                 totalInputTokens += secondResult.inputTokens();
@@ -178,7 +178,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
                 return null;
             });
 
-            sendEvent(emitter, Map.of(
+            sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf(
                 "type", "done",
                 "sessionId", sessionId,
                 "inputTokens", totalInputTokens,
@@ -189,7 +189,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
             emitter.complete();
         } catch (Exception ex) {
             try {
-                sendEvent(emitter, Map.of("type", "error", "message", friendlyErrorMessage(ex)));
+                sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf("type", "error", "message", friendlyErrorMessage(ex)));
             } catch (IOException ignored) {
             }
             emitter.complete();
@@ -244,16 +244,16 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     private List<AiToolDefinition> buildToolDefinitions() {
         Map<String, Object> schema = new HashMap<>();
         schema.put("type", "object");
-        schema.put("properties", Map.of(
-            "keyword", Map.of(
+        schema.put("properties", com.niuma.gzh.common.util.J8.mapOf(
+            "keyword", com.niuma.gzh.common.util.J8.mapOf(
                 "type", "string",
                 "description", "文章标题关键词或 wxArticleId"
             )
         ));
-        schema.put("required", List.of("keyword"));
+        schema.put("required", com.niuma.gzh.common.util.J8.listOf("keyword"));
         schema.put("additionalProperties", false);
 
-        return List.of(new AiToolDefinition(
+        return com.niuma.gzh.common.util.J8.listOf(new AiToolDefinition(
             "get_article_content",
             "根据文章标题关键词或 wxArticleId 获取文章正文与关键指标",
             schema
@@ -265,7 +265,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
             return null;
         }
         AiToolCall first = calls.get(0);
-        if (first == null || first.name() == null || first.name().isBlank()) {
+        if (first == null || first.name() == null || first.name().trim().isEmpty()) {
             return null;
         }
         String keyword = "";
@@ -278,7 +278,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         } catch (Exception ignore) {
             keyword = first.argumentsJson();
         }
-        if (keyword.isBlank()) {
+        if (keyword.trim().isEmpty()) {
             return null;
         }
         return new ToolCall(first.name(), keyword);
@@ -359,7 +359,7 @@ public class ChatServiceImpl extends BaseService implements ChatService {
         int chunkSize = 120;
         for (int i = 0; i < content.length(); i += chunkSize) {
             int end = Math.min(content.length(), i + chunkSize);
-            sendEvent(emitter, Map.of("type", "chunk", "content", content.substring(i, end)));
+            sendEvent(emitter, com.niuma.gzh.common.util.J8.mapOf("type", "chunk", "content", content.substring(i, end)));
         }
     }
 
@@ -368,20 +368,38 @@ public class ChatServiceImpl extends BaseService implements ChatService {
     }
 
     private String friendlyErrorMessage(Exception ex) {
-        if (ex instanceof BizException bizException && bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
-            String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-            if (message.contains("timed out") || message.contains("timeout")) {
-                return "千问响应超时，请稍后重试或切换千问版本";
+        if (ex instanceof BizException) {
+            BizException bizException = (BizException) ex;
+            if (bizException.getCode() == ErrorCode.THIRD_PARTY_ERROR.getCode()) {
+                String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+                if (message.contains("timed out") || message.contains("timeout")) {
+                    return "千问响应超时，请稍后重试或切换千问版本";
+                }
+                return "当前模型暂时不可用，请切换其他模型重试";
             }
-            return "当前模型暂时不可用，请切换其他模型重试";
         }
         String message = ex.getMessage();
-        if (message == null || message.isBlank()) {
+        if (message == null || message.trim().isEmpty()) {
             return "对话生成失败，请稍后重试";
         }
         return message;
     }
 
-    private record ToolCall(String name, String keyword) {
+    private static final class ToolCall {
+        private final String name;
+        private final String keyword;
+
+        private ToolCall(String name, String keyword) {
+            this.name = name;
+            this.keyword = keyword;
+        }
+
+        private String name() {
+            return name;
+        }
+
+        private String keyword() {
+            return keyword;
+        }
     }
 }

@@ -15,6 +15,7 @@ const MODEL_OPTIONS = [
 ];
 
 const RECHARGE_OPTIONS = [10, 100, 1000, 3000, 5000];
+const WECHAT_PAY_QR_URL = 'https://tangfuling.oss-cn-hangzhou.aliyuncs.com/mypublic/app/tangfuling.png';
 
 function mergeById<T extends { id: number }>(prev: T[], next: T[], page: number): T[] {
   if (page === 1) {
@@ -97,6 +98,7 @@ export default function GzhProfilePage() {
   const updateAuthProfile = useAuthStore((s) => s.updateProfile);
 
   const [amountCent, setAmountCent] = useState(1000);
+  const [wechatPayVisible, setWechatPayVisible] = useState(false);
   const [tokenPage, setTokenPage] = useState(1);
   const [paymentPage, setPaymentPage] = useState(1);
   const [tokenLogs, setTokenLogs] = useState<TokenLog[]>([]);
@@ -183,15 +185,6 @@ export default function GzhProfilePage() {
     onSuccess: (avatarUrl) => {
       setAvatarPreview(null);
       updateAuthProfile({ avatarUrl });
-      void profileQuery.refetch();
-    },
-  });
-
-  const createPaymentMutation = useMutation({
-    mutationFn: async () => SettingsApi.createPayment(amountCent),
-    onSuccess: (result) => {
-      window.open(result.payUrl, '_blank', 'noopener,noreferrer');
-      void paymentQuery.refetch();
       void profileQuery.refetch();
     },
   });
@@ -356,12 +349,11 @@ export default function GzhProfilePage() {
               id="pay-btn"
               type="button"
               style={{ width: '100%', justifyContent: 'center', height: '44px', fontSize: '14px' }}
-              onClick={() => createPaymentMutation.mutate()}
-              disabled={createPaymentMutation.isPending}
+              onClick={() => setWechatPayVisible(true)}
             >
-              {createPaymentMutation.isPending ? '创建订单中...' : `支付宝支付 ¥${formatAmount(amountCent)}`}
+              微信联系支付 ¥{formatAmount(amountCent)}
             </button>
-            {createPaymentMutation.error ? <div className="error-tip">{(createPaymentMutation.error as Error).message}</div> : null}
+            <div className="profile-pay-tip">支付功能开通中，点击后扫码添加微信好友并联系支付。</div>
           </div>
         </div>
 
@@ -460,6 +452,19 @@ export default function GzhProfilePage() {
           退出登录
         </button>
       </div>
+      {wechatPayVisible ? (
+        <div className="pay-qr-mask" onClick={() => setWechatPayVisible(false)}>
+          <div className="pay-qr-dialog" role="dialog" aria-modal="true" aria-label="微信联系支付" onClick={(event) => event.stopPropagation()}>
+            <div className="pay-qr-title">微信联系支付</div>
+            <div className="pay-qr-sub">扫码添加好友后，备注充值金额并联系我完成支付。</div>
+            <img className="pay-qr-image" src={WECHAT_PAY_QR_URL} alt="微信支付联系二维码" />
+            <div className="pay-qr-amount">当前选择金额：¥{formatAmount(amountCent)}</div>
+            <button type="button" className="btn btn-primary pay-qr-close" onClick={() => setWechatPayVisible(false)}>
+              我知道了
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
