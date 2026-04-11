@@ -6,7 +6,7 @@ import com.niuma.gzh.modules.auth.model.dto.LoginDTO;
 import com.niuma.gzh.modules.auth.model.dto.SendCodeDTO;
 import com.niuma.gzh.modules.auth.model.vo.LoginVO;
 import com.niuma.gzh.modules.auth.service.AuthService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;

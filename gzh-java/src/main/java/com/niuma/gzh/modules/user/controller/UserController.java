@@ -9,7 +9,7 @@ import com.niuma.gzh.modules.user.model.dto.UpdateProfileDTO;
 import com.niuma.gzh.modules.user.model.vo.TokenLogVO;
 import com.niuma.gzh.modules.user.model.vo.UserProfileVO;
 import com.niuma.gzh.modules.user.service.UserService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

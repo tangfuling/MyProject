@@ -8,7 +8,7 @@ import com.niuma.gzh.modules.analysis.model.dto.GenerateAnalysisDTO;
 import com.niuma.gzh.modules.analysis.model.vo.AnalysisEstimateVO;
 import com.niuma.gzh.modules.analysis.model.vo.AnalysisReportVO;
 import com.niuma.gzh.modules.analysis.service.AnalysisService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

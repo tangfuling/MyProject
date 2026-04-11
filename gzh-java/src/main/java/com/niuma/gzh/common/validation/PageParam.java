@@ -1,7 +1,7 @@
 package com.niuma.gzh.common.validation;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
 
 public class PageParam {
     @Min(value = 1, message = "page 最小为 1")

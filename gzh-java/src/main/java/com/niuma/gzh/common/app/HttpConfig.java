@@ -8,21 +8,22 @@ import java.util.Arrays;
 
 @Component
 public class HttpConfig {
-    private static final String DEBUG_BASE_URL = "http://127.0.0.1:8080";
     private static final String RELEASE_BASE_URL = "https://api-gzh.niumatech.com";
 
     private final boolean isDebug;
     private final String baseUrl;
 
     public HttpConfig(Environment environment,
+                      @Value("${server.port:8081}") Integer serverPort,
                       @Value("${HTTP_IS_DEBUG:#{null}}") Boolean debugOverride,
                       @Value("${HTTP_BASE_URL:}") String baseUrlOverride) {
         boolean profileDebug = Arrays.stream(environment.getActiveProfiles())
                 .anyMatch(profile -> "dev".equalsIgnoreCase(profile));
         this.isDebug = debugOverride != null ? debugOverride : profileDebug;
+        String debugBaseUrl = "http://127.0.0.1:" + (serverPort == null ? 8081 : serverPort);
 
         String resolvedBaseUrl = (baseUrlOverride == null || baseUrlOverride.trim().isEmpty())
-                ? (this.isDebug ? DEBUG_BASE_URL : RELEASE_BASE_URL)
+                ? (this.isDebug ? debugBaseUrl : RELEASE_BASE_URL)
                 : baseUrlOverride;
         this.baseUrl = trimTrailingSlash(resolvedBaseUrl);
     }

@@ -9,7 +9,7 @@ import com.niuma.gzh.modules.article.model.vo.ArticleVO;
 import com.niuma.gzh.modules.article.model.vo.OverviewVO;
 import com.niuma.gzh.modules.article.model.vo.SyncResultVO;
 import com.niuma.gzh.modules.article.service.ArticleService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -1,6 +1,6 @@
 package com.niuma.gzh.modules.user.model.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import javax.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data

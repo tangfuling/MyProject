@@ -1,6 +1,6 @@
 package com.niuma.gzh.modules.order.model.dto;
 
-import jakarta.validation.constraints.NotNull;
+import javax.validation.constraints.NotNull;
 
 public class PayOrderDTO {
     @NotNull(message = "orderId_required")

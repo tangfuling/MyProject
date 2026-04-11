@@ -1,6 +1,6 @@
 # gzh-java
 
-公众号数据运营助手后端（Spring Boot 3 + MyBatis-Plus）。
+公众号数据运营助手后端（Spring Boot 2.7 + MyBatis-Plus）。
 
 ## 1) 初始化数据库
 
@@ -27,5 +27,7 @@
 # 机器需已安装 Maven
 mvn spring-boot:run
 ```
+
+运行环境：Java 8（推荐 1.8.0_202+）。
 
 默认端口 `8081`。

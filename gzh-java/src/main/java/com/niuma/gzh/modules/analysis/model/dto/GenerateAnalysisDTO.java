@@ -1,6 +1,6 @@
 package com.niuma.gzh.modules.analysis.model.dto;
 
-import jakarta.validation.constraints.Pattern;
+import javax.validation.constraints.Pattern;
 import lombok.Data;
 
 @Data

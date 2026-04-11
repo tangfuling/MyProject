@@ -3,7 +3,7 @@ package com.niuma.gzh.common.config;
 import com.niuma.gzh.common.ai.AiModelProvider;
 import com.niuma.gzh.common.web.BizException;
 import com.niuma.gzh.common.web.ErrorCode;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;

@@ -5,7 +5,7 @@ import com.niuma.gzh.common.base.BaseController;
 import com.niuma.gzh.modules.chat.model.dto.ChatSendDTO;
 import com.niuma.gzh.modules.chat.model.vo.ChatMessageVO;
 import com.niuma.gzh.modules.chat.service.ChatService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: 8081
 
 spring:
   application:
@@ -9,11 +9,10 @@ spring:
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   jackson:

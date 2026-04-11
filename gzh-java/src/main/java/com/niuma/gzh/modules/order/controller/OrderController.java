@@ -5,7 +5,7 @@ import com.niuma.gzh.common.base.BaseController;
 import com.niuma.gzh.modules.order.model.dto.PayOrderDTO;
 import com.niuma.gzh.modules.order.model.vo.OrderVO;
 import com.niuma.gzh.modules.order.service.OrderService;
-import jakarta.validation.Valid;
+import javax.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
